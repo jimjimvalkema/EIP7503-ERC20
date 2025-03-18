@@ -12,17 +12,15 @@
   },
   "scripts": {
     "compile-contracts": "hardhat compile; cp artifacts/contracts/Token.sol/Token.json website/abis/Token.json",
-    "compile-circuits": "cd circuits/fullProver; nargo compile && cd circuits/smolProver; nargo compile",
-    "install-submodules": "git submodule update --init --recursive;",
+    "compile-circuit": "cd circuits/remintProver; nargo compile",
     "dev": "cd website; yarn vite",
     "build": "cd website; yarn vite build",
     "preview": "cd website; yarn vite preview",
     "install-vite": "cd website; yarn install"
   },
   "dependencies": {
-    "@aztec/bb.js": "0.66.0",
-    "@noir-lang/noir_js": "1.0.0-beta.1",
-    "@noir-lang/noir_wasm": "1.0.0-beta.1",
+    "@aztec/bb.js": "0.72.1",
+    "@noir-lang/noir_js": "1.0.0-beta.2",
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.0",
     "@nomicfoundation/hardhat-ethers": "^3.0.0",
     "@nomicfoundation/hardhat-ignition": "^0.15.5",
@@ -40,7 +38,6 @@
     "ethers": "^6.13.2",
     "hardhat-gas-reporter": "^1.0.8",
     "poseidon-lite": "^0.2.0",
-    "poseidon-lite-with-domain": "^0.2.2",
     "ts-node": ">=8.0.0",
     "typechain": "^8.3.0",
     "typescript": ">=4.5.0"

@@ -1,39 +1,39 @@
 # An erc20 with EIP7503, partial spends and reusable address
-An erc20 token with [EIP7503](https://eips.ethereum.org/EIPS/eip-7503) (zkwormholes) style private transfers, and a new nullifier scheme to enable partial spends and reusable burn addresses.  
+An erc20 token with [EIP7503](https://eips.ethereum.org/EIPS/eip-7503) (zkwormholes) with a in-contract merkle tree to make it compatible with any EVM chain. It also has a new nullifier scheme to enable partial spends and reusable burn addresses.  
 *More info in [docs/notes.md](https://github.com/jimjimvalkema/scrollZkWormholes/blob/main/docs/notes.md#L1)*
 
-**Try it out here: https://scrollzkwormholes.jimjim.dev/**  
+<!-- **Try it out here: https://scrollzkwormholes.jimjim.dev/**  
 <!-- TODO -> *Or on ipfs: https://bafybeia3aeuhou4jwtoakvds7ya5qxe5hwjqchmabvvvuwvd6thnqubgzm.ipfs.dweb.link/* -->
 
 
-![ui](./screenshots/2burns1remintui.png)  
+<!-- ![ui](./screenshots/2burns1remintui.png)   -->
 
-### deployment on scroll sepolia
+<!-- ### deployment on scroll sepolia
 https://sepolia.scrollscan.com/address/0x6A0e54612253d97Fd2c3dbb73BDdBAFfca531A9B
 
 ## WARNING WORK IN PROGRESS
 The code here in barely tested and has 3 inflation bugs.  
 These are: anyone can call `setTrustedStorageRoot` and `mint`.  
 Also EOA<->zkwormhole address collisions can be created.  
-*More info in [docs/notes.md](https://github.com/jimjimvalkema/scrollZkWormholes/blob/main/docs/notes.md#L8)*
+*More info in [docs/notes.md](https://github.com/jimjimvalkema/scrollZkWormholes/blob/main/docs/notes.md#L8)* -->
 
 
 ## install
 ### js
 ```shell
 yarn install;
-yarn install-submodules && yarn install-vite;
+yarn install-vite;
 ```
 ### Install noir
 nargo  
 https://noir-lang.org/docs/getting_started/quick_start#noir
 ```shell
-noirup -v 1.0.0-beta.1;
+noirup -v 1.0.0-beta.2;
 ```
 barretenberg  
 https://noir-lang.org/docs/getting_started/quick_start#proving-backend  
 ```shell
-bbup -v 0.66.0
+bbup -nv 1.0.0-beta.2;
 ```
 <!-- ```shell
 bbup -v 1.0.0-beta.1;
@@ -86,10 +86,6 @@ yarn hardhat run scripts/proofAndRemint.js
 ### test circuit
 ```shell
 cd circuits/remintProver;
-nargo test;
-```
-```shell
-cd circuits/storageRootProver;
 nargo test;
 ```
 
