@@ -12,7 +12,7 @@
   },
   "scripts": {
     "compile-contracts": "hardhat compile; cp artifacts/contracts/Token.sol/Token.json website/abis/Token.json",
-    "compile-circuit": "cd circuits/remintProver; nargo compile",
+    "compile-circuit": "cd circuits/privateTransferProver; nargo compile",
     "dev": "cd website; yarn vite",
     "build": "cd website; yarn vite build",
     "preview": "cd website; yarn vite preview",
