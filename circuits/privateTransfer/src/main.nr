@@ -38,7 +38,7 @@ fn main(
     nullifier_key: pub Field,
     root: pub Field,
     //-----very privacy sensitive data -----
-    secret: Field,//burnaddress is derived from secret // TODO instead of using a secrets use public cryptography shit so hardware wallets dont have to create a whole ass proof. Also makes complexity lower for hot wallets to ensure safety and better compatability with metamasksnap.
+    secret: Field,//private address is derived from secret // TODO instead of using a secrets use public cryptography shit so hardware wallets dont have to create a whole ass proof. Also makes complexity lower for hot wallets to ensure safety and better compatability with metamasksnap.
     incoming_balance: Field, // should be Field
     nonce: Field, // nonce to create a nulliefier from to track encrypted spend_amounts
     prev_nullifier_key: Field, // just here for the merkle proof of prev_nullifier, since prev_nullifier already contains all info
@@ -50,15 +50,15 @@ fn main(
 
     //------------ merkle proof of mapping(private_address -> incoming_balance) ------------
     // private_address = our secret commitment
-    // burn addres should be a field
+    // private addres should be a field
     let private_address:Field = get_private_address(secret);
 
-    // TODO merkle proof burn address
+    // TODO merkle proof private address
     // "address" string is there so both the address and nullifiers can be in the same tree without them getting swapped around by an attacker
-    let node_burn_addr = 0; // hash(private_address, incoming_balance, "address")
-    let root_burn_addr = 0;//TODO
+    let node_private_addr = 0; // hash(private_address, incoming_balance, "address")
+    let root_private_addr = 0;//TODO
 
-    assert(root_burn_addr == root, "given root doesnt match computed root_burn_addr from the private_address merkle proof");
+    assert(root_private_addr == root, "given root doesnt match computed root_private_addr from the private_address merkle proof");
 
     //--------prev nullifier------------
     if (nonce != 0) {

@@ -18,7 +18,7 @@
   <script  crossorigin type="module" src="./main.js"></script>
   <div class="outer">
     <div id="faucet" class="inner">
-      <h1><span class="tokenName">TOKENNAME</span> faucet</h1>
+      <h1><span class="tokenName">TOKENNAME</span> Faucet</h1>
 
       <label for="mintAmountInput">amount</label>
       <input value="420" max="1000" type="number" name="mintAmountInput" id="mintAmountInput" required />
@@ -26,21 +26,21 @@
       <br>
       user balance: <span class="userBalance">USERBALANCE</span>
     </div>
-    <div id="burnUi" class="inner">
-      <h1>burn your <span class="tokenName">TOKENNAME</span>!!!</h1>
-      <label for="burnAddressInputLabel">Burn address</label>
-      <input placeholder="generate new if left empty" type="text" name="burnAddressInput" id="burnAddressInput" />
+    <div id="privateUi" class="inner">
+      <h1>Deposit To Private Address</h1>
+      <label for="privateAddressInputLabel">private address</label>
+      <input placeholder="generate new if left empty" type="text" name="privateAddressInput" id="privateAddressInput" />
       <br>
-      <label for="burnAmountInput">set burnAmount</label>
-      <input value="420" type="number" name="burnAmount" id="burnAmount" required />
-      <button id="burnBtn">burn it!!!</button>
+      <label for="privateAmountInput">set privateAmount</label>
+      <input value="420" type="number" name="privateAmount" id="privateAmount" required />
+      <button id="depositBtn">deposit</button>
     </div>
 
-    <div id="remintUi" class="inner">
-      <h1>Privately remint your tokens</h1>
+    <div id="privateTransferUi" class="inner">
+      <h1>Make Private Transfer</h1>
       
-      <label for="burnedTokens">burned tokens</label>
-      <ul id="burnedTokens">
+      <label for="privateAddresses">private addresses</label>
+      <ul id="privateAddresses">
         <li>
           test
 

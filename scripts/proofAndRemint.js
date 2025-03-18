@@ -12,8 +12,8 @@ import { poseidon1, poseidon2 } from "poseidon-lite";
 import os from 'os';
 
 // project imports
-import { getProofInputs,hashBurnAddress, paddArray } from "./getProofInputs.js"
-import remintProverCircuit from '../circuits/remintProver/target/remintProver.json'  with { type: "json" }; //assert {type: 'json'};
+import { getProofInputs,hashprivateAddress, paddArray } from "./getProofInputs.js"
+import privateTransferProverCircuit from '../circuits/privateTransferProver/target/privateTransferProver.json'  with { type: "json" }; //assert {type: 'json'};
 
 //---- node trips up on the # in the file name. This is a work around----
 //import {tokenAbi } from "../ignition/deployments/chain-534351/artifacts/TokenModule#Token.json" assert {type: 'json'};
@@ -24,7 +24,7 @@ import Ethers from "@typechain/ethers-v6";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const tokenAbi = JSON.parse(await fs.readFile(__dirname + "/../ignition/deployments/chain-534351/artifacts/TokenModule#Token.json", "utf-8")).abi
-const remintVerifierAbi = JSON.parse(await fs.readFile(__dirname + "/../ignition/deployments/chain-534351/artifacts/VerifiersModule#RemintVerifier.json", "utf-8")).abi
+const privateTransferVerifierAbi = JSON.parse(await fs.readFile(__dirname + "/../ignition/deployments/chain-534351/artifacts/VerifiersModule#privateTransferVerifier.json", "utf-8")).abi
 
 //--------------------------
 
@@ -39,10 +39,10 @@ async function mint({ to, amount, contract }) {
     return mintTx
 }
 
-async function burn({ secret, amount, contract }) {
-    const burnAddress = ethers.toBeHex(poseidon1([secret])).slice(0, 2 + 40) // take only first 20 bytes (because eth address are 20 bytes)
-    const burnTx = await contract.transfer(burnAddress, amount)
-    return { burnTx, burnAddress }
+async function privateTransfer({ secret, amount, contract }) {
+    const privateAddress = ethers.toBeHex(poseidon1([secret])).slice(0, 2 + 40) // take only first 20 bytes (because eth address are 20 bytes)
+    const privateTx = await contract.privateTransfer(privateAddress, amount)
+    return { privateTx, privateAddress }
 }
 /**
  * @typedef {import("@noir-lang/noir_js").CompiledCircuit} CompiledCircuit 
@@ -54,31 +54,31 @@ async function burn({ secret, amount, contract }) {
  * @typedef {import("@noir-lang/types").ProofData} ProofData
  * @returns {Promise<ProofData>} proof
  */
-async function createRemintProof({ noirjsInputs, circuit = remintProverCircuit, contractDeployerWallet }) {
+async function createPrivateTransferProof({ noirjsInputs, circuit = privateTransferProverCircuit, contractDeployerWallet }) {
     const noir = new Noir(circuit);
     //console.log({circuit})
-    console.dir({remintProver: noirjsInputs},{depth:null})
-    console.log(`generating remint proof with ${os.cpus().length} cores `)
+    console.dir({privateTransferProver: noirjsInputs},{depth:null})
+    console.log(`generating privateTransfer proof with ${os.cpus().length} cores `)
     const backend = new UltraPlonkBackend(circuit.bytecode,  { threads:  os.cpus().length });
     const { witness } = await noir.execute(noirjsInputs);
     const proof = await backend.generateProof(witness);
     const verifiedByJs = await backend.verifyProof(proof);
-    console.log("remintProof: ",{ verifiedByJs })
+    console.log("privateTransferProof: ",{ verifiedByJs })
 
-    const remintVerifierAddress = await contractDeployerWallet.remintVerifier()
-    const remintVerifier = new ethers.Contract(remintVerifierAddress, remintVerifierAbi,contractDeployerWallet.runner.provider);
-    const verifiedOnVerifierContract = await remintVerifier.verify(proof.proof, proof.publicInputs)
-    console.log("remintProof: ", {verifiedOnVerifierContract})
+    const privateTransferVerifierAddress = await contractDeployerWallet.privateTransferVerifier()
+    const privateTransferVerifier = new ethers.Contract(privateTransferVerifierAddress, privateTransferVerifierAbi,contractDeployerWallet.runner.provider);
+    const verifiedOnVerifierContract = await privateTransferVerifier.verify(proof.proof, proof.publicInputs)
+    console.log("privateTransferProof: ", {verifiedOnVerifierContract})
     console.log({proof})
 
     return proof 
 }
 
 
-async function remint({ to, amount,nullifierKey,nullifierValue, snarkProof, contract }) {
-    // verify on chain and reMint!
-    const remintTx = await contract.reMint(to, amount,nullifierKey,nullifierValue, snarkProof)
-    return remintTx
+async function privateTransfer({ to, amount,nullifierKey,nullifierValue, snarkProof, contract }) {
+    // verify on chain and privateTransfer!
+    const privateTransferTx = await contract.privateTransfer(to, amount,nullifierKey,nullifierValue, snarkProof)
+    return privateTransferTx
 }
 
 
@@ -87,7 +87,7 @@ async function main() {
     // --------------
 
     // --------------provider---------------
-    const PROVIDERURL = "https://sepolia-rpc.scroll.io/"
+    const PROVIDERURL = "https://1rpc.io/sepolia"
     const provider = new ethers.JsonRpcProvider(PROVIDERURL)
     // --------------
 
@@ -104,48 +104,48 @@ async function main() {
     // --------------
 
 
-    //---------------burn -------------------
+    //---------------private -------------------
     // mint fresh tokens (normal mint)
-    const burnAmount =      420000000000000000000n
-    const remintAmount =    10000000000000000000n //-1n because there is a off by one error in the circuit which burns 1 wei
+    const privateAmount =      420000000000000000000n
+    const privateTransferAmount =    10000000000000000000n //-1n because there is a off by one error in the circuit which privates 1 wei
     const secret = 13093675745686700816186364422135239860302335203703094897030973687686916798500n//getSafeRandomNumber();
-    const burnAddress = hashBurnAddress({secret})
+    const privateAddress = hashprivateAddress({secret})
 
     //mint
-    const mintTx = await mint({ to: deployerWallet.address, amount: burnAmount, contract: contractDeployerWallet })
+    const mintTx = await mint({ to: deployerWallet.address, amount: privateAmount, contract: contractDeployerWallet })
     console.log({ mintTx: (await mintTx.wait(1)).hash })
     
-    // burn
-    const { burnTx } = await burn({ secret, amount: burnAmount, contract: contractDeployerWallet })
-    console.log({ burnAddress, burnTx: (await burnTx.wait(3)).hash }) // could wait less confirmation but
+    // private
+    const { privateTx } = await privateTransfer({ secret, amount: privateAmount, contract: contractDeployerWallet })
+    console.log({ privateAddress, privateTx: (await privateTx.wait(3)).hash }) // could wait less confirmation but
 
     const proofInputs = await getProofInputs({
         contract: contractRecipientWallet,  
-        withdrawAmount: remintAmount, 
-        remintAddress: recipientWallet.address, 
+        withdrawAmount: privateTransferAmount, 
+        privateTransferAddress: recipientWallet.address, 
         secret: secret, 
     })
 
     // get snark proof
-    const proof = await createRemintProof({ noirjsInputs: proofInputs.noirJsInputs, circuit: remintProverCircuit, contractDeployerWallet })
+    const proof = await createPrivateTransferProof({ noirjsInputs: proofInputs.noirJsInputs, circuit: privateTransferProverCircuit, contractDeployerWallet })
 
 
-    //remint
-    const remintInputs = {
+    //privateTransfer
+    const privateTransferInputs = {
         to: RECIPIENT_ADDRESS,
-        amount: remintAmount,
+        amount: privateTransferAmount,
         nullifierKey: proofInputs.proofData.nullifierData.nullifierKey,
         nullifierValue: proofInputs.proofData.nullifierData.nullifierValue,
         snarkProof: ethers.hexlify(proof.proof),
     }
     
-    console.log("------------remint tx inputs----------------")
-    console.log("reminting with call args:")
-    console.log({remintInputs})
+    console.log("------------privateTransfer tx inputs----------------")
+    console.log("privateTransfering with call args:")
+    console.log({privateTransferInputs})
     console.log("---------------------------------------")
-    const remintTx = await remint({ ...remintInputs, contract: contractRecipientWallet })
-    console.log({ remintTx: (await remintTx.wait(1)).hash })
-    console.log({ burnAddress, secret: secret})
+    const privateTransferTx = await privateTransfer({ ...privateTransferInputs, contract: contractRecipientWallet })
+    console.log({ privateTransferTx: (await privateTransferTx.wait(1)).hash })
+    console.log({ privateAddress, secret: secret})
 
 
 }

@@ -15,8 +15,8 @@ const FIELD_LIMIT = 218882428718392752222464057452572750885483644004160343436982
 const abi = [
     "function balanceOf(address) view returns (uint256)",
     "function partialNullifiers(bytes32) view returns (uint256)",
-    "function reMintAmounts(bytes32) view returns (uint256)",
-    "event Remint(bytes32 indexed nullifierKey, uint256 amount)"
+    "function privateTransferAmounts(bytes32) view returns (uint256)",
+    "event privateTransfer(bytes32 indexed nullifierKey, uint256 amount)"
 ];
 //import fs from "fs/promises";
 // import path from 'path';
@@ -61,10 +61,10 @@ export function hashNullifierKey({nonce,secret}) {
     return ethers.zeroPadValue(ethers.toBeHex(nullifierKey),32)
 }
 
-export function hashBurnAddress({secret}) {
+export function hashprivateAddress({secret}) {
     const hash = ethers.toBeArray(poseidon1([secret])) 
-    const burnAddress = hash.slice(0,20)
-    return ethers.zeroPadValue(ethers.hexlify(burnAddress),20)
+    const privateAddress = hash.slice(0,20)
+    return ethers.zeroPadValue(ethers.hexlify(privateAddress),20)
 }
 
 
@@ -75,21 +75,21 @@ export function hashBurnAddress({secret}) {
 //     startBlock = startBlock ? Number(startBlock) : (await provider.getBlockNumber("latest")) - 40000//80000
 //     //console.log(JSON.stringify(tokenContract))
 //     let usedNonce = 0n // TODO clean up this while loop so nonce starts at 0n. (for readability)
-//     let remintEvents = undefined;
+//     let privateTransferEvents = undefined;
 //     let prevSpendAmount = 0n 
 //     let txhashes = []
 //     // do event scanning
-//     while (remintEvents !== false) {
+//     while (privateTransferEvents !== false) {
 //         const nullifierKeys = Array(noncesPerEventScan).fill(0).map((x,i)=>hashNullifierKey({nonce:usedNonce+BigInt(i), secret}))
 //         console.log({nullifierKeys})
-//         remintEvents = await getRemintEventBulk({chunksize:chunkSizeEventScan,nullifierKeys, startBlock, contract:tokenContract})
+//         privateTransferEvents = await getprivateTransferEventBulk({chunksize:chunkSizeEventScan,nullifierKeys, startBlock, contract:tokenContract})
 
-//         if (remintEvents !== false) { //ugly
-//             usedNonce += BigInt(remintEvents.length)
-//             const remintedAmount = remintEvents.reduce((accum, event) => accum + BigInt(event.data),0n)
-//             prevSpendAmount += remintedAmount
-//             startBlock = remintEvents[remintEvents.length-1].blockNumber
-//             txhashes = txhashes.concat(remintEvents.map((event)=>event.transactionHash))
+//         if (privateTransferEvents !== false) { //ugly
+//             usedNonce += BigInt(privateTransferEvents.length)
+//             const privateTransferedAmount = privateTransferEvents.reduce((accum, event) => accum + BigInt(event.data),0n)
+//             prevSpendAmount += privateTransferedAmount
+//             startBlock = privateTransferEvents[privateTransferEvents.length-1].blockNumber
+//             txhashes = txhashes.concat(privateTransferEvents.map((event)=>event.transactionHash))
 //         }
 //     }
     
@@ -99,8 +99,8 @@ export function hashBurnAddress({secret}) {
 //         nullifierValue = ethers.toBeHex(await tokenContract.partialNullifiers(nullifierKey))
 
 //         if (nullifierValue !== "0x00") {
-//             const remintedAmount = await tokenContract.reMintAmounts(nullifierKey)
-//             prevSpendAmount += remintedAmount
+//             const privateTransferedAmount = await tokenContract.privateTransferAmounts(nullifierKey)
+//             prevSpendAmount += privateTransferedAmount
 //             usedNonce++
 //         }
 //     } 
@@ -109,8 +109,8 @@ export function hashBurnAddress({secret}) {
 // }
 
 
-async function getRemintEvent({nullifierKey, startBlock, contract}) {
-    const filter =  contract.filters.Remint([nullifierKey])
+async function getprivateTransferEvent({nullifierKey, startBlock, contract}) {
+    const filter =  contract.filters.privateTransfer([nullifierKey])
     const events = await contract.queryFilter(filter,startBlock)
     if (events[0] !== undefined) {
         return events[0] 
@@ -119,9 +119,9 @@ async function getRemintEvent({nullifierKey, startBlock, contract}) {
     }
 }
 
-//TODO do in bulk ex contract.filters.Remint([nullifierKey1, nullifierKey2, etc])
-async function getRemintEventBulk({chunksize=5000,nullifierKeys, startBlock, contract}) {
-    const filter =  contract.filters.Remint([...nullifierKeys])
+//TODO do in bulk ex contract.filters.privateTransfer([nullifierKey1, nullifierKey2, etc])
+async function getprivateTransferEventBulk({chunksize=5000,nullifierKeys, startBlock, contract}) {
+    const filter =  contract.filters.privateTransfer([...nullifierKeys])
     const events = await queryEventInChunks({chunksize,filter,startBlock,contract})
     console.log({events})
     if (events.length >= 1) {
@@ -156,7 +156,7 @@ async function queryEventInChunks({chunksize=5000,filter,startBlock,contract}){
 /**
  * @param {{
  *      contractAddress: ethers.AddressLike, 
- *      burnAddress: ethers.AddressLike,
+ *      privateAddress: ethers.AddressLike,
  *      withdrawAmount: BigInt, 
  *      blockNumber: BigInt | number,
  *      secret: BigInt, 
@@ -171,7 +171,7 @@ async function queryEventInChunks({chunksize=5000,filter,startBlock,contract}){
  * @typedef {decodedProof} stateProof
  * @typedef {{
  *      amounts: { 
- *          burnedTokenBalance: BigInt,
+ *          privateedTokenBalance: BigInt,
  *          prevSpendAmount: BigInt,
  *      },
  *      nullifierData : {
@@ -180,13 +180,13 @@ async function queryEventInChunks({chunksize=5000,filter,startBlock,contract}){
  *          prevNullifierKey: ethers.BytesLike, 
  *          nonce: BigInt,
  *      },
- *   }} RemintProofData 
- * @returns {Promise<RemintProofData>} remintProofData
+ *   }} privateTransferProofData 
+ * @returns {Promise<privateTransferProofData>} privateTransferProofData
  */
-export async function getRemintProofData({contract, burnAddress,withdrawAmount,secret, provider = provider}) {
+export async function getprivateTransferProofData({contract, privateAddress,withdrawAmount,secret, provider = provider}) {
     // contract data
     const provider = contract.runner.provider
-    const burnedTokenBalance = await contract.balanceOf(burnAddress)
+    const privateedTokenBalance = await contract.balanceOf(privateAddress)
     const {nonce, prevSpendAmount} = await findLatestNonce({secret, tokenContract: contract})
 
     // nullifiers
@@ -200,7 +200,7 @@ export async function getRemintProofData({contract, burnAddress,withdrawAmount,s
         // nullifiers
         amounts: {
             withdrawAmount, 
-            burnedTokenBalance,
+            privateedTokenBalance,
             prevSpendAmount
         },
 
@@ -212,7 +212,7 @@ export async function getRemintProofData({contract, burnAddress,withdrawAmount,s
         },
          // TODO merkle proof
     }
-    //return { block, burnedTokenBalance, contractBalance, balancesHashPaths, prevNullifierHashPaths, nullifier, provider }
+    //return { block, privateedTokenBalance, contractBalance, balancesHashPaths, prevNullifierHashPaths, nullifier, provider }
 }
 
 /**
@@ -234,7 +234,7 @@ function Bytes(input, len) {
  *      contractAddress: ethers.AddressLike, 
  *      blockNumber: BigInt,
  *      withdrawAmount: BigInt,
- *      remintAddress: ethers.AddressLike, 
+ *      privateTransferAddress: ethers.AddressLike, 
  *      secret: BigInt, 
  *      providerL ethers.Provider, 
  *      maxHashPathLen: number, 
@@ -242,17 +242,17 @@ function Bytes(input, len) {
  * }} params
  * 
  * @typedef {{
- *      remint_address: ethers.AddressLike,
+ *      privateTransfer_address: ethers.AddressLike,
  *          withdraw_amount: ethers.BytesLike,
  *          nullifier_value: ethers.BytesLike,
  *          nullifier_key: ethers.BytesLike,
  *          storage_root: ethers.BytesLike,
  *          secret: ethers.BytesLike,
- *          burned_balance: number[],
+ *          privateed_balance: number[],
  *          nonce: ethers.BytesLike,
  *          prev_nullifier_key: ethers.BytesLike,
  *          prev_spend_amount: ethers.BytesLike,
- *          burn_addr_storage_proof: {
+ *          private_addr_storage_proof: {
  *              hash_path: ethers.BytesLike[],
  *              leaf_type: ethers.BytesLike[],
  *              node_types: ethers.BytesLike[],
@@ -272,20 +272,20 @@ function Bytes(input, len) {
  *              block: ethers.Block, 
  *              rlp: ethers.BytesLike
  *        },
- *        proofData: RemintProofData,
+ *        proofData: privateTransferProofData,
  *        noirJsInputs: noirJsInputs
  *    }} ProofInputs
  * @returns {Promise<ProofInputs>} ProofInputs
  */
-export async function getProofInputs({contract, blockNumber,withdrawAmount,remintAddress, secret,deploymentBlock}) {
-    const burnAddress = hashBurnAddress({secret})
+export async function getProofInputs({contract, blockNumber,withdrawAmount,privateTransferAddress, secret,deploymentBlock}) {
+    const privateAddress = hashprivateAddress({secret})
     const provider  = contract.runner.provider
-    const proofData = await getRemintProofData({contract,burnAddress, withdrawAmount,blockNumber:Number(blockNumber),deploymentBlock:deploymentBlock,secret:secret, provider:provider})
+    const proofData = await getprivateTransferProofData({contract,privateAddress, withdrawAmount,blockNumber:Number(blockNumber),deploymentBlock:deploymentBlock,secret:secret, provider:provider})
     const {   
         // nullifiers
         amounts: {
             //withdrawAmount, 
-            burnedTokenBalance,
+            privateedTokenBalance,
             prevSpendAmount,
         },
         
@@ -305,7 +305,7 @@ export async function getProofInputs({contract, blockNumber,withdrawAmount,remin
         proofData,
         noirJsInputs: {
             // --public inputs--
-            remint_address: remintAddress,
+            privateTransfer_address: privateTransferAddress,
             withdraw_amount: ethers.toBeHex(withdrawAmount), //asPaddedArray(withdrawAmount, 32).map((x) => ethers.toBeHex(x)),
             nullifier_value: nullifierValue,
             nullifier_key: nullifierKey,
@@ -314,7 +314,7 @@ export async function getProofInputs({contract, blockNumber,withdrawAmount,remin
 
             // --private inputs--
             secret: ethers.toBeHex(secret),
-            burned_balance: asPaddedArray(burnedTokenBalance, 32).map((x) => ethers.toBeHex(x)),
+            privateed_balance: asPaddedArray(privateedTokenBalance, 32).map((x) => ethers.toBeHex(x)),
             nonce: ethers.toBeHex(nonce),
             prev_nullifier_key: ethers.toBeHex(prevNullifierKey),
             prev_spend_amount: ethers.toBeHex(prevSpendAmount),
@@ -326,20 +326,20 @@ export async function getProofInputs({contract, blockNumber,withdrawAmount,remin
 }
 /**
  * @param {Object} obj
- * @param {RemintProofData} obj.proofData 
- * @param {ethers.AddressLike} obj.remintAddress
+ * @param {privateTransferProofData} obj.proofData 
+ * @param {ethers.AddressLike} obj.privateTransferAddress
  * @param {bigint} obj.withdrawAmount
  * @param {ethers.BytesLike} obj.secret
  * @returns 
  */
-export function formatTest({proofData, remintAddress, withdrawAmount, secret}) {
+export function formatTest({proofData, privateTransferAddress, withdrawAmount, secret}) {
     // const headerRlp = await getBlockHeaderRlp(Number(block.number), provider
     console.log(proofData)
     return`
 #[test]
 fn test_main() {
     //----- public inputs
-    let remint_address: Field = ${remintAddress};
+    let privateTransfer_address: Field = ${privateTransferAddress};
     let withdraw_amount:  Field = ${ethers.toBeHex(withdrawAmount)};
     let nullifier_value: Field = ${proofData.nullifierData.nullifierValue};
     let nullifier_key: Field = ${proofData.nullifierData.nullifierKey};
@@ -347,7 +347,7 @@ fn test_main() {
     
     //-----private inputs -----
     let secret: Field  = ${ethers.toBeHex(secret)};
-    let burned_balance: [u8; 32]  = [${paddArray([...ethers.toBeArray(proofData.amounts.burnedTokenBalance)],32,0,true).map((x)=>ethers.toBeHex(x))}];
+    let privateed_balance: [u8; 32]  = [${paddArray([...ethers.toBeArray(proofData.amounts.privateedTokenBalance)],32,0,true).map((x)=>ethers.toBeHex(x))}];
     let nonce: Field = ${proofData.nullifierData.nonce};
     let prev_nullifier_key: Field = ${proofData.nullifierData.prevNullifierKey};
     let prev_spend_amount: Field = ${proofData.amounts.prevSpendAmount};'
@@ -356,13 +356,13 @@ fn test_main() {
 
     main(
         //----- public inputs
-        remint_address,
+        privateTransfer_address,
         withdraw_amount,
         nullifier_value,
         nullifier_key,
         //-----private inputs -----
         secret,
-        burned_balance,
+        privateed_balance,
         nonce,
         prev_nullifier_key,
         prev_spend_amount,

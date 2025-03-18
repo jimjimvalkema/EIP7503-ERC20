@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
-// no dencun
-// https://docs.scroll.io/en/developers/developer-quickstart/#configure-your-tooling
+
 pragma solidity ^0.8.23;
 
 //import "../../circuits/zkwormholesEIP7503/contract/zkwormholesEIP7503/plonk_vk.sol";
@@ -17,54 +16,31 @@ interface IVerifier {
 }
 
 error VerificationFailed();
-event Remint(bytes32 indexed nullifierKey, uint256 amount);
+event PrivateTransfer(bytes32 indexed nullifierKey, uint256 amount);
 event StorageRootAdded(uint256 blockNumber);
 
 contract Token is ERC20, Ownable {
     // @notice nullifierKey = poseidon(nonce, secret)
     // @notice nullifierValue = poseidon(amountSpent, nonce, secret)
-    mapping (bytes32 => bytes32) public partialNullifiers; // nullifierKey -> nullifierValue 
-    mapping (bytes32 => uint256) public reMintAmounts; 
+    mapping (bytes32 => bytes32) public nullifiers; // nullifierKey -> nullifierValue 
 
-    // remintVerifier doesnt go down the full 248 depth (32 instead) of the tree but is able to run witn noir js (and is faster)
-    address public remintVerifier;
-    address public storageRootVerifier;
+    // privateTransferVerifier doesnt go down the full 248 depth (32 instead) of the tree but is able to run witn noir js (and is faster)
+    address public privateTransferVerifier;
 
-    mapping (uint256 => bytes32) public storageRoots;
+    /** 
+     * EIP7503 reintroduces an attack vector with address collisions. This time its with EOAs and ZKwormhole addresses. 
+     * This allows the attacker to find a address that is both a EOA and a zkwormhole address. Which allows the hacker to mint infinite tokens.
+     * The cost for this attack is estimated to be 10 billion dollars in 2021.
+     * This contract enforces a maximum balance zkwormhole accounts can spend to make this attack uneconomical.
+     * more info here: https://hackmd.io/Vzhp5YJyTT-LhWm_s0JQpA and here: https://eips.ethereum.org/EIPS/eip-3607
+     */
+    uint256 public privateTransferLimit;
 
-    // @NOTICE useless since scrolls BLOCKHASH opcode is broken
-    function setStorageRoot(bytes32 storageRoot, uint256 blockNum, bytes calldata snarkProof) public {
-        // scroll returns a blockhash without the storage root
-        bytes32 blockHash = blockhash(blockNum);
-        
-        bytes32[] memory publicInputs = _formatPublicStorageRootInputs(storageRoot, blockHash, address(this));
-        if (!IVerifier(storageRootVerifier).verify(snarkProof, publicInputs)) {
-            revert VerificationFailed();
-        }
-        storageRoots[blockNum] = storageRoot;
-
-        emit StorageRootAdded(blockNum);
-    }
-
-    // @TODO @WARNING contract insecure because of this workaround because blockhash opcode is not supported
-    // https://docs.scroll.io/en/technology/chain/differences/#opcodes
-    function setTrustedStorageRoot(bytes32 storageRoot, uint256 blockNum) public {// onlyOwner() {
-        storageRoots[blockNum] = storageRoot;
-    }
-
-
-    // TODO makes this weth like instead of its own token
-    constructor()
+    constructor(uint256 _privateTransferLimit, uint8 _merkleTreeDepth, address _privateTransferVerifier)
         ERC20("zkwormholes-token", "WRMHL")
         Ownable(msg.sender)
     {
-    }
-
-    function setVerifiers(address _storageRootVerifier, address _remintVerifier) public onlyOwner {
-        require(remintVerifier == address(0x0000000000000000000000000000000000000000), "verifier is already set silly");
-        require(storageRootVerifier == address(0x0000000000000000000000000000000000000000), "verifier is already set silly");
-        storageRootVerifier = _storageRootVerifier;
-        remintVerifier = _remintVerifier;
+        privateTransferVerifier = _privateTransferVerifier;
     }
 
     // // TODO remove debug // WARNING anyone can mint
@@ -73,8 +49,8 @@ contract Token is ERC20, Ownable {
     }
 
     //---------------public---------------------
-    function reMint(address to, uint256 amount, uint256 blockNum, bytes32 nullifierKey, bytes32 nullifierValue, bytes calldata snarkProof) public {
-        _reMint( to,  amount,  blockNum, nullifierKey, nullifierValue, snarkProof,  remintVerifier);
+    function privateTransfer(address to, uint256 amount, uint256 blockNum, bytes32 nullifierKey, bytes32 nullifierValue, bytes calldata snarkProof) public {
+        _privateTransfer( to,  amount,  blockNum, nullifierKey, nullifierValue, snarkProof,  privateTransferVerifier);
     }
 
     // verifier wants the [u8;32] (bytes32 array) as bytes32[32] array.
@@ -85,16 +61,16 @@ contract Token is ERC20, Ownable {
     //TODO make private
     // TODO see much gas this cost and if publicInputs can be calldata
     // does bit shifting instead of indexing save gas?
-    function _formatPublicRemintInputs(address to, uint256 amount, bytes32 storageRoot, bytes32 nullifierKey, bytes32 nullifierValue) public pure returns (bytes32[] memory) {
+    function _formatPublicprivateTransferInputs(address to, uint256 amount, uint256 root, uint256 nullifierKey, uint256 nullifierValue) public pure returns (bytes32[] memory) {
         bytes32 amountBytes = bytes32(uint256(amount));
         bytes32 toBytes = bytes32(uint256(uint160(bytes20(to))));
         bytes32[] memory publicInputs = new bytes32[](5);
 
         publicInputs[0] = toBytes;
         publicInputs[1] = amountBytes;
-        publicInputs[2] = nullifierValue;
-        publicInputs[3] = nullifierKey;
-        publicInputs[4] = storageRoot;
+        publicInputs[2] = bytes32(nullifierValue);
+        publicInputs[3] = bytes32(nullifierKey);
+        publicInputs[4] = bytes32(root);
 
         return publicInputs;
     }
@@ -115,16 +91,20 @@ contract Token is ERC20, Ownable {
         return publicInputs;
     }
 
-    function _reMint(address to, uint256 amount, uint256 blockNum, bytes32 nullifierKey, bytes32 nullifierValue, bytes calldata snarkProof, address _verifier) private {
-        //require(nullifiers[nullifier] == false, "burn address already used");
-        require(partialNullifiers[nullifierKey] == bytes32(0x0), "nullifier already exist");
-        partialNullifiers[nullifierKey] = nullifierValue;
+    function _privateTransfer(address to, uint256 amount, uint256 root, bytes32 nullifierKey, bytes32 nullifierValue, bytes calldata snarkProof, address _verifier) private {
+        //require(nullifiers[nullifier] == false, "private address already used");
+        require(nullifiers[nullifierKey] == bytes32(0x0), "nullifier already exist");
+        nullifiers[nullifierKey] = nullifierValue;
 
         // @workaround
         //blockhash() is fucking use less :,(
         //bytes32 blkhash = blockhash(blockNum);
-        bytes32 storageRoot = storageRoots[blockNum];
-        bytes32[] memory publicInputs = _formatPublicRemintInputs(to, amount, storageRoot, nullifierKey, nullifierValue);
+
+        // @TODO
+        // @WARNING
+        // check that root exitst!!!
+
+        bytes32[] memory publicInputs = _formatPublicprivateTransferInputs(to, amount, root, nullifierKey, nullifierValue);
         if (!IVerifier(_verifier).verify(snarkProof, publicInputs)) {
             revert VerificationFailed();
         }
@@ -133,7 +113,6 @@ contract Token is ERC20, Ownable {
             _balances[to] += amount;
         }
         emit Transfer(address(0), to, amount);
-        emit Remint(nullifierKey, amount);
-        reMintAmounts[nullifierKey] = amount; // we can do without this to save gas but i am too lazy for event scanning 
+        emit PrivateTransfer(nullifierKey, amount);
     }
 }
