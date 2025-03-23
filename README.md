@@ -1,3 +1,5 @@
+# THIS REPO IS WORK IN PROGRESS
+
 # An erc20 with EIP7503, partial spends and reusable address
 An erc20 token with [EIP7503](https://eips.ethereum.org/EIPS/eip-7503) (zkwormholes) with a in-contract merkle tree to make it compatible with any EVM chain. It also has a new nullifier scheme to enable partial spends and reusable private addresses.  
 *More info in [docs/notes.md](https://github.com/jimjimvalkema/scrollZkWormholes/blob/main/docs/notes.md#L1)*
@@ -17,6 +19,19 @@ These are: anyone can call `setTrustedStorageRoot` and `mint`.
 Also EOA<->zkwormhole address collisions can be created.  
 *More info in [docs/notes.md](https://github.com/jimjimvalkema/scrollZkWormholes/blob/main/docs/notes.md#L8)* -->
 
+# TODO
+1. make  it work
+1. do `address=poseidon([secret, chainId])` instead so its easier to upgrade to multichain version.   
+1. encrypt nullifier value instead of hashing. `nullifierValue=encrypt([amount],publicKey)` 
+1. change the circuit to support a relayer. Prob by just adding a extra data field to public inputs
+1. `secret` should not be used. Instead the private-addresses should be derived from the same seed-phrase as the users ethereum wallet. Prob should do `address=poseidon(signature, chainId)`
+
+# future plans
+1. actually create a implementation of a relayer
+1. make verifier in solidity so people can recover in case they accidentally sent > privateTransferLimit
+1. change circuit and contract to allow input multiple roots from other chains to make it [toadnado](https://github.com/nodestarQ/toadnado) style 😎  
+ex: `assert(publicInputs.chainId == block.chainId)`   
+and `root = poseidon([...allOtherChainRoots])`  
 
 ## install
 ### js
