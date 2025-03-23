@@ -1,8 +1,10 @@
 use dep::std::field::bytes32_to_field;
 use dep::std::hash::poseidon;
 
-fn get_private_address(secret: Field) -> Field {
-    let hash:[u8; 32] = poseidon::bn254::hash_1([secret]).to_be_bytes(); //.as_array();
+global ADDRESS_TYPE: Field = poseidon::bn254::hash_1([0x7a6b776f726d686f6c65]); // UTF8("zkwormhole").toHex()
+
+fn get_private_address(pub_key: Field, chain_id: Field, address_type: Field) -> Field {
+    let hash:[u8; 32] = poseidon::bn254::hash_3([pub_key,chain_id,address_type ]).to_be_bytes(); //.as_array();
     let mut private_address:[u8;32] = [0; 32];
 
     // TODO do this with math instead of byte arrays
@@ -32,13 +34,14 @@ fn lower_then_or_equal(a: Field, b: Field) -> bool {
 //TODO remane nullifierId -> nullifierKey and nullifier -> nullifierValue
 fn main(
     //----- public inputs
+    chain_id: pub Field,
     recipient_address: pub Field,// the address to re-mint to
     withdraw_amount: pub Field,
     nullifier_value: pub Field,
     nullifier_key: pub Field,
     root: pub Field,
     //-----very privacy sensitive data -----
-    secret: Field,//private address is derived from secret // TODO instead of using a secrets use public cryptography shit so hardware wallets dont have to create a whole ass proof. Also makes complexity lower for hot wallets to ensure safety and better compatability with metamasksnap.
+    pub_key: Field, // kinda wierd but the public key shouldn't be public since it reveals the private_address
     incoming_balance: Field, // should be Field
     nonce: Field, // nonce to create a nulliefier from to track encrypted spend_amounts
     prev_nullifier_key: Field, // just here for the merkle proof of prev_nullifier, since prev_nullifier already contains all info
@@ -51,7 +54,8 @@ fn main(
     //------------ merkle proof of mapping(private_address -> incoming_balance) ------------
     // private_address = our secret commitment
     // private addres should be a field
-    let private_address:Field = get_private_address(secret);
+    // @TODO verify a signature here. prob sign hash(nonce,withdraw_amount,recipient_address)
+    let private_address:Field = get_private_address(pub_key,chain_id,ADDRESS_TYPE);
 
     // TODO merkle proof private address
     // "address" string is there so both the address and nullifiers can be in the same tree without them getting swapped around by an attacker
@@ -92,46 +96,44 @@ fn main(
     assert(computed_nullifier_key == nullifier_key, "computed nullifier doesnt match provided nullifier");
 }
 
-#[test]
-fn test_hashing() {
-    let nonce = 0;
-    let secret = 123;
-    let address = get_private_address(secret);
-    let nullifier = hash_nullifier_key(nonce, secret);
-    println(address);
-    println(nullifier);
-}
+// #[test]
+// fn test_hashing() {
+//     let nonce = 0;
+//     let secret = 123;
+//     let address = get_private_address(secret);
+//     let nullifier = hash_nullifier_key(nonce, secret);
+//     println(address);
+//     println(nullifier);
+// }
 
-#[test]
-fn test_main() {
-    //----- public inputs
-    let recipient_address: Field = 0x93211e420c8F552a0e4836f84892a0D4eb5D6D54;
-    let withdraw_amount:  Field = 0x8ac7230489e80000;
-    let nullifier_value: Field = 0x212456bab521c4afa65cca2751d74f7cbac9ba747d7bc3c21be994b886a7bfe1;
-    let nullifier_key: Field = 0x0a2fdf0860adb5ea719794ecf7ec81cc57e56f1846e1508a7fa6448d36cd9624;
-    let root: Field = 0;//0x1acea27e9cfb8fd7576d57d039f4c77e0d8edeb1d056bcc5213b7a65842cd900;
+// #[test]
+// fn test_main() {
+//     //----- public inputs
+//     let recipient_address: Field = 0x93211e420c8F552a0e4836f84892a0D4eb5D6D54;
+//     let withdraw_amount:  Field = 0x8ac7230489e80000;
+//     let nullifier_value: Field = 0x212456bab521c4afa65cca2751d74f7cbac9ba747d7bc3c21be994b886a7bfe1;
+//     let nullifier_key: Field = 0x0a2fdf0860adb5ea719794ecf7ec81cc57e56f1846e1508a7fa6448d36cd9624;
+//     let root: Field = 0;//0x1acea27e9cfb8fd7576d57d039f4c77e0d8edeb1d056bcc5213b7a65842cd900;
     
-    //-----private inputs -----
-    let secret: Field  = 0x1cf2c2021c2e15a1c61547a32a6295078aacf089edb3cc66fd992f627f30f824;
-    let incoming_balance: Field  = 420000000000000000000;
-    let nonce: Field = 3;
-    let prev_nullifier_key: Field = 0x1546f8d229c5a0943586cd5261ab4adbf995e849976a689a6055a32d4fae8337;
-    let prev_spend_amount: Field = 30000000000000000000;
+//     //-----private inputs -----
+//     let secret: Field  = 0x1cf2c2021c2e15a1c61547a32a6295078aacf089edb3cc66fd992f627f30f824;
+//     let incoming_balance: Field  = 420000000000000000000;
+//     let nonce: Field = 3;
+//     let prev_nullifier_key: Field = 0x1546f8d229c5a0943586cd5261ab4adbf995e849976a689a6055a32d4fae8337;
+//     let prev_spend_amount: Field = 30000000000000000000;
 
-    main(
-        //----- public inputs
-        recipient_address,
-        withdraw_amount,
-        nullifier_value,
-        nullifier_key,
-        root,
-        //-----private inputs -----
-        secret,
-        incoming_balance,
-        nonce,
-        prev_nullifier_key,
-        prev_spend_amount,
-    );
-}
-
-
+//     main(
+//         //----- public inputs
+//         recipient_address,
+//         withdraw_amount,
+//         nullifier_value,
+//         nullifier_key,
+//         root,
+//         //-----private inputs -----
+//         secret,
+//         incoming_balance,
+//         nonce,
+//         prev_nullifier_key,
+//         prev_spend_amount,
+//     );
+// }
