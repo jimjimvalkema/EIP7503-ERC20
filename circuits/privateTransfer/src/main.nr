@@ -3,8 +3,8 @@ use dep::std::hash::poseidon;
 
 global ADDRESS_TYPE: Field = poseidon::bn254::hash_1([0x7a6b776f726d686f6c65]); // UTF8("zkwormhole").toHex()
 
-fn get_private_address(pub_key: Field, chain_id: Field, address_type: Field) -> Field {
-    let hash:[u8; 32] = poseidon::bn254::hash_3([pub_key,chain_id,address_type ]).to_be_bytes(); //.as_array();
+fn get_private_address(viewing_key: Field, chain_id: Field, address_type: Field) -> Field {
+    let hash:[u8; 32] = poseidon::bn254::hash_3([viewing_key,chain_id,address_type ]).to_be_bytes(); //.as_array();
     let mut private_address:[u8;32] = [0; 32];
 
     // TODO do this with math instead of byte arrays
@@ -31,6 +31,12 @@ fn lower_then_or_equal(a: Field, b: Field) -> bool {
     !std::field::bn254::gt(a, b)
 }
 
+struct Signature_data {
+    public_key_x: [u8;32], 
+    public_key_y: [u8;32], 
+    signature: [u8;64], 
+}
+
 //TODO remane nullifierId -> nullifierKey and nullifier -> nullifierValue
 fn main(
     //----- public inputs
@@ -41,26 +47,30 @@ fn main(
     nullifier_key: pub Field,
     root: pub Field,
     //-----very privacy sensitive data -----
-    pub_key: Field, // kinda wierd but the public key shouldn't be public since it reveals the private_address
+    viewing_key: Field, // could be viewing_key = pub_key of the private_key, which used to derive the address. But viewing_key is also used to hash the nullifier_key
+    signature_data: Signature_data,
     incoming_balance: Field, // should be Field
-    nonce: Field, // nonce to create a nulliefier from to track encrypted spend_amounts
+    nonce: Field, // nonce to create a nullifier from to track encrypted spend_amounts
     prev_nullifier_key: Field, // just here for the merkle proof of prev_nullifier, since prev_nullifier already contains all info
     prev_spend_amount: Field,
 ) {
-    // to prevent the proof being stolen from the mempool and used for a differen withdraw address
-    // TODO check if you realy need to do this? Tornadocash something similair tho.
+    // to prevent the proof being stolen from the mempool and used for a different withdraw address
+    // TODO check if you really need to do this? Tornadocash something similar tho.
     assert(recipient_address != 0x0);
 
     //------------ merkle proof of mapping(private_address -> incoming_balance) ------------
     // private_address = our secret commitment
-    // private addres should be a field
+    // private address should be a field
     // @TODO verify a signature here. prob sign hash(nonce,withdraw_amount,recipient_address)
-    let private_address:Field = get_private_address(pub_key,chain_id,ADDRESS_TYPE);
+    let message_hash: [u8;32] = [0;32]; // hash(nonce,withdraw_amount,recipient_address)
+    assert(false, "TODO message_hash" );
+    let valid_signature = std::ecdsa_secp256k1::verify_signature(signature_data.public_key_x, signature_data.public_key_y, signature_data.signature, message_hash);
+    let private_address:Field = get_private_address(viewing_key,chain_id,ADDRESS_TYPE);
 
     // TODO merkle proof private address
     // "address" string is there so both the address and nullifiers can be in the same tree without them getting swapped around by an attacker
     let node_private_addr = 0; // hash(private_address, incoming_balance, "address")
-    let root_private_addr = 0;//TODO
+    let root_private_addr = 0; //TODO
 
     assert(root_private_addr == root, "given root doesnt match computed root_private_addr from the private_address merkle proof");
 
@@ -68,7 +78,7 @@ fn main(
     if (nonce != 0) {
         // verify that the nullifier exist onchain with a merkle proof
         // cant do this outside the circuit since that links prev_nullifier_key with the nullifier_key
-        let prev_nullifier_value: Field = hash_nullifier_value(prev_spend_amount, nonce - 1, secret);
+        let prev_nullifier_value: Field = hash_nullifier_value(prev_spend_amount, nonce - 1, viewing_key);
 
         // TODO merkle proof prev_nullifier_value
         let node_prev_nullifier = 0; // hash(prev_nullifier_key,prev_nullifier_value, "nullifier")
@@ -86,13 +96,13 @@ fn main(
     let new_spend_amount: Field = withdraw_amount + prev_spend_amount;
     // new_spend_amount <= incoming_balance
     assert(lower_then_or_equal(new_spend_amount, incoming_balance), "withdraw_amount too large, new_spend_amount is larger than incoming_balance");
-    let computed_nullifier_value: Field = hash_nullifier_value(new_spend_amount, nonce, secret);
+    let computed_nullifier_value: Field = hash_nullifier_value(new_spend_amount, nonce, viewing_key);
     assert(
         computed_nullifier_value == nullifier_value, "public input: nullifier_value, doesnt match the one computed in the circuit"
     );
 
     // ----- nullifier_key -------------
-    let computed_nullifier_key = hash_nullifier_key(nonce, secret);
+    let computed_nullifier_key = hash_nullifier_key(nonce, viewing_key);
     assert(computed_nullifier_key == nullifier_key, "computed nullifier doesnt match provided nullifier");
 }
 

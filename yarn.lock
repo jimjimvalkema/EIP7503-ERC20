@@ -1171,6 +1171,13 @@
   dependencies:
     "@types/node" "*"
 
+"@zk-kit/lazy-imt.sol@^2.0.0-beta.12":
+  version "2.0.0-beta.12"
+  resolved "https://registry.yarnpkg.com/@zk-kit/lazy-imt.sol/-/lazy-imt.sol-2.0.0-beta.12.tgz#76ae740c51b40a011a8219560ee9949883c1b098"
+  integrity sha512-9kiCM0hrO3EKl+Zkbl6l9616UwbF9snLgcMqDPhuLozZtwXnn6PE8vMIwgfuYGea4X5weH4O2VjnUFpIm/CIkg==
+  dependencies:
+    poseidon-solidity "0.0.5"
+
 abbrev@1:
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/abbrev/-/abbrev-1.1.1.tgz#f8f2c887ad10bf67f634f005b6987fed3179aac8"
@@ -3978,6 +3985,11 @@ poseidon-lite@^0.2.0:
   version "0.2.1"
   resolved "https://registry.yarnpkg.com/poseidon-lite/-/poseidon-lite-0.2.1.tgz#7ad98e3a3aa5b91a1fd3a61a87460e9e46fd76d6"
   integrity sha512-xIr+G6HeYfOhCuswdqcFpSX47SPhm0EpisWJ6h7fHlWwaVIvH3dLnejpatrtw6Xc6HaLrpq05y7VRfvDmDGIog==
+
+poseidon-solidity@0.0.5, poseidon-solidity@^0.0.5:
+  version "0.0.5"
+  resolved "https://registry.yarnpkg.com/poseidon-solidity/-/poseidon-solidity-0.0.5.tgz#3f93e01cfe25f6d2f2fac49734fbb00961b84655"
+  integrity sha512-NzrvSwHzvZgT4hvg2GyGqeR+UOU/eLSEt4wAoXEua+VaR7NTKKwx1X9bPlh1VMBEVEno+IWvkRBbidFGzTeAqQ==
 
 possible-typed-array-names@^1.0.0:
   version "1.0.0"
