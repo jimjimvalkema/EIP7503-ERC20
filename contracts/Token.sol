@@ -4,9 +4,12 @@
 pragma solidity ^0.8.23;
 
 //import "../../circuits/zkwormholesEIP7503/contract/zkwormholesEIP7503/plonk_vk.sol";
-import {ERC20} from "./ERC20.sol";
+import {ERC20} from "./ERC20.sol"; // from openzeppelin 5.2.0 but _updateMerkleTree is added inside _update. In order to make it track incoming balances of the recipient in a merkle tree
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import  {LazyIMT, LazyIMTData} from "@zk-kit/lazy-imt.sol/LazyIMT.sol";
+import {PoseidonT4} from "poseidon-solidity/PoseidonT4.sol";
+
 
 interface IVerifier {
     function verify(
@@ -16,16 +19,23 @@ interface IVerifier {
 }
 
 error VerificationFailed();
-event PrivateTransfer(bytes32 indexed nullifierKey, uint256 amount);
+event PrivateTransfer(uint256 indexed nullifierKey, uint256 amount);
 event StorageRootAdded(uint256 blockNumber);
 
 contract Token is ERC20, Ownable {
     // @notice nullifierKey = poseidon(nonce, secret)
     // @notice nullifierValue = poseidon(amountSpent, nonce, secret)
-    mapping (bytes32 => bytes32) public nullifiers; // nullifierKey -> nullifierValue 
+    mapping (uint256 => uint256) public nullifiers; // nullifierKey -> nullifierValue 
 
-    // privateTransferVerifier doesnt go down the full 248 depth (32 instead) of the tree but is able to run witn noir js (and is faster)
+    mapping (address => uint40) private accountIndexes;
+    mapping (uint256 => bool) public roots;
+    uint40 currentLeafIndex;
+    LazyIMTData public merkleTreeData;
+
+
+    // privateTransferVerifier doesn't go down the full 248 depth (32 instead) of the tree but is able to run with noir js (and is faster)
     address public privateTransferVerifier;
+
 
     /** 
      * EIP7503 reintroduces an attack vector with address collisions. This time its with EOAs and ZKwormhole addresses. 
@@ -36,12 +46,53 @@ contract Token is ERC20, Ownable {
      */
     uint256 public privateTransferLimit;
 
+    /**
+     * _privateTransferLimit caps the amount of tokens that are able to be spend from a private address
+     */
     constructor(uint256 _privateTransferLimit, uint8 _merkleTreeDepth, address _privateTransferVerifier)
         ERC20("zkwormholes-token", "WRMHL")
         Ownable(msg.sender)
     {
         privateTransferVerifier = _privateTransferVerifier;
+        privateTransferLimit = _privateTransferLimit;
+        LazyIMT.init(merkleTreeData, _merkleTreeDepth);
     }
+
+    function getAccountLeafIndex(address _account) public view returns(uint40) {
+        // -1 we store index + 1, because mappings default to 0 if a key doesn't exist.
+        return accountIndexes[_account]-1;
+    }
+
+    function _hashAccountLeaf(address _account, uint256 balance) private pure returns(uint256) {
+        return PoseidonT4.hash([uint256(uint160(_account)), balance ,uint256(0x61646472657373)]); //0x61646472657373 = utf8(address) => hexadecimal
+    }
+
+    function _updateBalanceInMerkleTree(address _account, uint256 _newBalance) override internal {
+        
+        //TODO
+        // check if account == tx.origin or if its a contract, since in that case it's not a private address.
+        // tx.origin is always a EOA
+        if (tx.origin == _account || _account.code.length > 0) {return;}
+        
+        // @WARNING you might be tempted to create smarter ways to check if its for sure not a private address. 
+        // Example: store the tx.origin address somewhere in a mapping like "allKnownEOAs" to check to save gas on future transfers. 
+        // Registering your EOA in "allKnownEOAs" now saves you on gas in the future. But that creates perverse incentives that break plausible deniability.
+        // doing so will cause every EOA to register in "allKnownEOAs" and then there is no plausible deniability left since it now "looks weird" to not do that.
+        // Even doing account != contract is bad in that sense.
+        
+        // hash leaf
+
+        uint256 leaf = _hashAccountLeaf(_account, _newBalance);
+        uint40 accountIndex = accountIndexes[_account];
+        if (accountIndex == 0 ) {
+            LazyIMT.insert(merkleTreeData, leaf);
+            currentLeafIndex += 1;
+            accountIndexes[_account] = currentLeafIndex; // after currentLeafIndex += 1 because accountIndexes returns index+1 
+        } else {
+            LazyIMT.update(merkleTreeData, leaf, accountIndex-1);
+        }
+    }
+
 
     // // TODO remove debug // WARNING anyone can mint
     function mint(address to, uint256 amount) public {
@@ -49,7 +100,7 @@ contract Token is ERC20, Ownable {
     }
 
     //---------------public---------------------
-    function privateTransfer(address to, uint256 amount, uint256 blockNum, bytes32 nullifierKey, bytes32 nullifierValue, bytes calldata snarkProof) public {
+    function privateTransfer(address to, uint256 amount, uint256 blockNum, uint256 nullifierKey, uint256 nullifierValue, bytes calldata snarkProof) public {
         _privateTransfer( to,  amount,  blockNum, nullifierKey, nullifierValue, snarkProof,  privateTransferVerifier);
     }
 
@@ -61,7 +112,7 @@ contract Token is ERC20, Ownable {
     //TODO make private
     // TODO see much gas this cost and if publicInputs can be calldata
     // does bit shifting instead of indexing save gas?
-    function _formatPublicprivateTransferInputs(address to, uint256 amount, uint256 root, uint256 nullifierKey, uint256 nullifierValue) public pure returns (bytes32[] memory) {
+    function _formatPublicInputs(address to, uint256 amount, uint256 root, uint256 nullifierKey, uint256 nullifierValue) public pure returns (bytes32[] memory) {
         bytes32 amountBytes = bytes32(uint256(amount));
         bytes32 toBytes = bytes32(uint256(uint160(bytes20(to))));
         bytes32[] memory publicInputs = new bytes32[](5);
@@ -75,25 +126,9 @@ contract Token is ERC20, Ownable {
         return publicInputs;
     }
 
-    function _formatPublicStorageRootInputs(bytes32 storageRoot, bytes32 blockHash, address contractAddress) public pure returns(bytes32[] memory) {
-        bytes32[] memory publicInputs = new bytes32[](65);
-        publicInputs[0] = storageRoot;
-        bytes20 contractAddressBytes = bytes20(contractAddress);
-
-        for (uint i=1; i < 33; i++) {
-            publicInputs[i] = bytes32(uint256(uint8(blockHash[i-1])));
-        }
-
-        // only copy first 20 bytes, rest can stay zero
-        for (uint i=33; i < 53; i++) {
-            publicInputs[i] = bytes32(uint256(uint8(contractAddressBytes[i-33])));
-        }
-        return publicInputs;
-    }
-
-    function _privateTransfer(address to, uint256 amount, uint256 root, bytes32 nullifierKey, bytes32 nullifierValue, bytes calldata snarkProof, address _verifier) private {
+    function _privateTransfer(address to, uint256 amount, uint256 root, uint256 nullifierKey, uint256 nullifierValue, bytes calldata snarkProof, address _verifier) private {
         //require(nullifiers[nullifier] == false, "private address already used");
-        require(nullifiers[nullifierKey] == bytes32(0x0), "nullifier already exist");
+        require(nullifiers[nullifierKey] == uint256(0), "nullifier already exist");
         nullifiers[nullifierKey] = nullifierValue;
 
         // @workaround
@@ -104,15 +139,12 @@ contract Token is ERC20, Ownable {
         // @WARNING
         // check that root exitst!!!
 
-        bytes32[] memory publicInputs = _formatPublicprivateTransferInputs(to, amount, root, nullifierKey, nullifierValue);
+        bytes32[] memory publicInputs = _formatPublicInputs(to, amount, root, nullifierKey, nullifierValue);
         if (!IVerifier(_verifier).verify(snarkProof, publicInputs)) {
             revert VerificationFailed();
         }
-        unchecked {
-            // Overflow not possible: balance + value is at most totalSupply, which we know fits into a uint256.
-            _balances[to] += amount;
-        }
-        emit Transfer(address(0), to, amount);
+
+        _update(address(0), to, amount);
         emit PrivateTransfer(nullifierKey, amount);
     }
 }

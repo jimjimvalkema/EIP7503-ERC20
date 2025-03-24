@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.0.0) (token/ERC20/ERC20.sol)
+// OpenZeppelin Contracts (last updated v5.2.0) (token/ERC20/ERC20.sol)
 
+// from openzeppelin 5.2.0 but _updateMerkleTree is added inside _update. In order to make it track incoming balances of the recipient in a merkle tree
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -23,16 +24,11 @@ import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.so
  *
  * We have followed general OpenZeppelin Contracts guidelines: functions revert
  * instead returning `false` on failure. This behavior is nonetheless
- * conventional and does not conflict with the expectations of ERC20
+ * conventional and does not conflict with the expectations of ERC-20
  * applications.
- *
- * Additionally, an {Approval} event is emitted on calls to {transferFrom}.
- * This allows applications to reconstruct the allowance for all accounts just
- * by listening to said events. Other implementations of the EIP may not emit
- * these events, as it isn't required by the specification.
  */
 abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
-    mapping(address account => uint256) internal _balances;
+    mapping(address account => uint256) private _balances;
 
     mapping(address account => mapping(address spender => uint256)) private _allowances;
 
@@ -51,6 +47,9 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
         _name = name_;
         _symbol = symbol_;
     }
+
+
+    function _updateBalanceInMerkleTree(address account, uint256 newBalance) virtual internal;
 
     /**
      * @dev Returns the name of the token.
@@ -138,8 +137,8 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
     /**
      * @dev See {IERC20-transferFrom}.
      *
-     * Emits an {Approval} event indicating the updated allowance. This is not
-     * required by the EIP. See the note at the beginning of {ERC20}.
+     * Skips emitting an {Approval} event indicating an allowance update. This is not
+     * required by the ERC. See {xref-ERC20-_approve-address-address-uint256-bool-}[_approve].
      *
      * NOTE: Does not update the allowance if the current allowance
      * is the maximum `uint256`.
@@ -273,7 +272,8 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
      *
      * Anyone who wishes to continue emitting `Approval` events on the`transferFrom` operation can force the flag to
      * true using the following override:
-     * ```
+     *
+     * ```solidity
      * function _approve(address owner, address spender, uint256 value, bool) internal virtual override {
      *     super._approve(owner, spender, value, true);
      * }
@@ -304,7 +304,7 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
      */
     function _spendAllowance(address owner, address spender, uint256 value) internal virtual {
         uint256 currentAllowance = allowance(owner, spender);
-        if (currentAllowance != type(uint256).max) {
+        if (currentAllowance < type(uint256).max) {
             if (currentAllowance < value) {
                 revert ERC20InsufficientAllowance(spender, currentAllowance, value);
             }
