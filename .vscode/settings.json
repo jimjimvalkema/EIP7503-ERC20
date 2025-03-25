@@ -3,6 +3,7 @@
         "ciphertext",
         "Merkle",
         "println",
+        "secp",
         "Tornadocash",
         "zkwormhole"
     ]

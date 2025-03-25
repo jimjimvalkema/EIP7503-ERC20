@@ -22,16 +22,18 @@ Also EOA<->zkwormhole address collisions can be created.
 
 # TODO
 1. make  it work
-1. ~~encrypt nullifier value instead of hashing. `nullifierValue=encrypt([amount],publicKey)`~~ just keep nullifierValue as a hash. Just allow a extra data field in the event to help people sync a old wallet. 
+1. ~~encrypt nullifier value instead of hashing. `nullifierValue=encrypt([amount],publicKey)`~~ just keep nullifierValue as a hash. Just allow a extra data field in the event to help people sync a old wallet. Hashing is far cheaper in circuit anyway. 
+1. make js to generate a viewing from the signature.
 1. change the circuit to support a relayer. Prob by just adding a extra data field to public inputs
 1. `secret` should not be used. Instead the private-addresses should be derived from the same seed-phrase as the users ethereum wallet. Prob should do `address=poseidon(public_key, chainId, "zkwormholes)`
 
 
 # future plans
-1. consider using eip712 for signing
+1. consider using eip712 for signing spends. (maybe also viewing keys?)
 1. actually create a implementation of a relayer
 1. make verifier in solidity so people can recover in case they accidentally sent > privateTransferLimit
-1. change circuit and contract to allow input multiple roots from other chains to make it [toadnado](https://github.com/nodestarQ/toadnado) style 😎  
+1. change circuit and contract to allow input multiple roots from other chains to make it [toadnado](https://github.com/nodestarQ/toadnado) style 😎  '
+1. consider using a per spend public key. But tbh i would just use built a offchain POI system like railgun instead.
 ex: `assert(publicInputs.chainId == block.chainId)`   
 and `root = poseidon([...allOtherChainRoots])`  
 

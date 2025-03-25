@@ -15,16 +15,16 @@ fn get_private_address(viewing_key: Field, chain_id: Field, address_type: Field)
     bytes32_to_field(private_address)
 }
 
-// nonce makes sure the hash is never the same even when the amount is different
+// account_nonce makes sure the hash is never the same even when the amount is different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
-fn hash_nullifier_value(amount: Field, nonce: Field, secret: Field) -> Field {
-    poseidon::bn254::hash_3([amount, nonce, secret])
+fn hash_nullifier_value(amount: Field, account_nonce: Field, secret: Field) -> Field {
+    poseidon::bn254::hash_3([amount, account_nonce, secret])
 }
 
-// nonce makes sure the hash is never the same even when the amount is different
+// account_nonce makes sure the hash is never the same even when the amount is different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
-fn hash_nullifier_key(nonce: Field, secret: Field) -> Field {
-    poseidon::bn254::hash_2([nonce, secret])
+fn hash_nullifier_key(account_nonce: Field, secret: Field) -> Field {
+    poseidon::bn254::hash_2([account_nonce, secret])
 }
 
 fn lower_then_or_equal(a: Field, b: Field) -> bool {
@@ -37,52 +37,56 @@ struct Signature_data {
     signature: [u8;64], 
 }
 
-//TODO remane nullifierId -> nullifierKey and nullifier -> nullifierValue
 fn main(
     //----- public inputs
     chain_id: pub Field,
-    recipient_address: pub Field,// the address to re-mint to
+    recipient_address: pub Field,      
     withdraw_amount: pub Field,
-    nullifier_value: pub Field,
-    nullifier_key: pub Field,
-    root: pub Field,
+    nullifier_value: pub Field,         // tracks how much is spend after this transfer hash(prev_spend_amount+withdraw_amount, account_nonce, viewing_key)
+    nullifier_key: pub Field,           // a deterministic identifier so we can lookup nullifier_value.  hash(account_nonce, viewing_key)
+    root: pub Field,                    // root of merkle tree we use to privately proof incoming_balance, prev_nullifier are on the chain.
     //-----very privacy sensitive data -----
-    viewing_key: Field, // could be viewing_key = pub_key of the private_key, which used to derive the address. But viewing_key is also used to hash the nullifier_key
-    signature_data: Signature_data,
-    incoming_balance: Field, // should be Field
-    nonce: Field, // nonce to create a nullifier from to track encrypted spend_amounts
-    prev_nullifier_key: Field, // just here for the merkle proof of prev_nullifier, since prev_nullifier already contains all info
-    prev_spend_amount: Field,
+    viewing_key: Field,                 // prob just take sig.#r from `sig = ethers.Signature.from( await signer.signMessage(message))`
+    signature_data: Signature_data,     // contains hash(account_nonce,withdraw_amount,recipient_address) 
+
+    incoming_balance: Field,            // the "balanceOf" of the private_address
+    account_nonce: Field,               // starts at 0, increments by one every private transaction (not a ethereum account nonce, its zkwormhole account!)
+    prev_nullifier_key: Field,          // just here for the merkle proof of prev_nullifier, since prev_nullifier already contains all info, we dont need to hash it in circuit
+    prev_spend_amount: Field,           // needed to verify incoming_balance-prev_spend_amount > withdraw_amount. and to create nullifier_value=hash(prev_spend_amount+withdraw_amount, account_nonce, viewing_key)
 ) {
     // to prevent the proof being stolen from the mempool and used for a different withdraw address
-    // TODO check if you really need to do this? Tornadocash something similar tho.
+    // TODO remove this when we verify the sig since it already contains this
     assert(recipient_address != 0x0);
 
     //------------ merkle proof of mapping(private_address -> incoming_balance) ------------
     // private_address = our secret commitment
     // private address should be a field
-    // @TODO verify a signature here. prob sign hash(nonce,withdraw_amount,recipient_address)
-    let message_hash: [u8;32] = [0;32]; // hash(nonce,withdraw_amount,recipient_address)
+    // @TODO verify a signature here. prob sign hash(account_nonce,withdraw_amount,recipient_address)
+    let message_hash: [u8;32] = [0;32]; // hash(account_nonce,withdraw_amount,recipient_address)
     assert(false, "TODO message_hash" );
     let valid_signature = std::ecdsa_secp256k1::verify_signature(signature_data.public_key_x, signature_data.public_key_y, signature_data.signature, message_hash);
+    assert(valid_signature);
+
     let private_address:Field = get_private_address(viewing_key,chain_id,ADDRESS_TYPE);
 
     // TODO merkle proof private address
     // "address" string is there so both the address and nullifiers can be in the same tree without them getting swapped around by an attacker
     let node_private_addr = 0; // hash(private_address, incoming_balance, "address")
     let root_private_addr = 0; //TODO
+    assert(false, "TODO merkle proof private address" );
 
-    assert(root_private_addr == root, "given root doesnt match computed root_private_addr from the private_address merkle proof");
+    assert(root_private_addr == root, "given root doesn't match computed root_private_addr from the private_address merkle proof");
 
     //--------prev nullifier------------
-    if (nonce != 0) {
+    if (account_nonce != 0) {
         // verify that the nullifier exist onchain with a merkle proof
         // cant do this outside the circuit since that links prev_nullifier_key with the nullifier_key
-        let prev_nullifier_value: Field = hash_nullifier_value(prev_spend_amount, nonce - 1, viewing_key);
+        let prev_nullifier_value: Field = hash_nullifier_value(prev_spend_amount, account_nonce - 1, viewing_key);
 
         // TODO merkle proof prev_nullifier_value
+        assert(false, "TODO merkle proof prev_nullifier_value" );
         let node_prev_nullifier = 0; // hash(prev_nullifier_key,prev_nullifier_value, "nullifier")
-        let root_prev_nullifier = 0; //TODO hash it (proof,node)
+        let root_prev_nullifier = 0; //TODO hash it calculate_root(proof,node)
 
         assert(root_prev_nullifier == root, "given root doesnt match computed root_prev_nullifier from the prev_nullifier merkle proof");
 
@@ -96,22 +100,22 @@ fn main(
     let new_spend_amount: Field = withdraw_amount + prev_spend_amount;
     // new_spend_amount <= incoming_balance
     assert(lower_then_or_equal(new_spend_amount, incoming_balance), "withdraw_amount too large, new_spend_amount is larger than incoming_balance");
-    let computed_nullifier_value: Field = hash_nullifier_value(new_spend_amount, nonce, viewing_key);
+    let computed_nullifier_value: Field = hash_nullifier_value(new_spend_amount, account_nonce, viewing_key);
     assert(
         computed_nullifier_value == nullifier_value, "public input: nullifier_value, doesnt match the one computed in the circuit"
     );
 
     // ----- nullifier_key -------------
-    let computed_nullifier_key = hash_nullifier_key(nonce, viewing_key);
+    let computed_nullifier_key = hash_nullifier_key(account_nonce, viewing_key);
     assert(computed_nullifier_key == nullifier_key, "computed nullifier doesnt match provided nullifier");
 }
 
 // #[test]
 // fn test_hashing() {
-//     let nonce = 0;
+//     let account_nonce = 0;
 //     let secret = 123;
 //     let address = get_private_address(secret);
-//     let nullifier = hash_nullifier_key(nonce, secret);
+//     let nullifier = hash_nullifier_key(account_nonce, secret);
 //     println(address);
 //     println(nullifier);
 // }
@@ -128,7 +132,7 @@ fn main(
 //     //-----private inputs -----
 //     let secret: Field  = 0x1cf2c2021c2e15a1c61547a32a6295078aacf089edb3cc66fd992f627f30f824;
 //     let incoming_balance: Field  = 420000000000000000000;
-//     let nonce: Field = 3;
+//     let account_nonce: Field = 3;
 //     let prev_nullifier_key: Field = 0x1546f8d229c5a0943586cd5261ab4adbf995e849976a689a6055a32d4fae8337;
 //     let prev_spend_amount: Field = 30000000000000000000;
 
@@ -142,7 +146,7 @@ fn main(
 //         //-----private inputs -----
 //         secret,
 //         incoming_balance,
-//         nonce,
+//         account_nonce,
 //         prev_nullifier_key,
 //         prev_spend_amount,
 //     );
