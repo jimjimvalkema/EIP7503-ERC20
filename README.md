@@ -33,10 +33,19 @@ Also EOA<->zkwormhole address collisions can be created.
 1. actually create a implementation of a relayer
 1. make verifier in solidity so people can recover in case they accidentally sent > privateTransferLimit
 1. change circuit and contract to allow input multiple roots from other chains to make it [toadnado](https://github.com/nodestarQ/toadnado) style 😎  '
-1. consider using a per spend public key. But tbh i would just use built a offchain POI system like railgun instead.
+1. consider using a per spend public key. But tbh i would just use built a offchain POI system like railgun instead.  
 ex: `assert(publicInputs.chainId == block.chainId)`   
 and `root = poseidon([...allOtherChainRoots])`  
 
+1. consider using a PoW instead of transferLimit.  
+Where `PoW = Hash_n_times(deterministicSig("myPow"))`.  
+and `address=hash(public_key, PoWHash,etc)` and `pubInputs=[PoWNullifier , ...theRest]`  
+and circuit should do: `nonce!=0 ? PoWNullifier <= can be random bs idc`  
+PoW can come from anywhere we dont care but originating it from `deterministicSig` supports hardware wallets and doesnt break "i only need my seedphrase to recover". (all wallets have "deterministicSig" afaik )
+
+
+## difference from EIP7503
+1. its a erc20! :P
 
 ## install
 ### js
