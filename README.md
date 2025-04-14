@@ -25,7 +25,7 @@ Also EOA<->zkwormhole address collisions can be created.
 1. ~~encrypt nullifier value instead of hashing. `nullifierValue=encrypt([amount],publicKey)`~~ just keep nullifierValue as a hash. Just allow a extra data field in the event to help people sync a old wallet. Hashing is far cheaper in circuit anyway. 
 1. make js to generate a viewing from the signature.
 1. change the circuit to support a relayer. Prob by just adding a extra data field to public inputs
-1. `secret` should not be used. Instead the private-addresses should be derived from the same seed-phrase as the users ethereum wallet. Prob should do `address=poseidon(public_key, chainId, "zkwormholes)`
+1. `secret` should not be used. Instead the private-addresses should be derived from the same seed-phrase as the users ethereum wallet. Prob should do `address=hash(public_key, hash(chainId, viewKey), "zkwormholes")`
 
 
 # future plans
@@ -33,15 +33,17 @@ Also EOA<->zkwormhole address collisions can be created.
 1. actually create a implementation of a relayer
 1. make verifier in solidity so people can recover in case they accidentally sent > privateTransferLimit
 1. change circuit and contract to allow input multiple roots from other chains to make it [toadnado](https://github.com/nodestarQ/toadnado) style 😎  '
-1. consider using a per spend public key. But tbh i would just use built a offchain POI system like railgun instead.  
+1. consider using a per spend viewing key to allow more flexible compliance. But tbh i would just use built a offchain POI system like railgun instead.  
 ex: `assert(publicInputs.chainId == block.chainId)`   
 and `root = poseidon([...allOtherChainRoots])`  
 
 1. consider using a PoW instead of transferLimit.  
-Where `PoW = Hash_n_times(deterministicSig("myPow"))`.  
+Where `PoW = Hash_n_times(deterministicSig("myPow"))` is paralyzable by doing "myPow1", "myPow2", etc  .  
 and `address=hash(public_key, PoWHash,etc)` and `pubInputs=[PoWNullifier , ...theRest]`  
 and circuit should do: `nonce!=0 ? PoWNullifier <= can be random bs idc`  
 PoW can come from anywhere we dont care but originating it from `deterministicSig` supports hardware wallets and doesnt break "i only need my seedphrase to recover". (all wallets have "deterministicSig" afaik )
+
+1. consider making this a "token factory" where all tokens created from this contract submit to the same commitment tree. And make sure the differentiate them by doing `address=hash(pubKey,hash(chainId,tokenAddress,viewingKey))`
 
 
 ## difference from EIP7503
