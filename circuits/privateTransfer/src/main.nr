@@ -42,6 +42,10 @@ fn main(
     chain_id: pub Field,
     recipient_address: pub Field,      
     withdraw_amount: pub Field,
+    relayer_address: pub Field,         // TODO if relayer_address = 0x0000... <- we don't check in contract and so can be anyone, who dares to fight the mev bots (likely block builder)
+    token_price_eth: pub Field,         // Not the true price of token/eth. But whatever the user decides to pay the relayer relative to block.basefee * gas_cost. So the user should probably set this price a bit higher then the real price to compensate for priorityFee, relayerInfraCost and other hidden cost 
+    max_fee: pub Field,                 // NOTE to self: the user pays: relayer_fee = gas_cost * block.basefee * token_price_eth. But relayers pays gas_cost * (block.basefee, priorityFee). gas_cost can change per hard fork and priorityFee at network congestion. User should consider this by lowering or raising the token_price_eth 
+
     nullifier_value: pub Field,         // tracks how much is spend after this transfer hash(prev_spend_amount+withdraw_amount, account_nonce, viewing_key)
     nullifier_key: pub Field,           // a deterministic identifier so we can lookup nullifier_value.  hash(account_nonce, viewing_key)
     root: pub Field,                    // root of merkle tree we use to privately proof incoming_balance, prev_nullifier are on the chain.
@@ -53,7 +57,11 @@ fn main(
     account_nonce: Field,               // starts at 0, increments by one every private transaction (not a ethereum account nonce, its zkwormhole account!)
     prev_nullifier_key: Field,          // just here for the merkle proof of prev_nullifier, since prev_nullifier already contains all info, we dont need to hash it in circuit
     prev_spend_amount: Field,           // needed to verify incoming_balance-prev_spend_amount > withdraw_amount. and to create nullifier_value=hash(prev_spend_amount+withdraw_amount, account_nonce, viewing_key)
-) {
+) { 
+
+    // less constraints then assert(lt(a, b)) but i cant attach a error message :(
+    std::field::bn254::assert_lt(max_fee ,  withdraw_amount); // "max_fee needs to be lower then the withdraw_amount"
+
     // to prevent the proof being stolen from the mempool and used for a different withdraw address
     // TODO remove this when we verify the sig since it already contains this
     assert(recipient_address != 0x0);
