@@ -59,12 +59,12 @@ yarn install-vite;
 nargo  
 https://noir-lang.org/docs/getting_started/quick_start#noir
 ```shell
-noirup -v 1.0.0-beta.2;
+noirup -v 1.0.0-beta.13;
 ```
 barretenberg  
 https://noir-lang.org/docs/getting_started/quick_start#proving-backend  
 ```shell
-bbup -nv 1.0.0-beta.2;
+bbup -v 1.2.0;
 ```
 <!-- ```shell
 bbup -v 1.0.0-beta.1;
@@ -123,8 +123,4 @@ nargo test;
 ### Compile circuit (verifier contracts are created in `scripts/deploy.cjs`)
 ```shell
 yarn compile-circuits 
-```
-### get storage slots layout
-```shell
-forge inspect contracts/Token.sol:Token storage --pretty > contracts/storagelayouts/Token.txt
 ```

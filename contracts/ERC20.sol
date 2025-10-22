@@ -205,6 +205,7 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
                 _totalSupply -= value;
             }
         } else {
+            _insertMerkleTree()
             unchecked {
                 // Overflow not possible: balance + value is at most totalSupply, which we know fits into a uint256.
                 _balances[to] += value;
