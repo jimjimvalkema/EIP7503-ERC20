@@ -17,3 +17,4 @@ node_modules
 ignition/deployments/chain-31337
 
 website/dist
+circuits/privateTransfer/target/private_transfer.json
