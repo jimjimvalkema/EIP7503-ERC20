@@ -24,6 +24,15 @@ event PrivateTransfer(uint256 indexed nullifierKey, uint256 amount);
 event StorageRootAdded(uint256 blockNumber);
 
 contract WormholeToken is ERC20WithWormHoleMerkleTree {
+    address internal constant POSEIDON2_ADDRESS = 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C; // yul-recompile-200: 0xb41072641808e6186eF5246fE1990e46EB45B65A gas: 62572, huff: 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C gas:39 627, yul-lib: 0x925e05cfb89f619BE3187Bf13D355A6D1864D24D,
+    // Hasher internal constant HASHER = Hasher(_hasher, SNARK_SCALAR_FIELD); constants on types that are function is not implemented yet in solidity (caused by HASHER.func)
+
+    // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT
+    function poseidon2T2(uint256[2] memory input) public view returns (uint256) {
+        (, bytes memory result) = POSEIDON2_ADDRESS.staticcall(abi.encode(input));
+        return uint256(bytes32(result));
+    }
+
     // @notice nullifierKey = poseidon(nonce, secret)
     // @notice nullifierValue = poseidon(amountSpent, nonce, secret)
     mapping (uint256 => uint256) public nullifiers; // nullifierKey -> nullifierValue 
@@ -31,13 +40,16 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     mapping (address => uint40) private accountIndexes;
     mapping (uint256 => bool) public roots;
     uint40 currentLeafIndex;
+
+    uint256 public testLeaf;
+    uint256[2] public onChainPreimg;
     //LazyIMTData public merkleTreeData;
 
 
     // privateTransferVerifier doesn't go down the full 248 depth (32 instead) of the tree but is able to run with noir js (and is faster)
     address public privateTransferVerifier;
     LeanIMTData public tree;
-
+    
     /**
      * _privateTransferLimit caps the amount of tokens that are able to be spend from a private address
      */
@@ -74,7 +86,14 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         // Even doing account != contract is bad in that sense. Since account based wallets would also save on gas.
         
         // leaf = hash(_to, _newBalance)
-        uint256 leaf = 420;
+        // uint256[] memory input = new uint256[](2);
+        // input[0] = uint256(uint160(bytes20(_to)));
+        // input[1] = _newBalance;
+        uint256 leaf = poseidon2T2([uint256(uint160(bytes20(_to))), _newBalance]);
+        testLeaf = leaf;
+        onChainPreimg[0] = uint256(uint160(bytes20(_to)));
+        onChainPreimg[1] = _newBalance;
+
         if (leanIMTPoseidon2.has(tree,leaf)) {
             // it's already in there! (rarely happens but can happen if an EOA receives an amount that results in a balance it had before)
             return;
@@ -84,6 +103,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         }
     }
 
+    function root() public view returns(uint256){
+        return leanIMTPoseidon2.root(tree);
+    }
 
     // // TODO remove debug // WARNING anyone can mint
     function mint(address to, uint256 amount) public {

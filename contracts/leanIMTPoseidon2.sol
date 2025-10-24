@@ -11,7 +11,7 @@ library leanIMTPoseidon2 {
 
     // The function used for hashing. Passed as a function parameter in functions from InternalLazyIMT
     function _hasher(uint256[2] memory leaves) internal view returns (uint256) {
-        (, bytes memory result) = POSEIDON2_ADDRESS.staticcall(abi.encode(leaves[0],leaves[1]));
+        (, bytes memory result) = POSEIDON2_ADDRESS.staticcall(abi.encode(leaves));
         return uint256(bytes32(result));
     }
 
