@@ -6,7 +6,8 @@ import { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/art
 import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 // TODO fix @warptoad/gigabridge-js why it doesn't automattically gets @aztec/aztec.js
 import {deployPoseidon2Huff} from "@warptoad/gigabridge-js"
-import { padBytes, padHex } from "viem";
+import { fromHex, Hex, Hex, padBytes, padHex } from "viem";
+import { poseidon2Hash } from "@zkpassport/poseidon2"
 
 
 const WormholeTokenContractName = "WormholeToken"
@@ -27,15 +28,25 @@ describe("Token", async function () {
         leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [],{libraries:{}}); 
         PrivateTransferVerifier = await viem.deployContract(PrivateTransferVerifierContractName, [],{libraries:{}}); 
         wormholeToken = await viem.deployContract(WormholeTokenContractName, [PrivateTransferVerifier.address] ,{libraries:{leanIMTPoseidon2:leanIMTPoseidon2.address}});
-        for (const wallet of [deployer, alice, bob]) {
+        let _______root = await wormholeToken.read.root()
+        for (const wallet of [alice, bob]) {
             await wormholeToken.write.getFreeTokens([wallet.account.address, 1_000_000n])
+
+            const _______preimg = [fromHex(wallet.account.address,"bigint"),1_000_000n]
+            const _______leaf = poseidon2Hash(_______preimg)
+            _______root = await wormholeToken.read.root()
+            const onChainLeaf = await wormholeToken.read.testLeaf()
+            const onChainPreimg0 = await wormholeToken.read.onChainPreimg([0n])
+            const onChainPreimg1 = await wormholeToken.read.onChainPreimg([1n])
+            const onChainPreimg = [onChainPreimg0, onChainPreimg1]
+            console.log({_______root, _______leaf,onChainLeaf,onChainPreimg,  _______preimg})
         }
     })
 
     describe("Token", async function ()  {
         it("Should transfer", async function () {
             console.log({wormholeToken})
-            await wormholeToken.write.transfer([alice.account.address, 420n])
+            //await wormholeToken.write.transfer([alice.account.address, 420n])
         })
     })
 })
