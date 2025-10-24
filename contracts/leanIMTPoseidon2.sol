@@ -4,7 +4,7 @@ pragma solidity ^0.8.4;
 import {InternalLeanIMT, LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.sol";
 import {SNARK_SCALAR_FIELD} from "zk-kit-lean-imt-custom-hash/Constants.sol";
 
-library LeanIMT {
+library leanIMTPoseidon2 {
     // TODO
     address internal constant POSEIDON2_ADDRESS = 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C; // yul-recompile-200: 0xb41072641808e6186eF5246fE1990e46EB45B65A gas: 62572, huff: 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C gas:39 627, yul-lib: 0x925e05cfb89f619BE3187Bf13D355A6D1864D24D,
     // Hasher internal constant HASHER = Hasher(_hasher, SNARK_SCALAR_FIELD); constants on types that are function is not implemented yet in solidity (caused by HASHER.func)
