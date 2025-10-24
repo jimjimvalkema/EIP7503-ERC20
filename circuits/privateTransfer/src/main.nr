@@ -28,18 +28,25 @@ fn compute_root(
     )
 }
 
-// TODO add PoW to prevent address collision attack
 fn get_private_address(pub_key: Field, pow_nonce: Field) -> Field {
-    let pow_hash: Field =  Poseidon2::hash([pow_nonce], 1); 
-    std::field::bn254::assert_gt(pow_hash, POW_DIFFICULTY); //"pow failed: pow_nonce results in hash that is not > POW_DIFFICULTY"
-    let hash: [u8; 32] = Poseidon2::hash([pub_key, pow_nonce, PRIVATE_ADDRESS_TYPE], 3).to_be_bytes();
-    let mut private_address: [u8; 32] = [0; 32];
+    // EIP7503 reintroduces an attack vector with address collisions because addresses are only 20 bytes. This time its with EOAs and ZKwormhole addresses. 
+    // This allows the attacker to find a address that is both a EOA and a zkwormhole address. Which allows the hacker to mint infinite tokens.
+    // The cost for this attack is estimated to be 10 billion dollars in 2021.
+    // more info here: https://hackmd.io/Vzhp5YJyTT-LhWm_s0JQpA and here: https://eips.ethereum.org/EIPS/eip-3607
 
+    // Here we add pow_nonce to the address hashing and the PoW verification to force the attacker to do a PoW challenge on each attempt
+    // pow_nonce need to be added to address_hash input other wise the attacker can find colliding address and do the PoW challenge afterwards
+    // the pow_hash has the address_hash as input to prevent the attacker from reusing pow_nonces
+    let address_hash: Field = Poseidon2::hash([pub_key,pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
+    let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
+    std::field::bn254::assert_gt(pow_hash, POW_DIFFICULTY); //"pow failed: pow_nonce results in hash that is not > POW_DIFFICULTY"
+    
     // replace last 12 bytes with zero since address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
-    for index in 0..20 {
-        private_address[index + 12] = hash[index];
+    let mut address_bytes: [u8;32] = address_hash.to_be_bytes();
+    for index in 20..32 {
+        address_bytes[index] = 0;
     }
-    bytes32_to_field(private_address)
+    bytes32_to_field(address_bytes)
 }
 
 fn hash_received_total_leaf(private_address: Field, received_total: Field) -> Field {

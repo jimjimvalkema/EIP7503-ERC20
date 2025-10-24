@@ -49,7 +49,7 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
     }
 
 
-    function _updateBalanceInMerkleTree(address account, uint256 newBalance) virtual internal;
+    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance) virtual internal;
 
     /**
      * @dev Returns the name of the token.

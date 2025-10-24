@@ -8,7 +8,8 @@ import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol"; /
 // import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 // import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 // import {LazyIMT, LazyIMTData} from "@zk-kit/lazy-imt.sol/LazyIMT.sol";
-
+import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
+import {LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.sol";
 
 
 interface IVerifier {
@@ -22,7 +23,7 @@ error VerificationFailed();
 event PrivateTransfer(uint256 indexed nullifierKey, uint256 amount);
 event StorageRootAdded(uint256 blockNumber);
 
-contract Token is ERC20WithWormHoleMerkleTree {
+contract WormholeToken is ERC20WithWormHoleMerkleTree {
     // @notice nullifierKey = poseidon(nonce, secret)
     // @notice nullifierValue = poseidon(amountSpent, nonce, secret)
     mapping (uint256 => uint256) public nullifiers; // nullifierKey -> nullifierValue 
@@ -35,26 +36,20 @@ contract Token is ERC20WithWormHoleMerkleTree {
 
     // privateTransferVerifier doesn't go down the full 248 depth (32 instead) of the tree but is able to run with noir js (and is faster)
     address public privateTransferVerifier;
-
-
-    /** 
-     * EIP7503 reintroduces an attack vector with address collisions. This time its with EOAs and ZKwormhole addresses. 
-     * This allows the attacker to find a address that is both a EOA and a zkwormhole address. Which allows the hacker to mint infinite tokens.
-     * The cost for this attack is estimated to be 10 billion dollars in 2021.
-     * This contract enforces a maximum balance zkwormhole accounts can spend to make this attack uneconomical.
-     * more info here: https://hackmd.io/Vzhp5YJyTT-LhWm_s0JQpA and here: https://eips.ethereum.org/EIPS/eip-3607
-     */
-    uint256 public privateTransferLimit;
+    LeanIMTData public tree;
 
     /**
      * _privateTransferLimit caps the amount of tokens that are able to be spend from a private address
      */
-    constructor(uint256 _privateTransferLimit, uint8 _merkleTreeDepth, address _privateTransferVerifier)
+    constructor(address _privateTransferVerifier)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
     {
         privateTransferVerifier = _privateTransferVerifier;
-        privateTransferLimit = _privateTransferLimit;
         //LazyIMT.init(merkleTreeData, _merkleTreeDepth);
+    }
+
+    function getFreeTokens(address _to, uint256 _amount) public {
+        _mint(_to, _amount);
     }
 
     function getAccountLeafIndex(address _account) public view returns(uint40) {
@@ -66,30 +61,27 @@ contract Token is ERC20WithWormHoleMerkleTree {
         //return PoseidonT4.hash([uint256(uint160(_account)), balance ,uint256(0x61646472657373)]); //0x61646472657373 = utf8(address) => hexadecimal
     }
 
-    function _updateBalanceInMerkleTree(address _account, uint256 _newBalance) override internal {
-        
+    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance) override internal {        
         //TODO
         // check if account == tx.origin or if its a contract, since in that case it's not a private address.
         // tx.origin is always a EOA
-        if (tx.origin == _account || _account.code.length > 0) {return;}
+        if (tx.origin == _to || _to.code.length > 0) {return;}
         
         // @WARNING you might be tempted to create smarter ways to check if its for sure not a private address. 
         // Example: store the tx.origin address somewhere in a mapping like "allKnownEOAs" to check to save gas on future transfers. 
         // Registering your EOA in "allKnownEOAs" now saves you on gas in the future. But that creates perverse incentives that break plausible deniability.
-        // doing so will cause every EOA to register in "allKnownEOAs" and then there is no plausible deniability left since it now "looks weird" to not do that.
-        // Even doing account != contract is bad in that sense.
+        // doing so will cause every EOA owner to register in "allKnownEOAs" and then there is no plausible deniability left since it now "looks weird" to not do that.
+        // Even doing account != contract is bad in that sense. Since account based wallets would also save on gas.
         
-        // hash leaf
-
-        // uint256 leaf = _hashAccountLeaf(_account, _newBalance);
-        // uint40 accountIndex = accountIndexes[_account];
-        // if (accountIndex == 0 ) {
-        //     LazyIMT.insert(merkleTreeData, leaf);
-        //     currentLeafIndex += 1;
-        //     accountIndexes[_account] = currentLeafIndex; // after currentLeafIndex += 1 because accountIndexes returns index+1 
-        // } else {
-        //     LazyIMT.update(merkleTreeData, leaf, accountIndex-1);
-        // }
+        // leaf = hash(_to, _newBalance)
+        uint256 leaf = 420;
+        if (leanIMTPoseidon2.has(tree,leaf)) {
+            // it's already in there! (rarely happens but can happen if an EOA receives an amount that results in a balance it had before)
+            return;
+        } else {
+            // TODO use insert many when remint happens
+            leanIMTPoseidon2.insert(tree,leaf);
+        }
     }
 
 
