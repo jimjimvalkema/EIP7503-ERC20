@@ -27,7 +27,7 @@ import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.so
  * conventional and does not conflict with the expectations of ERC-20
  * applications.
  */
-abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
+abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata, IERC20Errors {
     mapping(address account => uint256) private _balances;
 
     mapping(address account => mapping(address spender => uint256)) private _allowances;
@@ -205,11 +205,17 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
                 _totalSupply -= value;
             }
         } else {
-            _insertMerkleTree()
+            uint256 newBalance;
             unchecked {
                 // Overflow not possible: balance + value is at most totalSupply, which we know fits into a uint256.
-                _balances[to] += value;
+                newBalance = _balances[to] + value;
+    
             }
+            _balances[to] = newBalance;
+
+            // we only care about `to` since zkwormhole accounts can only receive from the public not spend
+            // so the _balances[to] number goes up only :D
+            _updateBalanceInMerkleTree(to, newBalance);
         }
 
         emit Transfer(from, to, value);

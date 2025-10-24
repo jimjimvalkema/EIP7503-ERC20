@@ -2,11 +2,8 @@ const { buildModule } = require("@nomicfoundation/hardhat-ignition/modules");
 
 module.exports = buildModule("TokenModule", (m) => {
   const merkleTreeDepth = m.getParameter("merkleTreeDepth");
-  const privateTransferLimit = m.getParameter("privateTransferLimit");
-  const PoseidonT3Address = m.getParameter("PoseidonT3Address");
-  const PoseidonT4Address = m.getParameter("PoseidonT4Address");
-  const _poseidonT3 = m.contractAt("PoseidonT3", PoseidonT3Address)
 
+  // TODO leanIMTPoseidon2
   const privateTransferVerifier = m.contract("privateTransferVerifier", [], {
     value: 0n,
   });
@@ -15,5 +12,5 @@ module.exports = buildModule("TokenModule", (m) => {
     value: 0n,
     token
   });
-  return { token };
+  return { token, privateTransferVerifier };
 });
