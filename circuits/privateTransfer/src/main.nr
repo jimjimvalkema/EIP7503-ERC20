@@ -3,9 +3,11 @@ use dep::std::field::bytes32_to_field;
 use binary_merkle_root::binary_merkle_root;
 
 // domain separators
-global ADDRESS_TYPE: Field = Poseidon2::hash([0x7a6b776f726d686f6c65], 1); // UTF8("zkwormhole").toHex()
+global PRIVATE_ADDRESS_TYPE: Field = Poseidon2::hash([0x7a6b776f726d686f6c65], 1); // UTF8("zkwormhole").toHex()
 global RECEIVED_TOTAL_DOMAIN: Field = 0x52454345495645445F544F54414C; // UTF8("RECEIVED_TOTAL").toHex()
 global SPENT_TOTAL_DOMAIN: Field = 0x5350454E545F544F54414C; // UTF8("SPENT_TOTAL").toHex()
+// @TODO find out what number would be secure enough!
+global POW_DIFFICULTY: Field = 0xffff; // find a nonce that result in a hash that is hash > POW_DIFFICULTY
 
 global MAX_TREE_DEPTH: u32 = 40;
 
@@ -27,8 +29,10 @@ fn compute_root(
 }
 
 // TODO add PoW to prevent address collision attack
-fn get_private_address(pub_key: Field, address_type: Field) -> Field {
-    let hash: [u8; 32] = Poseidon2::hash([pub_key, address_type], 2).to_be_bytes(); //.as_array();
+fn get_private_address(pub_key: Field, pow_nonce: Field) -> Field {
+    let pow_hash: Field =  Poseidon2::hash([pow_nonce], 1); 
+    std::field::bn254::assert_gt(pow_hash, POW_DIFFICULTY); //"pow failed: pow_nonce results in hash that is not > POW_DIFFICULTY"
+    let hash: [u8; 32] = Poseidon2::hash([pub_key, pow_nonce, PRIVATE_ADDRESS_TYPE], 3).to_be_bytes();
     let mut private_address: [u8; 32] = [0; 32];
 
     // replace last 12 bytes with zero since address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
@@ -98,6 +102,7 @@ fn main(
     root: pub Field,                    // root of merkle tree we use to privately proof received_total, prev_nullifier are on the chain.
     //-----very privacy sensitive data -----
     signature_data: SignatureData,      // contains hash(account_nonce,amount,recipient_address)
+    pow_nonce: Field,                    // to limit the collision attacks between EOAs and private_addresses, 
     received_total: Field,              // the "balanceOf" of the private_address
     prev_spent_total: Field,            // needed to verify received_total-prev_spent_total > amount. and to create nullifier_value=hash(prev_spent_total+amount, account_nonce, viewing_key)
     viewing_key: Field,                 // used as randomness to blind commitments. Prob just take sig.#r from `sig = ethers.Signature.from( await signer.signMessage(message))`
@@ -135,8 +140,7 @@ fn main(
     assert(valid_signature, "invalid signature");
     // public_key_x is 32 bytes so can go over the field limit but from_be_bytes will just wrap around which is fine in this case
     let pub_key_x_field: Field = Field::from_be_bytes(signature_data.public_key_x);
-    // TODO add PoW
-    let private_address: Field = get_private_address(pub_key_x_field, ADDRESS_TYPE);
+    let private_address: Field = get_private_address(pub_key_x_field, pow_nonce);
 
     let received_total_leaf = hash_received_total_leaf(private_address, received_total);
 

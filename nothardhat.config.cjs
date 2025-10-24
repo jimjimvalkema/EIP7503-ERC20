@@ -1,6 +1,7 @@
 // type: "module" not supported in package.js which is cringe
 require("@nomicfoundation/hardhat-toolbox");
 const { vars } = require("hardhat/config");
+import hardhatTypechain from "@nomicfoundation/hardhat-typechain";
 
 const ETHERSCAN_KEY = vars.get("ETHERSCAN_KEY");
 const PRIVATE_KEY = vars.get("PRIVATE_KEY");
@@ -8,6 +9,7 @@ const PRIVATE_KEY = vars.get("PRIVATE_KEY");
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: "0.8.28",
+  plugins: [hardhatTypechain],
 
   networks: {
     sepolia: {

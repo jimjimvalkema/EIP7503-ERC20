@@ -4,11 +4,11 @@
 pragma solidity ^0.8.23;
 
 //import "../../circuits/zkwormholesEIP7503/contract/zkwormholesEIP7503/plonk_vk.sol";
-import {ERC20} from "./ERC20.sol"; // from openzeppelin 5.2.0 but _updateMerkleTree is added inside _update. In order to make it track incoming balances of the recipient in a merkle tree
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-import  {LazyIMT, LazyIMTData} from "@zk-kit/lazy-imt.sol/LazyIMT.sol";
-import {PoseidonT4} from "poseidon-solidity/PoseidonT4.sol";
+import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol"; // from openzeppelin 5.2.0 but _updateMerkleTree is added inside _update. In order to make it track incoming balances of the recipient in a merkle tree
+// import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+// import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+// import {LazyIMT, LazyIMTData} from "@zk-kit/lazy-imt.sol/LazyIMT.sol";
+
 
 
 interface IVerifier {
@@ -22,7 +22,7 @@ error VerificationFailed();
 event PrivateTransfer(uint256 indexed nullifierKey, uint256 amount);
 event StorageRootAdded(uint256 blockNumber);
 
-contract Token is ERC20, Ownable {
+contract Token is ERC20WithWormHoleMerkleTree {
     // @notice nullifierKey = poseidon(nonce, secret)
     // @notice nullifierValue = poseidon(amountSpent, nonce, secret)
     mapping (uint256 => uint256) public nullifiers; // nullifierKey -> nullifierValue 
@@ -30,7 +30,7 @@ contract Token is ERC20, Ownable {
     mapping (address => uint40) private accountIndexes;
     mapping (uint256 => bool) public roots;
     uint40 currentLeafIndex;
-    LazyIMTData public merkleTreeData;
+    //LazyIMTData public merkleTreeData;
 
 
     // privateTransferVerifier doesn't go down the full 248 depth (32 instead) of the tree but is able to run with noir js (and is faster)
@@ -50,12 +50,11 @@ contract Token is ERC20, Ownable {
      * _privateTransferLimit caps the amount of tokens that are able to be spend from a private address
      */
     constructor(uint256 _privateTransferLimit, uint8 _merkleTreeDepth, address _privateTransferVerifier)
-        ERC20("zkwormholes-token", "WRMHL")
-        Ownable(msg.sender)
+        ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
     {
         privateTransferVerifier = _privateTransferVerifier;
         privateTransferLimit = _privateTransferLimit;
-        LazyIMT.init(merkleTreeData, _merkleTreeDepth);
+        //LazyIMT.init(merkleTreeData, _merkleTreeDepth);
     }
 
     function getAccountLeafIndex(address _account) public view returns(uint40) {
@@ -64,7 +63,7 @@ contract Token is ERC20, Ownable {
     }
 
     function _hashAccountLeaf(address _account, uint256 balance) private pure returns(uint256) {
-        return PoseidonT4.hash([uint256(uint160(_account)), balance ,uint256(0x61646472657373)]); //0x61646472657373 = utf8(address) => hexadecimal
+        //return PoseidonT4.hash([uint256(uint160(_account)), balance ,uint256(0x61646472657373)]); //0x61646472657373 = utf8(address) => hexadecimal
     }
 
     function _updateBalanceInMerkleTree(address _account, uint256 _newBalance) override internal {
@@ -82,15 +81,15 @@ contract Token is ERC20, Ownable {
         
         // hash leaf
 
-        uint256 leaf = _hashAccountLeaf(_account, _newBalance);
-        uint40 accountIndex = accountIndexes[_account];
-        if (accountIndex == 0 ) {
-            LazyIMT.insert(merkleTreeData, leaf);
-            currentLeafIndex += 1;
-            accountIndexes[_account] = currentLeafIndex; // after currentLeafIndex += 1 because accountIndexes returns index+1 
-        } else {
-            LazyIMT.update(merkleTreeData, leaf, accountIndex-1);
-        }
+        // uint256 leaf = _hashAccountLeaf(_account, _newBalance);
+        // uint40 accountIndex = accountIndexes[_account];
+        // if (accountIndex == 0 ) {
+        //     LazyIMT.insert(merkleTreeData, leaf);
+        //     currentLeafIndex += 1;
+        //     accountIndexes[_account] = currentLeafIndex; // after currentLeafIndex += 1 because accountIndexes returns index+1 
+        // } else {
+        //     LazyIMT.update(merkleTreeData, leaf, accountIndex-1);
+        // }
     }
 
 
