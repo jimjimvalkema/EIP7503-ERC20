@@ -6,7 +6,7 @@ import { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/art
 import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 // TODO fix @warptoad/gigabridge-js why it doesn't automattically gets @aztec/aztec.js
 import {deployPoseidon2Huff} from "@warptoad/gigabridge-js"
-import { fromHex, Hex, Hex, padBytes, padHex } from "viem";
+import { fromHex, Hex, padBytes, padHex } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 
 
@@ -28,18 +28,16 @@ describe("Token", async function () {
         leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [],{libraries:{}}); 
         PrivateTransferVerifier = await viem.deployContract(PrivateTransferVerifierContractName, [],{libraries:{}}); 
         wormholeToken = await viem.deployContract(WormholeTokenContractName, [PrivateTransferVerifier.address] ,{libraries:{leanIMTPoseidon2:leanIMTPoseidon2.address}});
-        let _______root = await wormholeToken.read.root()
+        let root = await wormholeToken.read.root()
+        console.log({root})
+        const amountFreeTokens = await wormholeToken.read.amountFreeTokens()
         for (const wallet of [alice, bob]) {
-            await wormholeToken.write.getFreeTokens([wallet.account.address, 1_000_000n])
+            await wormholeToken.write.getFreeTokens([wallet.account.address]) //sends 1_000_000n token
 
-            const _______preimg = [fromHex(wallet.account.address,"bigint"),1_000_000n]
-            const _______leaf = poseidon2Hash(_______preimg)
-            _______root = await wormholeToken.read.root()
-            const onChainLeaf = await wormholeToken.read.testLeaf()
-            const onChainPreimg0 = await wormholeToken.read.onChainPreimg([0n])
-            const onChainPreimg1 = await wormholeToken.read.onChainPreimg([1n])
-            const onChainPreimg = [onChainPreimg0, onChainPreimg1]
-            console.log({_______root, _______leaf,onChainLeaf,onChainPreimg,  _______preimg})
+            const preimg = [fromHex(wallet.account.address,"bigint"),amountFreeTokens]
+            const leafJs = poseidon2Hash(preimg)
+            root = await wormholeToken.read.root()
+            console.log({root: root,leaf: leafJs,preimg})
         }
     })
 
