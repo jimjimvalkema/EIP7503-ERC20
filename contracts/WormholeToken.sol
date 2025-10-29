@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
 
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.3;
 
-//import "../../circuits/zkwormholesEIP7503/contract/zkwormholesEIP7503/plonk_vk.sol";
-import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol"; // from openzeppelin 5.2.0 but _updateMerkleTree is added inside _update. In order to make it track incoming balances of the recipient in a merkle tree
-// import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-// import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
-// import {LazyIMT, LazyIMTData} from "@zk-kit/lazy-imt.sol/LazyIMT.sol";
-import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
+import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol"; 
 import {LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.sol";
+import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
 
 
 interface IVerifier {
@@ -21,6 +17,7 @@ interface IVerifier {
 
 
 struct FeeData {
+    // relayerAddress = 0 <= self relay, relayerAddress = 1 <= msg.sender will relay, all other will send it to that address like expected
     address relayerAddress;
     // there is no way for the contract to know what priority fee is set so the spender just has to set it for the relayer (who ofc can choose a different number)
     uint256 priorityFee;
@@ -28,7 +25,9 @@ struct FeeData {
     // price of eth in fee_token * gas_used
     uint256 conversionRate;
     // in the contract the fee is calculated feeAmountInFeeToken = (pubInput.priority_fee + block.baseFee) * pubInput.conversion_rate
-    // and should feeAmountInFeeToken < max_fee
+    // and should feeAmountInFeeToken < max_fee. conversionRate = gasUsage*tokenPriceInWei*relayerBonusFactor. 
+    // ex gasUsage=45000,tokenPriceInEth=0.048961448,relayerBonusFactor=10%
+    // conversionRate = 45000 * 48955645000000000 * 1.1
     uint256 maxFee;
     // fee_token is not that interesting rn because it really can only be the token it self or eth,
     // but in the future where it is integrated as a deposit method of a rail-gun like system it can be use full.
@@ -36,7 +35,8 @@ struct FeeData {
 }
 
 error VerificationFailed();
-// 
+// accountNoteNullifier is indexed so users can search for it and find out the total amount spend, which is needed to make the next spend the next
+// alternatively they can use `nullifiers` mapping
 event PrivateTransfer(uint256 indexed accountNoteNullifier, uint256 amount);
 event StorageRootAdded(uint256 blockNumber);
 event NewLeaf(uint256 leaf);
@@ -44,9 +44,9 @@ event NewLeaf(uint256 leaf);
 contract WormholeToken is ERC20WithWormHoleMerkleTree {
     address internal constant POSEIDON2_ADDRESS = 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C; // yul-recompile-200: 0xb41072641808e6186eF5246fE1990e46EB45B65A gas: 62572, huff: 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C gas:39 627, yul-lib: 0x925e05cfb89f619BE3187Bf13D355A6D1864D24D,
 
-    // @notice accountNoteNullifier = poseidon(nonce, secret)
-    // @notice accountNoteHash = poseidon(amountSpent, nonce, secret)
-    mapping (uint256 => uint256) public nullifiers; // accountNoteNullifier -> amount spend 
+    // @notice accountNoteNullifier = poseidon(nonce, viewingKey)
+    // @notice accountNoteHash = poseidon(totalAmountSpent, nonce, viewingKey)
+    mapping (uint256 => uint256) public nullifiers; // accountNoteNullifier -> amountSpendInTx + 1 (+1 to protect nullifier logic on txs where amount is 0) 
 
     mapping (address => uint40) private accountIndexes;
     mapping (uint256 => bool) public roots;
@@ -54,8 +54,6 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
 
     uint256 public amountFreeTokens = 1000000*10**decimals();
 
-
-    // privateTransferVerifier doesn't go down the full 248 depth (32 instead) of the tree but is able to run with noir js (and is faster)
     address public privateTransferVerifier;
     LeanIMTData public tree;
     
@@ -79,15 +77,15 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     }
 
     function _updateBalanceInMerkleTree(address _to, uint256 _newBalance) override internal {        
-        // TODO
-        // check if account == tx.origin or if its a contract, since in that case it's not a private address.
-        // tx.origin is always a EOA
-        if (tx.origin == _to || _to.code.length > 0) {return;}
+        // tx.origin is always a EOA, so no need to do a merkle tree insertion, saves gas on defi interactions for example someone buying the token
+        if (tx.origin == _to ) {return;}
+        //to.code.length check is removed since it creates  perverse incentives
+        //if (tx.origin == _to || _to.code.length > 0) {return;}
         
         // @WARNING you might be tempted to create smarter ways to check if its for sure not a private address. 
-        // Example: store the tx.origin address somewhere in a mapping like "allKnownEOAs" to check to save gas on future transfers. 
-        // Registering your EOA in "allKnownEOAs" now saves you on gas in the future. But that creates perverse incentives that break plausible deniability.
-        // doing so will cause every EOA owner to register in "allKnownEOAs" and then there is no plausible deniability left since it now "looks weird" to not do that.
+        // Example: check i _to is an smartcontract (_to.code.length > 0) or store the tx.origin address somewhere in a mapping like "allKnownEOAs" to check to save gas on future transfers. 
+        // Registering your EOA in "allKnownEOAs" / using smartcontract accounts saves you on gas in the future. But that creates perverse incentives that break plausible deniability.
+        // doing so will cause every EOA owner to register in "allKnownEOAs" / use smartcontract accounts and then there is no plausible deniability left since it's now "looks weird" to not do that.
         // Even doing account != contract is bad in that sense. Since account based wallets would also save on gas.
         
 
@@ -167,7 +165,15 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         return publicInputs;
     }
 
-    function _privateTransfer(
+    function _calculateFees(FeeData calldata _feeData, uint256 _amount) private view returns(uint256, uint256) {
+        require(_feeData.feeToken == address(this), "alternative payment tokens is not implemented yet");
+        uint256 _relayerReward = (_feeData.priorityFee + block.basefee) * _feeData.conversionRate;
+        uint256 _recipientAmount = _amount - _relayerReward;
+        assert(_feeData.maxFee >= _relayerReward);
+        return (_relayerReward, _recipientAmount);
+    }
+
+    function privateTransfer(
         uint256 _amount,
         address _to,
         FeeData calldata _feeData,
@@ -176,18 +182,35 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _root,
         bytes calldata _snarkProof,
         address _verifier
-    ) private {
+    ) public {
         require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
         require(roots[_root], "invalid root");
-        nullifiers[_accountNoteNullifier] = _amount;
+        // +1 to protect nullifier logic on txs where amount is 0
+        nullifiers[_accountNoteNullifier] = _amount +1 ;
+    
+        if (_feeData.relayerAddress != address(0)) {
+            //-- self relay --
+            // inserts _accountNoteHash into the merkle tree as well
+            _privateReMint(_to, _amount, _accountNoteHash);
+            emit PrivateTransfer(_accountNoteNullifier, _amount);
+        } else {
+            //-- use relayer --
+            address rewardRecipient = _feeData.relayerAddress;
+            if (_feeData.relayerAddress == address(1)) {
+                // this enables ex block builder to permissionlessly relay the tx
+                rewardRecipient = msg.sender;
+            }
+            (uint256 _relayerReward,uint256 _recipientAmount) = _calculateFees(_feeData, _amount);
+             // inserts _accountNoteHash into the merkle tree as well
+            _privateReMint(_to, _recipientAmount, _accountNoteHash);
+            // @note this can cause a separate insert here that could be more efficient with insert many. But in most cases tx.origin == relayerAddress so not worth to optimize this.
+            _update(address(0), _feeData.relayerAddress, _relayerReward);
+            emit PrivateTransfer(_accountNoteNullifier, _amount);
+        }
 
         bytes32[] memory publicInputs = _formatPublicInputs(_amount,_to, _feeData, _accountNoteHash, _accountNoteNullifier, _root);
         if (!IVerifier(_verifier).verify(_snarkProof, publicInputs)) {
             revert VerificationFailed();
         }
-
-        // inserts _accountNoteHash into the merkle tree as well
-        _privateReMint(_to, _amount, _accountNoteHash);
-        emit PrivateTransfer(_accountNoteNullifier, _amount);
     }
 }
