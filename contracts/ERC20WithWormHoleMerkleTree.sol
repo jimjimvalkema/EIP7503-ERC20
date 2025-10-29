@@ -232,21 +232,6 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
      * Same as _update but added _accountNoteHash so it use insertMany to save on gas and _totalSupply doesn't increase
      */
     function _privateReMint(address to, uint256 value, uint256 _accountNoteHash) internal virtual {
-        // from is always address(0),  we don't need this!
-        // if (from == address(0)) {
-        //     // Overflow check required: The rest of the code assumes that totalSupply never overflows
-        //     _totalSupply += value;
-        // } else {
-        //     uint256 fromBalance = _balances[from];
-        //     if (fromBalance < value) {
-        //         revert ERC20InsufficientBalance(from, fromBalance, value);
-        //     }
-        //     unchecked {
-        //         // Overflow not possible: value <= fromBalance <= totalSupply.
-        //         _balances[from] = fromBalance - value;
-        //     }
-        // }
-
         if (to == address(0)) {
             unchecked {
                 // Overflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.

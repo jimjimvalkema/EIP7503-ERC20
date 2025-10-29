@@ -79,6 +79,7 @@ struct SignatureData {
 }
 
 struct FeeData {
+    // relayerAddress = 0 <= self relay, relayerAddress = 1 <= msg.sender will relay, all other will send it to that address like expected
     relayer_address: Field,
     // there is no way for the contract to know what priority fee is set so the spender just has to set it for the relayer (who ofc can choose a different number)
     priority_fee: Field,
@@ -86,9 +87,11 @@ struct FeeData {
     // price of eth in fee_token * gas_used
     conversion_rate: Field,
     // in the contract the fee is calculated feeAmountInFeeToken = (pubInput.priority_fee + block.baseFee) * pubInput.conversion_rate
-    // and should feeAmountInFeeToken < max_fee
+    // and should feeAmountInFeeToken < max_fee.
+    // conversionRate = gasUsage*tokenPriceInWei*relayerBonusFactor. ex gasUsage=45000,tokenPriceInEth=0.048961448,relayerBonusFactor=10%
+    // conversionRate = 45000 * 48955645000000000 * 1.1
     max_fee: Field,
-    // fee_token is not that interesting rn because it really can only be the token it self or eth,
+    // fee_token is not that interesting rn because it really can only be the token it self,
     // but in the future where it is integrated as a deposit method of a rail-gun like system it can be use full.
     fee_token: Field,
 }
