@@ -59,12 +59,12 @@ yarn install-vite;
 nargo  
 https://noir-lang.org/docs/getting_started/quick_start#noir
 ```shell
-noirup -v 1.0.0-beta.13;
+noirup -v 1.0.0-beta.14;
 ```
 barretenberg  
 https://noir-lang.org/docs/getting_started/quick_start#proving-backend  
 ```shell
-bbup -v 1.2.0;
+bbup -v 3.0.0-nightly.20250916;
 ```
 <!-- ```shell
 bbup -v 1.0.0-beta.1;
@@ -78,6 +78,16 @@ yarn dev
 ## Build static site locally
 ```shell
 yarn build
+```
+
+## compile
+noir (and generate solidity verifier)
+```shell
+yarn noir;
+```
+solidity
+```shell
+yarn solidity
 ```
 
 ## Deploy
