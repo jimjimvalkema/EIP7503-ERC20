@@ -28,7 +28,11 @@ fn compute_root(
     )
 }
 
-fn get_private_address(pub_key: Field, pow_nonce: Field) -> Field {
+// pow_nonce should be deterministically derived from the viewing_key, ex hash(viewing_key) N times until a valid PoW
+// and viewing_key should be deterministically derived from the seed-phrase / priv_key, ex: deterministicSign(my_priv_key, "some standard message that notifies the user the viewing_key is created, etc")
+// ethereum signatures are already deterministic, there is mailability, but we don't care about that in this case
+// we want the preserve the "i only need my seed-phrase to recover" UX, which is very important!!!!
+fn get_private_address(pub_key: Field, pow_nonce: Field ) -> Field {
     // EIP7503 reintroduces an attack vector with address collisions because addresses are only 20 bytes. This time its with EOAs and ZKwormhole addresses. 
     // This allows the attacker to find a address that is both a EOA and a zkwormhole address. Which allows the hacker to mint infinite tokens.
     // The cost for this attack is estimated to be 10 billion dollars in 2021.
