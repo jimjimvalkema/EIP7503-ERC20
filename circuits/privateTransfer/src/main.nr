@@ -3,11 +3,13 @@ use dep::std::field::bytes32_to_field;
 use binary_merkle_root::binary_merkle_root;
 
 // domain separators
-global PRIVATE_ADDRESS_TYPE: Field = Poseidon2::hash([0x7a6b776f726d686f6c65], 1); // UTF8("zkwormhole").toHex()
+global PRIVATE_ADDRESS_TYPE: Field = 0x5a4b574f524d484f4c45; // UTF8("ZKWORMHOLE").toHex() [...new TextEncoder().encode("zkwormhole")].map(b=>b.toString(16)).join('')
 global RECEIVED_TOTAL_DOMAIN: Field = 0x52454345495645445F544F54414C; // UTF8("RECEIVED_TOTAL").toHex()
 global SPENT_TOTAL_DOMAIN: Field = 0x5350454E545F544F54414C; // UTF8("SPENT_TOTAL").toHex()
 // @TODO find out what number would be secure enough!
-global POW_DIFFICULTY: Field = 0xffff; // find a nonce that result in a hash that is hash > POW_DIFFICULTY
+// const POW_LEADING_ZEROS = 4n;
+// const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
+global POW_DIFFICULTY: Field =  0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff; // find a nonce that result in a hash that is hash > POW_DIFFICULTY
 
 global MAX_TREE_DEPTH: u32 = 40;
 
@@ -43,7 +45,7 @@ fn get_private_address(pub_key: Field, pow_nonce: Field ) -> Field {
     // the pow_hash has the address_hash as input to prevent the attacker from reusing pow_nonces
     let address_hash: Field = Poseidon2::hash([pub_key,pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
     let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
-    std::field::bn254::assert_gt(pow_hash, POW_DIFFICULTY); //"pow failed: pow_nonce results in hash that is not > POW_DIFFICULTY"
+    std::field::bn254::assert_gt(POW_DIFFICULTY, pow_hash); //"pow failed: pow_nonce results in hash that is not > POW_DIFFICULTY"
     
     // replace last 12 bytes with zero since address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
     let mut address_bytes: [u8;32] = address_hash.to_be_bytes();
@@ -132,6 +134,7 @@ fn main(
 
     // @TODO do we need more inputs to commit to in the signature?
     // we commit to this in the signature so if a users machine is compromised, at least the attacker cant mess with these values, provided it's signed by a hardware wallet
+    // TODO we prob need to use keccak here, or maybe we can blind sign in viem
     let message_hash: [u8; 32] = Poseidon2::hash(
         [
             recipient_address,
@@ -141,7 +144,7 @@ fn main(
             fee_data.conversion_rate,
             fee_data.max_fee,
         ],
-        5,
+        6,
     ).to_be_bytes();
 
     let valid_signature: bool = std::ecdsa_secp256k1::verify_signature(
@@ -197,6 +200,39 @@ fn main(
         computed_account_note_hash == account_note_hash,
         "public input: nullifier_value, doesn't match the one computed in the circuit",
     );
+}
+
+#[test]
+fn verify_sig() {
+    let signature_data:SignatureData = SignatureData {
+        public_key_x: [244,28,215,192,211,91,249,255,187,119,71,137,203,63,135,230,202,61,19,185,192,191,226,1,143,87,250,143,0,5,152,234],
+        public_key_y: [44,245,100,66,161,117,80,1,185,140,4,112,174,182,209,93,233,149,135,167,249,202,162,217,82,145,96,36,87,96,205,129],
+        signature: [14,128,49,202,4,250,111,112,29,6,97,171,208,190,254,167,44,251,221,247,135,155,141,136,119,129,69,35,219,88,71,177,82,85,103,13,229,15,221,25,122,149,21,17,81,157,29,41,50,66,167,84,146,131,99,55,88,96,21,175,143,96,27,9]
+    };
+    let message_hash:[u8;32] = 0x0000000000000000000000000000000000000000000000000000000000420690.to_be_bytes();
+
+    let valid_signature: bool = std::ecdsa_secp256k1::verify_signature(
+        signature_data.public_key_x,
+        signature_data.public_key_y,
+        signature_data.signature,
+        message_hash,
+    );
+
+    assert(valid_signature, "invalid signature");
+}
+
+#[test]
+fn bytes_to_field() {
+    let field_limit: [u8; 32] = [48,100,78,114,225,49,160,41,184,80,69,182,129,129,88,93,40,51,232,72,121,185,112,145,67,225,245,147,240,0,0,0];
+    let field_limit_plus_one: [u8; 32] = [48,100,78,114,225,49,160,41,184,80,69,182,129,129,88,93,40,51,232,72,121,185,112,145,67,225,245,147,240,0,0,1];
+    let field_limit_plus_two: [u8; 32] = [48,100,78,114,225,49,160,41,184,80,69,182,129,129,88,93,40,51,232,72,121,185,112,145,67,225,245,147,240,0,0,2];
+    println("field_limit");
+    println("field_limit");
+    println(Field::from_be_bytes(field_limit));
+    println("field_limit_plus_one");
+    println(Field::from_be_bytes(field_limit_plus_one));
+    println("field_limit_plufield_limit_plus_twos_one");
+    println(Field::from_be_bytes(field_limit_plus_two));
 }
 
 // #[test]
