@@ -4,8 +4,8 @@ use binary_merkle_root::binary_merkle_root;
 
 // domain separators
 global PRIVATE_ADDRESS_TYPE: Field = 0x5a4b574f524d484f4c45; // UTF8("ZKWORMHOLE").toHex() [...new TextEncoder().encode("zkwormhole")].map(b=>b.toString(16)).join('')
-global RECEIVED_TOTAL_DOMAIN: Field = 0x52454345495645445F544F54414C; // UTF8("RECEIVED_TOTAL").toHex()
-global SPENT_TOTAL_DOMAIN: Field = 0x5350454E545F544F54414C; // UTF8("SPENT_TOTAL").toHex()
+global TOTAL_RECEIVED_DOMAIN: Field = 0x52454345495645445F544F54414C; // UTF8("total_received").toHex()
+global TOTAL_SPENT_DOMAIN: Field = 0x5350454E545F544F54414C; // UTF8("total_spent").toHex()
 // @TODO find out what number would be secure enough!
 // const POW_LEADING_ZEROS = 3n;
 // const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
@@ -55,23 +55,37 @@ fn get_private_address(pub_key: Field, pow_nonce: Field ) -> Field {
     bytes32_to_field(address_bytes)
 }
 
-fn hash_received_total_leaf(private_address: Field, received_total: Field) -> Field {
+fn hash_total_received_leaf(private_address: Field, total_received: Field) -> Field {
     Poseidon2::hash(
-        [private_address, received_total, RECEIVED_TOTAL_DOMAIN],
+        [private_address, total_received, TOTAL_RECEIVED_DOMAIN],
         3,
     )
 }
 
-// account_nonce makes sure the hash is never the same even when the spent_total is not different
+// account_nonce makes sure the hash is never the same even when the total_spent is not different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
-fn hash_account_note(spent_total: Field, account_nonce: Field, viewing_key: Field) -> Field {
-    Poseidon2::hash([spent_total, account_nonce, viewing_key, SPENT_TOTAL_DOMAIN], 4)
+fn hash_account_note(total_spent: Field, account_nonce: Field, viewing_key: Field) -> Field {
+    Poseidon2::hash([total_spent, account_nonce, viewing_key, TOTAL_SPENT_DOMAIN], 4)
 }
 
-// account_nonce makes sure the hash is never the same even when the spent_total is not different
+// account_nonce makes sure the hash is never the same even when the total_spent is not different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
 fn hash_nullifier(account_nonce: Field, viewing_key: Field) -> Field {
     Poseidon2::hash([account_nonce, viewing_key], 2)
+}
+
+fn hash_signature_inputs(recipient_address: Field, amount: Field, fee_data: FeeData) -> [u8;32] {
+    Poseidon2::hash(
+        [
+            recipient_address,
+            amount,
+            fee_data.relayer_address,
+            fee_data.priority_fee,
+            fee_data.conversion_rate,
+            fee_data.max_fee,
+        ],
+        6,
+    ).to_be_bytes()
 }
 
 fn lower_then_or_equal(a: Field, b: Field) -> bool {
@@ -113,39 +127,29 @@ fn main(
     amount: pub Field,
     recipient_address: pub Field,
     fee_data: pub FeeData,
-    account_note_hash: pub Field,       // tracks how much is spend after this transfer hash(prev_spent_total+amount, account_nonce, viewing_key)
+    account_note_hash: pub Field,       // tracks how much is spend after this transfer hash(prev_total_spent+amount, account_nonce, viewing_key)
     account_note_nullifier: pub Field,  // nullifies the previous account_note.  hash(account_nonce, viewing_key)
-    root: pub Field,                    // root of merkle tree we use to privately proof received_total, prev_nullifier are on the chain.
+    root: pub Field,                    // root of merkle tree we use to privately proof total_received, prev_nullifier are on the chain.
     //-----very privacy sensitive data -----
     signature_data: SignatureData,      // contains hash(account_nonce,amount,recipient_address)
     pow_nonce: Field,                    // to limit the collision attacks between EOAs and private_addresses, 
-    received_total: Field,              // the "balanceOf" of the private_address
-    prev_spent_total: Field,            // needed to verify received_total-prev_spent_total > amount. and to create nullifier_value=hash(prev_spent_total+amount, account_nonce, viewing_key)
+    total_received: Field,              // the "balanceOf" of the private_address
+    prev_total_spent: Field,            // needed to verify total_received-prev_total_spent > amount. and to create nullifier_value=hash(prev_total_spent+amount, account_nonce, viewing_key)
     viewing_key: Field,                 // used as randomness to blind commitments. Prob just take sig.#r from `sig = ethers.Signature.from( await signer.signMessage(message))`
     account_nonce: Field,               // starts at 0, increments by one every private transaction (not a ethereum account nonce, its zkwormhole account!)
     prev_account_note_merkle: MerkleData,
-    received_total_merkle: MerkleData,
+    total_received_merkle: MerkleData,
 ) {
     // less constraints then assert(lt(a, b)) but i cant attach a error message :(
     // prevents promising the relayer more fees then can be spend
     std::field::bn254::assert_lt(fee_data.max_fee, amount); // "max_fee needs to be lower then the amount"
 
-    //------------ merkle proof of received_total and private_address ------------
+    //------------ merkle proof of total_received and private_address ------------
 
     // @TODO do we need more inputs to commit to in the signature?
     // we commit to this in the signature so if a users machine is compromised, at least the attacker cant mess with these values, provided it's signed by a hardware wallet
     // TODO we prob need to use keccak here, or maybe we can blind sign in viem
-    let message_hash: [u8; 32] = Poseidon2::hash(
-        [
-            recipient_address,
-            amount,
-            fee_data.relayer_address,
-            fee_data.priority_fee,
-            fee_data.conversion_rate,
-            fee_data.max_fee,
-        ],
-        6,
-    ).to_be_bytes();
+    let message_hash: [u8; 32] = hash_signature_inputs(recipient_address,amount,fee_data);
 
     let valid_signature: bool = std::ecdsa_secp256k1::verify_signature(
         signature_data.public_key_x,
@@ -159,19 +163,19 @@ fn main(
     let pub_key_x_field: Field = Field::from_be_bytes(signature_data.public_key_x);
     let private_address: Field = get_private_address(pub_key_x_field, pow_nonce);
 
-    let received_total_leaf = hash_received_total_leaf(private_address, received_total);
+    let total_received_leaf = hash_total_received_leaf(private_address, total_received);
 
     // calculate the root from the merkle proof and assert it is the same as `root`
-    let root_received_total: Field = compute_root(received_total_leaf,received_total_merkle);
+    let root_total_received: Field = compute_root(total_received_leaf,total_received_merkle);
     assert(
-        root_received_total == root,
+        root_total_received == root,
         "given root doesn't match computed root_private_addr from the private_address merkle proof",
     );
 
-    //--------prev_spent_total------------
+    //--------prev_total_spent------------
     if (account_nonce != 0) {
-        // verify that the prev_spent_total exist onchain with a merkle proof
-        let prev_account_note_hash: Field = hash_account_note(prev_spent_total, account_nonce, viewing_key);
+        // verify that the prev_total_spent exist onchain with a merkle proof
+        let prev_account_note_hash: Field = hash_account_note(prev_total_spent, account_nonce, viewing_key);
         let computed_prev_account_note_root: Field = compute_root(prev_account_note_hash,prev_account_note_merkle); 
         assert(
             computed_prev_account_note_root == root,
@@ -180,7 +184,7 @@ fn main(
     } else {
         // in this case it's the first spend so there is no note_hash to prove inclusion of
         // redundant check but can prevent user burning funds on their first spend
-        assert(prev_spent_total == 0, "account_nonce is zero but prev_spent_total isn't")
+        assert(prev_total_spent == 0, "account_nonce is zero but prev_total_spent isn't")
     }
     // ----- nullify the prev note -------------
     // note: at account_nonce=0 we nullify even though no pre prev_account_note exists, 
@@ -190,10 +194,10 @@ fn main(
 
     // ----- create new account_note-------------
     // @WARNING TODO watch out for overflows (solution?: make sure max supply of coin is < FIELD_LIMIT inside contract)
-    let new_spent_amount: Field = amount + prev_spent_total;
+    let new_spent_amount: Field = amount + prev_total_spent;
     assert(
-        lower_then_or_equal(new_spent_amount, received_total),
-        "amount too large, new_spend_amount is larger than received_total",
+        lower_then_or_equal(new_spent_amount, total_received),
+        "amount too large, new_spend_amount is larger than total_received",
     );
     let computed_account_note_hash: Field = hash_account_note(new_spent_amount, account_nonce, viewing_key);
     assert(
@@ -256,10 +260,10 @@ fn bytes_to_field() {
 
 //     //-----private inputs -----
 //     let secret: Field  = 0x1cf2c2021c2e15a1c61547a32a6295078aacf089edb3cc66fd992f627f30f824;
-//     let received_total: Field  = 420000000000000000000;
+//     let total_received: Field  = 420000000000000000000;
 //     let account_nonce: Field = 3;
 //     let prev_nullifier_key: Field = 0x1546f8d229c5a0943586cd5261ab4adbf995e849976a689a6055a32d4fae8337;
-//     let prev_spent_total: Field = 30000000000000000000;
+//     let prev_total_spent: Field = 30000000000000000000;
 
 //     main(
 //         //----- public inputs
@@ -270,9 +274,9 @@ fn bytes_to_field() {
 //         root,
 //         //-----private inputs -----
 //         secret,
-//         received_total,
+//         total_received,
 //         account_nonce,
 //         prev_nullifier_key,
-//         prev_spent_total,
+//         prev_total_spent,
 //     );
 // }

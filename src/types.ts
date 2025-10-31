@@ -35,12 +35,12 @@ export interface UnformattedPrivateProofInputs {
         signature: SignMessageReturnType
     },
     powNonce: bigint,
-    receivedTotal: bigint,
-    prevSpentTotal: bigint,
+    totalReceived: bigint,
+    prevTotalSpent: bigint,
     viewingKey: bigint,
     accountNonce: bigint,
     prevAccountNoteMerkle: MerkleData,
-    receivedTotalMerkle: MerkleData,
+    totalReceivedMerkle: MerkleData,
 }
 
 export interface UnformattedProofInputs {
@@ -67,8 +67,8 @@ export interface FormattedProofInputs {
         signature: bigint[];
     };
     pow_nonce: bigint;
-    received_total: bigint;
-    prev_spent_total: bigint;
+    total_received: bigint;
+    prev_total_spent: bigint;
     viewing_key: bigint;
     account_nonce: bigint;
     prev_account_note_merkle: {
@@ -76,7 +76,7 @@ export interface FormattedProofInputs {
         indices: bigint[];
         siblings: bigint[];
     };
-    received_total_merkle: {
+    total_received_merkle: {
         depth: bigint;
         indices: bigint[];
         siblings: bigint[];

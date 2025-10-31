@@ -42,6 +42,8 @@ event StorageRootAdded(uint256 blockNumber);
 event NewLeaf(uint256 leaf);
 
 contract WormholeToken is ERC20WithWormHoleMerkleTree {
+    // this is so leafs from received balance and spent balance wont get mixed up
+    uint256 constant public TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414C; // UTF8("total_received").toHex()
     address internal constant POSEIDON2_ADDRESS = 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C; // yul-recompile-200: 0xb41072641808e6186eF5246fE1990e46EB45B65A gas: 62572, huff: 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C gas:39 627, yul-lib: 0x925e05cfb89f619BE3187Bf13D355A6D1864D24D,
 
     // @notice accountNoteNullifier = poseidon(nonce, viewingKey)
@@ -67,7 +69,11 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     }
 
     // The function used for hashing the balanceLeaf
-    function hashBalanceLeaf(uint256[2] memory input) public view returns (uint256) {
+    function hashBalanceLeaf(address _to, uint256 _newBalance) public view returns (uint256) {
+        uint256[3] memory input;
+        input[0] = _addressToUint256(_to);
+        input[1] = _newBalance;
+        input[2] = TOTAL_RECEIVED_DOMAIN;
         (, bytes memory result) = POSEIDON2_ADDRESS.staticcall(abi.encode(input));
         return uint256(bytes32(result));
     }
@@ -89,7 +95,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         // Even doing account != contract is bad in that sense. Since account based wallets would also save on gas.
         
 
-        uint256 leaf = hashBalanceLeaf([_addressToUint256(_to), _newBalance]);
+        uint256 leaf = hashBalanceLeaf(_to, _newBalance);
 
         if (leanIMTPoseidon2.has(tree,leaf)) {
             // it's already in there! (rarely happens but can happen if an EOA receives an amount that results in a balance it had before)
@@ -108,7 +114,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         if (tx.origin == _to || _to.code.length > 0) {
             leanIMTPoseidon2.insert(tree,_accountNoteHash);
         } else {
-            uint256 accountBalanceLeaf = hashBalanceLeaf([_addressToUint256(_to), _newBalance]);
+            uint256 accountBalanceLeaf = hashBalanceLeaf(_to, _newBalance);
 
             if (leanIMTPoseidon2.has(tree,accountBalanceLeaf)) {
                 // accountBalanceLeaf is already in there! so we only insert _accountNoteHash
@@ -143,7 +149,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _amount,
         address _to,
         FeeData calldata _feeData,
-        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_spent_total+amount, account_nonce, viewing_key)
+        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, account_nonce, viewing_key)
         uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(account_nonce, viewing_key)
         uint256 _root
     ) public pure returns (bytes32[] memory) {
@@ -177,7 +183,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _amount,
         address _to,
         FeeData calldata _feeData,
-        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_spent_total+amount, account_nonce, viewing_key)
+        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, account_nonce, viewing_key)
         uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(account_nonce, viewing_key)
         uint256 _root,
         bytes calldata _snarkProof,
@@ -188,7 +194,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         // +1 to protect nullifier logic on txs where amount is 0
         nullifiers[_accountNoteNullifier] = _amount +1 ;
     
-        if (_feeData.relayerAddress != address(0)) {
+        if (_feeData.relayerAddress == address(0)) {
             //-- self relay --
             // inserts _accountNoteHash into the merkle tree as well
             _privateReMint(_to, _amount, _accountNoteHash);
