@@ -23,12 +23,12 @@ export function formatProofInputs({pubInputs,privInputs}: UnformattedProofInputs
             signature:      [...hexToBytes(privInputs.signatureData.signature.slice(0, 2+128) as Hex,{size:64})].map((v)=>BigInt(v)), // we need to skip the last byte
         },
         pow_nonce: privInputs.powNonce,
-        received_total: privInputs.receivedTotal,
-        prev_spent_total: privInputs.prevSpentTotal,
+        total_received: privInputs.totalReceived,
+        prev_total_spent: privInputs.prevTotalSpent,
         viewing_key: privInputs.viewingKey,
         account_nonce: privInputs.accountNonce,
         prev_account_note_merkle: privInputs.prevAccountNoteMerkle,
-        received_total_merkle: privInputs.receivedTotalMerkle,
+        total_received_merkle: privInputs.totalReceivedMerkle,
     }
     return proofInputs
 }
