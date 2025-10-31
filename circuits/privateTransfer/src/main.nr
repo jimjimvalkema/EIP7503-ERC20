@@ -7,9 +7,9 @@ global PRIVATE_ADDRESS_TYPE: Field = 0x5a4b574f524d484f4c45; // UTF8("ZKWORMHOLE
 global RECEIVED_TOTAL_DOMAIN: Field = 0x52454345495645445F544F54414C; // UTF8("RECEIVED_TOTAL").toHex()
 global SPENT_TOTAL_DOMAIN: Field = 0x5350454E545F544F54414C; // UTF8("SPENT_TOTAL").toHex()
 // @TODO find out what number would be secure enough!
-// const POW_LEADING_ZEROS = 4n;
+// const POW_LEADING_ZEROS = 3n;
 // const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
-global POW_DIFFICULTY: Field =  0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff; // find a nonce that result in a hash that is hash > POW_DIFFICULTY
+global POW_DIFFICULTY: Field =  0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff; // find a nonce that result in a hash that is hash < POW_DIFFICULTY
 
 global MAX_TREE_DEPTH: u32 = 40;
 
