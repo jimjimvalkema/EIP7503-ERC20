@@ -1,0 +1,15 @@
+export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("zkwormhole")].map(b=>b.toString(16)).join('') as Hex
+export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034343698204186575808495616n;
+export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
+export const POW_LEADING_ZEROS = 3n;
+export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
+
+export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
+
+}
+
+export const VIEWING_KEY_SIG_MESSAGE = `
+You are about to create your viewing key for your zkwormhole account! \n
+Yay! :D Becarefull signing this on untrusted websites.
+Here is some salt: TODO
+`
