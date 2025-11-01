@@ -1,7 +1,8 @@
-import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress } from "viem";
+import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { FIELD_MODULUS, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_RECEIVED_DOMAIN as TOTAL_RECEIVED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { FeeData } from "./types.js";
+import { toBigInt } from "@aztec/aztec.js";
 
 export function verifyPowNonce({ pubKeyX, powNonce, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, powNonce: bigint, difficulty?: bigint }) {
     const powHash = hashPow({ pubKeyX, powNonce });
@@ -13,10 +14,15 @@ export async function extractPubKeyFromSig({ hash, signature }: { hash: Hash, si
         hash: hash,
         signature: signature
     });
-    // first byte is cringe
     const pubKeyX = "0x" + publicKey.slice(4).slice(0, 64) as Hex
     const pubKeyY = "0x" + publicKey.slice(4).slice(64, 128) as Hex
-    // const rawSigHex = signature.r + signature.s.slice(2)
+    // if (pubKeyX!=="0xba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0") {
+    //     console.log({
+    //         expected: "0xba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0",
+    //         got: pubKeyX
+    //     })
+    //     throw new Error("yoooooooooooo")
+    // }
     return { pubKeyX, pubKeyY }
 }
 
@@ -31,14 +37,15 @@ export function getViewingKey({ signature }: { signature: Hex }) {
 }
 
 export function hashAddress({ pubKeyX, powNonce }: { pubKeyX: Hex, powNonce: bigint }) {
-    const pubKeyField = hexToBigInt(pubKeyX) % FIELD_MODULUS
+    const pubKeyField = hexToBigInt("0x"+pubKeyX.slice(2+2) as Hex) //slice first byte so it fits in a field
+    //console.log({pubKeyField:toHex(pubKeyField), pubKeyX})
     const addressHash = poseidon2Hash([pubKeyField, powNonce, PRIVATE_ADDRESS_TYPE]);
     return addressHash
 }
 
 export function getPrivateAddress({ pubKeyX, powNonce }: { pubKeyX: Hex, powNonce: bigint }) {
     const addressHash = hashAddress({ pubKeyX, powNonce })
-    return getAddress(toHex(addressHash).slice(0, 2 + 40)) //slice off bytes and make it the address type in viem
+    return getAddress("0x"+toHex(addressHash,{size:32}).slice(2+24)) //slice off bytes and make it the address type in viem
 
 }
 
@@ -48,24 +55,28 @@ export function hashPow({ pubKeyX, powNonce }: { pubKeyX: Hex, powNonce: bigint 
     return powHash
 }
 
-// account_nonce makes sure the hash is never the same even when the total_spent is not different
+// prev_account_nonce makes sure the hash is never the same even when the total_spent is not different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
 export function hashAccountNote({ totalSpent, accountNonce, viewingKey }: { totalSpent: bigint, accountNonce: bigint, viewingKey: bigint }) {
+    console.log("([totalSpent, accountNonce, viewingKey, TOTAL_SPENT_DOMAIN]")
+    console.log(([totalSpent, accountNonce, viewingKey, TOTAL_SPENT_DOMAIN].map((v)=>toHex(v))))
     return poseidon2Hash([totalSpent, accountNonce, viewingKey, TOTAL_SPENT_DOMAIN])
 }
 
-// account_nonce makes sure the hash is never the same even when the total_spent is not different
+// prev_account_nonce makes sure the hash is never the same even when the total_spent is not different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
 export function hashNullifier({ accountNonce, viewingKey }: { accountNonce: bigint, viewingKey: bigint }) {
     return poseidon2Hash([accountNonce, viewingKey])
 }
 
 export function hashTotalReceivedLeaf({ privateAddress, totalReceived }: { privateAddress: Address, totalReceived: bigint }) {
+    console.log("[hexToBigInt(privateAddress as Hex), totalReceived, TOTAL_RECEIVED_DOMAIN]")
+    console.log([hexToBigInt(privateAddress as Hex), totalReceived, TOTAL_RECEIVED_DOMAIN].map((v)=>toHex(v)))
     return poseidon2Hash([hexToBigInt(privateAddress as Hex), totalReceived, TOTAL_RECEIVED_DOMAIN])
 }
 
 export function hashSignatureInputs({ recipientAddress, amount, feeData }: { recipientAddress: Address, amount: bigint, feeData: FeeData }) {
-    return poseidon2Hash(
+    const poseidonHash = poseidon2Hash(
         [
             hexToBigInt(recipientAddress),
             amount,
@@ -75,6 +86,7 @@ export function hashSignatureInputs({ recipientAddress, amount, feeData }: { rec
             feeData.maxFee,
         ],
     )
+    return poseidonHash
 }
 
 export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, viewingKey: bigint, difficulty?: bigint }) {
@@ -105,22 +117,21 @@ export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESS
 }
 
 export async function signPrivateTransfer({ recipientAddress, amount, feeData, wallet }: { wallet: WalletClient & { account: Account }, recipientAddress: Address, amount: bigint, feeData: FeeData }) {
-    const hash = toHex(hashSignatureInputs({ recipientAddress, amount, feeData }))
+    const poseidonHash = toHex(hashSignatureInputs({ recipientAddress, amount, feeData }), {size:32})
     // blind signing yay!
     const signature = await wallet.request({
         method: 'eth_sign',
-        params: [wallet.account.address as Hex, hash],
+        params: [wallet.account.address as Hex, poseidonHash],
     });
-    const publicKey = await recoverPublicKey({
-        hash: hash,
-        signature: signature
-    });
-    // first byte is cringe
-    const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
-    const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
+    const preImageOfKeccak = toPrefixedMessage({raw:poseidonHash})
+    const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);
+
+    const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: KeccakWrappedPoseidonHash, signature: signature })
+    // const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
+    // const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
     return {
-        publicKeyX: pubKeyXHex,
-        publicKeyY: pubKeyYHex,
+        publicKeyX: pubKeyX,
+        publicKeyY: pubKeyY,
         signature: signature
     }
 }

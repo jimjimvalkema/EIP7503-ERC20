@@ -1,4 +1,4 @@
-account_nonce = ""
+prev_account_nonce = ""
 account_note_hash = ""
 account_note_nullifier = ""
 amount = ""

@@ -149,8 +149,8 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _amount,
         address _to,
         FeeData calldata _feeData,
-        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, account_nonce, viewing_key)
-        uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(account_nonce, viewing_key)
+        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
+        uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root
     ) public pure returns (bytes32[] memory) {
         bytes32[] memory publicInputs = new bytes32[](5);
@@ -183,8 +183,8 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _amount,
         address _to,
         FeeData calldata _feeData,
-        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, account_nonce, viewing_key)
-        uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(account_nonce, viewing_key)
+        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
+        uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root,
         bytes calldata _snarkProof,
         address _verifier

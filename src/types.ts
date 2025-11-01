@@ -70,7 +70,7 @@ export interface FormattedProofInputs {
     total_received: bigint;
     prev_total_spent: bigint;
     viewing_key: bigint;
-    account_nonce: bigint;
+    prev_account_nonce: bigint;
     prev_account_note_merkle: {
         depth: bigint;
         indices: bigint[];
