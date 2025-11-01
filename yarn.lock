@@ -983,7 +983,7 @@
     chalk "^5.3.0"
     jest-diff "^29.7.0"
 
-"@nomicfoundation/hardhat-node-test-runner@^3.0.4":
+"@nomicfoundation/hardhat-node-test-runner@^3.0.5":
   version "3.0.5"
   resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-node-test-runner/-/hardhat-node-test-runner-3.0.5.tgz#9c330e8cb3b54d6475f9a0ffe5bf111adb32f1f8"
   integrity sha512-tfzQ7jGry87rAV7AgWIK3KV58CKxUc6UxbaRNm320wstyTasTq6MgS4KNo7KAdXSFrEzXJZdV+fcaCRB7QGHQA==
@@ -2278,7 +2278,7 @@ gtoken@^7.0.0:
     gaxios "^6.0.0"
     jws "^4.0.0"
 
-hardhat@^3.0.9:
+hardhat@^3.0.10:
   version "3.0.10"
   resolved "https://registry.yarnpkg.com/hardhat/-/hardhat-3.0.10.tgz#676ba0be6797db6ec2f46fc92b729d9f8521e470"
   integrity sha512-y9vZfK7NqdJQaIyBL7tZHh57rHzdm6vymJK2XatFY49fWi55QC8dn7C6R3JkpYH6eJ/lOolC06UBy/mhzNyO+g==
@@ -3577,10 +3577,10 @@ viem@2.23.7:
     ox "0.6.7"
     ws "8.18.0"
 
-viem@^2.30.0, viem@^2.37.2:
-  version "2.38.5"
-  resolved "https://registry.yarnpkg.com/viem/-/viem-2.38.5.tgz#30ea97c024f720794c7838d92ab0ca0dc001f271"
-  integrity sha512-EU2olUnWd5kBK1t3BicwaamPHGUANRYetoDLSVzDy7XQ8o8UswItnkQbufe3xTcdRCtb2JYMwjlgHZZ7fUoLdA==
+viem@^2.37.2, viem@^2.38.6:
+  version "2.38.6"
+  resolved "https://registry.yarnpkg.com/viem/-/viem-2.38.6.tgz#ab315bef8f872bce86f0f145e9b008b5e94f1904"
+  integrity sha512-aqO6P52LPXRjdnP6rl5Buab65sYa4cZ6Cpn+k4OLOzVJhGIK8onTVoKMFMT04YjDfyDICa/DZyV9HmvLDgcjkw==
   dependencies:
     "@noble/curves" "1.9.1"
     "@noble/hashes" "1.8.0"

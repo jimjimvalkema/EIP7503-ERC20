@@ -1,6 +1,6 @@
 use dep::poseidon::poseidon2::Poseidon2;
 use dep::keccak256::keccak256;
-use dep::std::{ field::{bytes32_to_field, bn254::assert_gt}};
+use dep::std::{ field::{bytes32_to_field, bn254::{assert_gt, assert_lt}}};
 use binary_merkle_root::binary_merkle_root;
 
 // domain separators
@@ -48,7 +48,7 @@ fn get_private_address(pub_key: Field, pow_nonce: Field ) -> Field {
     // the pow_hash has the address_hash as input to prevent the attacker from reusing pow_nonces
     let address_hash: Field = Poseidon2::hash([pub_key,pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
     let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
-    assert_gt(POW_DIFFICULTY, pow_hash); //"pow failed: pow_nonce results in hash that is not > POW_DIFFICULTY"
+    assert_lt(pow_hash, POW_DIFFICULTY); //"pow failed: pow_nonce results in hash that is not < POW_DIFFICULTY"
     // let pow_diff: Field = pow_hash/POW_DIFFICULTY;
     // assert(pow_diff == 0, "failed POW");
     // replace last 12 bytes with zero since address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)

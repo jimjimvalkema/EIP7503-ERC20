@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 
 import { network } from "hardhat";
-import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
+
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
-import { fromHex, padHex, Hash, parseEventLogs, recoverPublicKey, toHex, Hex, getAddress, hashMessage, hexToBytes, toPrefixedMessage, keccak256, toBytes } from "viem";
+import { fromHex, padHex, Hash, parseEventLogs, recoverPublicKey, toHex, Hex, getAddress, hashMessage, hexToBytes, toPrefixedMessage, keccak256, toBytes, GetContractReturnType } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 
 import { UltraHonkBackend } from '@aztec/bb.js';
@@ -26,12 +26,13 @@ const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
 const PrivateTransferVerifierContractName = "PrivateTransferVerifier"
 const ZKTranscriptLibContractName = "ZKTranscriptLib"
 
-export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
+export type WormholeTokenTest = GetContractReturnType<typeof WormholeTokenContractName>
 
 
 let gas: any = { "transfers": {} }
 describe("Token", async function () {
     const SNARK_SCALAR_FIELD = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617")
+    
     const { viem } = await network.connect();
     const publicClient = await viem.getPublicClient();
     let wormholeToken: ContractReturnType<typeof WormholeTokenContractName>;
