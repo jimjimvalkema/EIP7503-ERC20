@@ -40,3 +40,6 @@ ignition/deployments/chain-31337
 
 website/dist
 circuits/privateTransfer/target/private_transfer.json
+circuits/privateTransfer/target/Verifier.sol
+circuits/privateTransfer/target/vk
+circuits/privateTransfer/target/vk_hash

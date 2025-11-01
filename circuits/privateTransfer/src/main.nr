@@ -10,7 +10,6 @@ global TOTAL_SPENT_DOMAIN: Field = 0x5350454E545F544F54414C; // UTF8("total_spen
 // @TODO find out what number would be secure enough!
 // const POW_LEADING_ZEROS = 3n;
 // const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
-
 global POW_DIFFICULTY: Field =  0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;//0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff // find a nonce that result in a hash that is hash < POW_DIFFICULTY
 
 global MAX_TREE_DEPTH: u32 = 40;
@@ -49,8 +48,7 @@ fn get_private_address(pub_key: Field, pow_nonce: Field ) -> Field {
     // the pow_hash has the address_hash as input to prevent the attacker from reusing pow_nonces
     let address_hash: Field = Poseidon2::hash([pub_key,pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
     let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
-    // TODO find workaround for assert_gt not working on big numbers like this
-    //assert_gt(POW_DIFFICULTY, pow_hash); //"pow failed: pow_nonce results in hash that is not > POW_DIFFICULTY"
+    assert_gt(POW_DIFFICULTY, pow_hash); //"pow failed: pow_nonce results in hash that is not > POW_DIFFICULTY"
     // let pow_diff: Field = pow_hash/POW_DIFFICULTY;
     // assert(pow_diff == 0, "failed POW");
     // replace last 12 bytes with zero since address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
@@ -251,16 +249,20 @@ fn verify_sig() {
 //     println(Field::from_be_bytes(field_limit_plus_two));
 // }
 
-// #[test]
-// fn wrap() {
-//     let (hash_h, hash_l) = std::field::bn254::decompose(0x000eeed5c0ff5b4932f1dc3ffcc9fc2fbc06e49f9d1df500be9087c111aafd40);
-//     let (pow_diff_h, pow_diff_l) = std::field::bn254::decompose(POW_DIFFICULTY);
-//     println("hash_l");
-//     println(hash_l);
-//     println("hash_h");
-//     println(hash_h);
-//     assert_gt(POW_DIFFICULTY, 0x000eeed5c0ff5b4932f1dc3ffcc9fc2fbc06e49f9d1df500be9087c111aafd40);
-// }
+#[test]
+fn wrap() {
+    let (hash_h, hash_l) = std::field::bn254::decompose(0x000eeed5c0ff5b4932f1dc3ffcc9fc2fbc06e49f9d1df500be9087c111aafd40);
+    let (pow_diff_h, pow_diff_l) = std::field::bn254::decompose(POW_DIFFICULTY);
+    println("pow_diff_l");
+    println(pow_diff_l);
+    println("hash_h");
+    println(pow_diff_h);
+    println("pow_diff_h");
+    println(hash_l);
+    println("hash_h");
+    println(hash_h);
+    assert_gt(POW_DIFFICULTY, 0x000eeed5c0ff5b4932f1dc3ffcc9fc2fbc06e49f9d1df500be9087c111aafd40);
+}
 
 #[test]
 fn main_test() {   
