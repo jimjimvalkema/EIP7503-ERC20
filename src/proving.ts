@@ -170,11 +170,12 @@ export async function getProofInputs(
     })
     const pubInputs = getPubInputs({ amountToReMint, recipient, syncedPrivateWallet, prevAccountNonce, totalSpent, nextAccountNonce, root })
     const privInputs = await getPrivInputs({ amountToReMint, feeData, recipient, syncedPrivateWallet, prevAccountNonce, prevTotalSpent, totalReceived, prevAccountNoteMerkle, totalReceivedMerkle })
-    return formatProofInputs({ pubInputs, privInputs })
+    const formattedInput = formatProofInputs({ pubInputs, privInputs })
+    return formattedInput
 }
 
 export function getAvailableThreads() {
-    if (typeof navigator !== 'undefined' && 'hardwareConcurrency' in navigator) {
+    if (typeof navigator !== undefined && 'hardwareConcurrency' in navigator) {
         return navigator.hardwareConcurrency ?? 1;
     } else {
         // TODO naively assumes that it runs on node if not in browser!
@@ -182,10 +183,11 @@ export function getAvailableThreads() {
     }
 }
 
-export async function getBackend() {
+export async function getBackend(threads?: number) {
     console.log("initializing backend with circuit")
-    console.log({threads:getAvailableThreads()})
-    return new UltraHonkBackend(privateTransferCircuit.bytecode, { threads:getAvailableThreads() }, { recursive: false });
+    threads = threads ?? getAvailableThreads()
+    console.log({ threads })
+    return new UltraHonkBackend(privateTransferCircuit.bytecode, { threads: threads }, { recursive: false });
 }
 
 export async function generateProof({ proofInputs, backend }: { proofInputs: FormattedProofInputs, backend?: UltraHonkBackend }) {
@@ -194,11 +196,11 @@ export async function generateProof({ proofInputs, backend }: { proofInputs: For
     const noir = new Noir(privateTransferCircuit as CompiledCircuit);
     const { witness } = await noir.execute(proofInputs as InputMap);
     console.log("generating proof")
-    const proof = await backend.generateProof(witness, {});
+    const proof = await backend.generateProof(witness,{ keccakZK: true});
     return proof
 }
 
 export async function verifyProof({ proof, backend }: { proof: ProofData, backend?: UltraHonkBackend }) {
     backend = backend ?? await getBackend()
-    return await backend.verifyProof(proof)
+    return await backend.verifyProof(proof,{ keccakZK: true})
 }

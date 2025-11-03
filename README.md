@@ -59,12 +59,12 @@ yarn install-vite;
 nargo  
 https://noir-lang.org/docs/getting_started/quick_start#noir
 ```shell
-noirup -v 1.0.0-beta.14;
+noirup --version 1.0.0-beta.14
 ```
 barretenberg  
 https://noir-lang.org/docs/getting_started/quick_start#proving-backend  
 ```shell
-bbup -v 3.0.0-nightly.20250916;
+bbup -v 3.0.0-nightly.20251030-2
 ```
 <!-- ```shell
 bbup -v 1.0.0-beta.1;

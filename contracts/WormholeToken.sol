@@ -6,15 +6,7 @@ pragma solidity ^0.8.3;
 import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol"; 
 import {LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.sol";
 import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
-
-
-interface IVerifier {
-    function verify(
-        bytes calldata _proof,
-        bytes32[] calldata _publicInputs
-    ) external view returns (bool);
-}
-
+import {IVerifier} from "./PrivateTransferVerifier.sol";
 
 struct FeeData {
     // relayerAddress = 0 <= self relay, relayerAddress = 1 <= msg.sender will relay, all other will send it to that address like expected
@@ -153,20 +145,20 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root
     ) public pure returns (bytes32[] memory) {
-        bytes32[] memory publicInputs = new bytes32[](5);
+        bytes32[] memory publicInputs = new bytes32[](10);
 
         publicInputs[0] = bytes32(uint256(_amount));
         publicInputs[1] = bytes32(_addressToUint256(_to));
         //-- feeData --
-        publicInputs[3] = bytes32(_addressToUint256(_feeData.relayerAddress));
-        publicInputs[4] = bytes32(_feeData.priorityFee);
-        publicInputs[5] = bytes32(_feeData.conversionRate);
-        publicInputs[6] = bytes32(_feeData.maxFee);
-        publicInputs[7] = bytes32(_addressToUint256(_feeData.feeToken));
+        publicInputs[2] = bytes32(_addressToUint256(_feeData.relayerAddress));
+        publicInputs[3] = bytes32(_feeData.priorityFee);
+        publicInputs[4] = bytes32(_feeData.conversionRate);
+        publicInputs[5] = bytes32(_feeData.maxFee);
+        publicInputs[6] = bytes32(_addressToUint256(_feeData.feeToken));
         //------------
-        publicInputs[8] = bytes32(_accountNoteHash);
-        publicInputs[9] = bytes32(_accountNoteNullifier);
-        publicInputs[10] = bytes32(_root);
+        publicInputs[7] = bytes32(_accountNoteHash);
+        publicInputs[8] = bytes32(_accountNoteNullifier);
+        publicInputs[9] = bytes32(_root);
 
         return publicInputs;
     }
@@ -186,8 +178,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root,
-        bytes calldata _snarkProof,
-        address _verifier
+        bytes calldata _snarkProof
     ) public {
         require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
         require(roots[_root], "invalid root");
@@ -215,7 +206,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         }
 
         bytes32[] memory publicInputs = _formatPublicInputs(_amount,_to, _feeData, _accountNoteHash, _accountNoteNullifier, _root);
-        if (!IVerifier(_verifier).verify(_snarkProof, publicInputs)) {
+        if (!IVerifier(privateTransferVerifier).verify(_snarkProof, publicInputs)) {
             revert VerificationFailed();
         }
     }
