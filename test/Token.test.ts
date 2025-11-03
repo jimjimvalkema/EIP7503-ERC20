@@ -21,7 +21,7 @@ import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 
 console.log({ POW_DIFFICULTY: padHex(toHex(POW_DIFFICULTY), { size: 32, dir: "left" }) })
 
-const logNoirTests = false
+const logNoirTests = true
 
 const WormholeTokenContractName = "WormholeToken"
 const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
