@@ -105,6 +105,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         // tx.origin is always a EOA
         if (tx.origin == _to || _to.code.length > 0) {
             leanIMTPoseidon2.insert(tree,_accountNoteHash);
+            emit NewLeaf(_accountNoteHash);
         } else {
             uint256 accountBalanceLeaf = hashBalanceLeaf(_to, _newBalance);
 
@@ -119,6 +120,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
                 leanIMTPoseidon2.insertMany(tree, inserts);
                 roots[leanIMTPoseidon2.root(tree)] = true;
                 emit NewLeaf(accountBalanceLeaf);
+                emit NewLeaf(_accountNoteHash);
             }
         }
     }

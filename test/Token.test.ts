@@ -223,8 +223,8 @@ describe("Token", async function () {
 
             const amountToReMint = 69n
             const reMintRecipient = bob.account.address
-            const alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
-            const tx = await makePrivateTx({
+            let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
+            const reMintTx1 = await makePrivateTx({
                 wormholeToken: wormholeTokenAlice,
                 syncedPrivateWallet: alicePrivateSynced,
                 publicClient,
@@ -235,11 +235,40 @@ describe("Token", async function () {
 
             const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
             const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([alicePrivate.burnAddress])
-            const balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
+            let balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
 
             assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
             assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
             assert.equal(balanceBobPublic, amountToReMint, "bob didn't receive the expected amount of re-minted tokens")
+
+            // sync for the next tx, TODO make it auto detect if it needs to sync wallet based on if that account nonce is nullified
+            alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
+            console.log({alicePrivateSynced})
+            // we should be able to do it again!!!
+            // TODO add input for a pre-synced tree so we don't resync every time
+            const reMintTx2 = await makePrivateTx({
+                wormholeToken: wormholeTokenAlice,
+                syncedPrivateWallet: alicePrivateSynced,
+                publicClient,
+                amount: amountToReMint,
+                recipient: reMintRecipient,
+                backend: circuitBackend
+            })
+            balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
+            assert.equal(balanceBobPublic, amountToReMint*2n, "bob didn't receive the expected amount of re-minted tokens")
+
+            // one more time
+            alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
+            const reMintTx3 = await makePrivateTx({
+                wormholeToken: wormholeTokenAlice,
+                syncedPrivateWallet: alicePrivateSynced,
+                publicClient,
+                amount: amountToReMint,
+                recipient: reMintRecipient,
+                backend: circuitBackend
+            })
+            balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
+            assert.equal(balanceBobPublic, amountToReMint*3n, "bob didn't receive the expected amount of re-minted tokens")
         })
     })
 })

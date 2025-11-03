@@ -38,6 +38,7 @@ export async function getTree(
 }
 
 //you can event scan or just iter over the nullifier mapping!
+// TODO add actual balancce
 export async function syncPrivateAccountData(
     {wormholeToken,privateWallet}
     :{privateWallet:UnsyncedPrivateWallet, wormholeToken:WormholeToken|WormholeTokenTest}

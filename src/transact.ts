@@ -61,6 +61,7 @@ export async function getTransactionInputs({ proofInputs, zkProof }: { zkProof: 
     return inputs
 }
 
+// TODO check if syncedPrivateWallet.accountNonce is not nullified, if it is resync the wallet!!!
 export async function makePrivateTx(
     { wormholeToken, syncedPrivateWallet, publicClient, amount, recipient, feeData, backend }:
         { wormholeToken: WormholeToken | WormholeTokenTest, syncedPrivateWallet: SyncedPrivateWallet, publicClient: PublicClient, recipient: Address, amount: bigint, feeData?: FeeData, backend?: UltraHonkBackend }
