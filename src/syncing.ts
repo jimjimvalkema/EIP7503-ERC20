@@ -3,7 +3,7 @@ import { LeanIMTHashFunction, LeanIMT } from "@zk-kit/lean-imt"
 import { Address, PublicClient } from "viem"
 import { WormholeTokenTest } from "../test/Token.test.js"
 import { WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.js"
-import { WormholeToken } from "./types.js"
+import { SyncedPrivateWallet, UnsyncedPrivateWallet, WormholeToken } from "./types.js"
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { hashNullifier } from "./hashing.js"
 
@@ -38,12 +38,15 @@ export async function getTree(
 }
 
 //you can event scan or just iter over the nullifier mapping!
-export async function getTotalSpentAndAccountNonceFromMapping({wormholeToken,privateWallet:{viewingKey, accountNonceStart=0n}}:{privateWallet:{viewingKey:bigint, accountNonceStart:bigint}, wormholeToken:WormholeToken|WormholeTokenTest}) {
-    let isNullified = true
-    let accountNonce = accountNonceStart
-    let totalSpent = 0n;
+export async function syncPrivateAccountData(
+    {wormholeToken,privateWallet}
+    :{privateWallet:UnsyncedPrivateWallet, wormholeToken:WormholeToken|WormholeTokenTest}
+):Promise<SyncedPrivateWallet> {
+    let accountNonce = privateWallet.accountNonce ?? 0n
+    let totalSpent = privateWallet.totalSpent ?? 0n
+    let isNullified = true;
     while (isNullified) {
-        const nullifier = hashNullifier({accountNonce,viewingKey})
+        const nullifier = hashNullifier({accountNonce,viewingKey:privateWallet.viewingKey})
         const res = await wormholeToken.read.nullifiers([nullifier])
         isNullified = res > 0n
         if (!isNullified) {
@@ -54,9 +57,10 @@ export async function getTotalSpentAndAccountNonceFromMapping({wormholeToken,pri
         accountNonce+=1n
         totalSpent+=res-1n 
     }
-    return {totalSpent, prevAccountNonce:accountNonce}
-}
 
-export async function getTotalReceived({address, wormholeToken}:{address:Address, wormholeToken:WormholeToken|WormholeTokenTest}) {
-    return await wormholeToken.read.balanceOf([address])
+    const syncedPrivateWallet = {...privateWallet}
+    syncedPrivateWallet.totalSpent = totalSpent;
+    syncedPrivateWallet.accountNonce = accountNonce;
+    syncedPrivateWallet.totalReceived = await wormholeToken.read.balanceOf([privateWallet.burnAddress]);
+    return syncedPrivateWallet as SyncedPrivateWallet
 }

@@ -1,7 +1,7 @@
 import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { FIELD_MODULUS, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_RECEIVED_DOMAIN as TOTAL_RECEIVED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
-import { FeeData } from "./types.js";
+import { FeeData, SyncedPrivateWallet, UnsyncedPrivateWallet } from "./types.js";
 import { toBigInt } from "@aztec/aztec.js";
 
 export function verifyPowNonce({ pubKeyX, powNonce, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, powNonce: bigint, difficulty?: bigint }) {
@@ -16,13 +16,6 @@ export async function extractPubKeyFromSig({ hash, signature }: { hash: Hash, si
     });
     const pubKeyX = "0x" + publicKey.slice(4).slice(0, 64) as Hex
     const pubKeyY = "0x" + publicKey.slice(4).slice(64, 128) as Hex
-    // if (pubKeyX!=="0xba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0") {
-    //     console.log({
-    //         expected: "0xba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0",
-    //         got: pubKeyX
-    //     })
-    //     throw new Error("yoooooooooooo")
-    // }
     return { pubKeyX, pubKeyY }
 }
 
@@ -38,7 +31,6 @@ export function getViewingKey({ signature }: { signature: Hex }) {
 
 export function hashAddress({ pubKeyX, powNonce }: { pubKeyX: Hex, powNonce: bigint }) {
     const pubKeyField = hexToBigInt("0x"+pubKeyX.slice(2+2) as Hex) //slice first byte so it fits in a field
-    //console.log({pubKeyField:toHex(pubKeyField), pubKeyX})
     const addressHash = poseidon2Hash([pubKeyField, powNonce, PRIVATE_ADDRESS_TYPE]);
     return addressHash
 }
@@ -58,8 +50,6 @@ export function hashPow({ pubKeyX, powNonce }: { pubKeyX: Hex, powNonce: bigint 
 // prev_account_nonce makes sure the hash is never the same even when the total_spent is not different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
 export function hashAccountNote({ totalSpent, accountNonce, viewingKey }: { totalSpent: bigint, accountNonce: bigint, viewingKey: bigint }) {
-    console.log("([totalSpent, accountNonce, viewingKey, TOTAL_SPENT_DOMAIN]")
-    console.log(([totalSpent, accountNonce, viewingKey, TOTAL_SPENT_DOMAIN].map((v)=>toHex(v))))
     return poseidon2Hash([totalSpent, accountNonce, viewingKey, TOTAL_SPENT_DOMAIN])
 }
 
@@ -70,8 +60,6 @@ export function hashNullifier({ accountNonce, viewingKey }: { accountNonce: bigi
 }
 
 export function hashTotalReceivedLeaf({ privateAddress, totalReceived }: { privateAddress: Address, totalReceived: bigint }) {
-    console.log("[hexToBigInt(privateAddress as Hex), totalReceived, TOTAL_RECEIVED_DOMAIN]")
-    console.log([hexToBigInt(privateAddress as Hex), totalReceived, TOTAL_RECEIVED_DOMAIN].map((v)=>toHex(v)))
     return poseidon2Hash([hexToBigInt(privateAddress as Hex), totalReceived, TOTAL_RECEIVED_DOMAIN])
 }
 
@@ -105,23 +93,23 @@ export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY 
     return powNonce
 }
 
-export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESSAGE }: { wallet: WalletClient & { account: Account }, message?: string }) {
-    const signature = await wallet.signMessage({ message: message, account: wallet.account })
+export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESSAGE }: { wallet: WalletClient, message?: string }):Promise<UnsyncedPrivateWallet> {
+    const signature = await wallet.signMessage({ message: message, account: (await wallet.getAddresses())[0] })
     const hash = hashMessage(message);
     const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature })
     const viewingKey = getViewingKey({ signature: signature })
     const powNonce = findPoWNonce({ pubKeyX: pubKeyX, viewingKey: viewingKey })
     const burnAddress = getPrivateAddress({ pubKeyX: pubKeyX, powNonce: powNonce })
-    const accountNonceStart = 0n
-    return { viewingKey, powNonce, pubKey: { x: pubKeyX, y: pubKeyY }, burnAddress, accountNonceStart }
+    const accountNonce = 0n
+    return {viem:{wallet}, viewingKey, powNonce, pubKey: { x: pubKeyX, y: pubKeyY }, burnAddress, accountNonce }
 }
 
-export async function signPrivateTransfer({ recipientAddress, amount, feeData, wallet }: { wallet: WalletClient & { account: Account }, recipientAddress: Address, amount: bigint, feeData: FeeData }) {
+export async function signPrivateTransfer({ recipientAddress, amount, feeData, privateWallet }: { privateWallet: UnsyncedPrivateWallet|SyncedPrivateWallet, recipientAddress: Address, amount: bigint, feeData: FeeData }) {
     const poseidonHash = toHex(hashSignatureInputs({ recipientAddress, amount, feeData }), {size:32})
     // blind signing yay!
-    const signature = await wallet.request({
+    const signature = await privateWallet.viem.wallet.request({
         method: 'eth_sign',
-        params: [wallet.account.address as Hex, poseidonHash],
+        params: [(await privateWallet.viem.wallet.getAddresses())[0], poseidonHash],
     });
     const preImageOfKeccak = toPrefixedMessage({raw:poseidonHash})
     const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);

@@ -1,6 +1,7 @@
 import { Address, GetContractReturnType, Hex, PublicClient, WalletClient } from "viem";
 import { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/artifacts.js";
 import { SignMessageReturnType } from "viem/accounts";
+import { InputMap } from "@noir-lang/noir_js";
 
 export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Required<{ public?: PublicClient; wallet?: WalletClient; }>>
 
@@ -48,37 +49,56 @@ export interface UnformattedProofInputs {
     privInputs: UnformattedPrivateProofInputs
 }
 
-export interface FormattedProofInputs {
-    amount: bigint;
-    recipient_address: bigint;
+export interface FormattedProofInputs extends InputMap {
+    amount: Hex;
+    recipient_address: Hex;
     fee_data: {
-        relayer_address: bigint;
-        priority_fee: bigint;
-        conversion_rate: bigint;
-        max_fee: bigint;
-        fee_token: bigint;
+        relayer_address: Hex;
+        priority_fee: Hex;
+        conversion_rate: Hex;
+        max_fee: Hex;
+        fee_token: Hex;
     };
-    account_note_hash: bigint;
-    account_note_nullifier: bigint;
-    root: bigint;
+    account_note_hash: Hex;
+    account_note_nullifier: Hex;
+    root: Hex;
     signature_data: {
-        public_key_x: bigint[];
-        public_key_y: bigint[];
-        signature: bigint[];
+        public_key_x: Hex[];
+        public_key_y: Hex[];
+        signature: Hex[];
     };
-    pow_nonce: bigint;
-    total_received: bigint;
-    prev_total_spent: bigint;
-    viewing_key: bigint;
-    prev_account_nonce: bigint;
+    pow_nonce: Hex;
+    total_received: Hex;
+    prev_total_spent: Hex;
+    viewing_key: Hex;
+    prev_account_nonce: Hex;
     prev_account_note_merkle: {
-        depth: bigint;
-        indices: bigint[];
-        siblings: bigint[];
+        depth: Hex;
+        indices: Hex[];
+        siblings: Hex[];
     };
     total_received_merkle: {
-        depth: bigint;
-        indices: bigint[];
-        siblings: bigint[];
+        depth: Hex;
+        indices: Hex[];
+        siblings: Hex[];
     };
+}
+
+export interface UnsyncedPrivateWallet {
+    pubKey: { x: Hex, y: Hex };
+    viewingKey:bigint,
+    powNonce: bigint;
+    burnAddress:Address, 
+    viem:{wallet:WalletClient},
+    accountNonce?:bigint, 
+    totalSpent?:bigint, 
+    totalReceived?:bigint
+}
+
+
+export interface SyncedPrivateWallet extends UnsyncedPrivateWallet{
+    burnAddress:Address;
+    accountNonce: bigint;
+    totalSpent: bigint;
+    totalReceived: bigint;
 }

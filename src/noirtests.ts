@@ -24,10 +24,10 @@ fn verify_sig() {
 `
 }
 
-export function noir_test_main(proofInput:FormattedProofInputs) {
+export function noir_test_main_self_relay(proofInput:FormattedProofInputs) {
     return`
 #[test]
-fn main_test() {   
+fn main_self_relay_test() {   
     let amount: Field = ${proofInput.amount.toString()};
     let recipient_address: Field = ${toHex(proofInput.recipient_address)};
     let fee_data: FeeData = FeeData {

@@ -9,6 +9,7 @@
         "println",
         "secp",
         "Tornadocash",
+        "viem",
         "zkwormhole"
     ]
 }

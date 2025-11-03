@@ -234,40 +234,10 @@ fn verify_sig() {
     assert(valid_signature, "invalid signature");
 }
 
-// #[test]
-// fn bytes_to_field() {
-//     // from_be_bytes wraps around when it goes over the field limit: large_number % FIELD_MODULUS
-//     let field_limit: [u8; 32] = [48,100,78,114,225,49,160,41,184,80,69,182,129,129,88,93,40,51,232,72,121,185,112,145,67,225,245,147,240,0,0,0];
-//     let field_limit_plus_one: [u8; 32] = [48,100,78,114,225,49,160,41,184,80,69,182,129,129,88,93,40,51,232,72,121,185,112,145,67,225,245,147,240,0,0,1];
-//     let field_limit_plus_two: [u8; 32] = [48,100,78,114,225,49,160,41,184,80,69,182,129,129,88,93,40,51,232,72,121,185,112,145,67,225,245,147,240,0,0,2];
-//     println("field_limit");
-//     println("field_limit");
-//     println(Field::from_be_bytes(field_limit));
-//     println("field_limit_plus_one");
-//     println(Field::from_be_bytes(field_limit_plus_one));
-//     println("field_limit_plus_two");
-//     println(Field::from_be_bytes(field_limit_plus_two));
-// }
-
 #[test]
-fn wrap() {
-    let (hash_h, hash_l) = std::field::bn254::decompose(0x000eeed5c0ff5b4932f1dc3ffcc9fc2fbc06e49f9d1df500be9087c111aafd40);
-    let (pow_diff_h, pow_diff_l) = std::field::bn254::decompose(POW_DIFFICULTY);
-    println("pow_diff_l");
-    println(pow_diff_l);
-    println("hash_h");
-    println(pow_diff_h);
-    println("pow_diff_h");
-    println(hash_l);
-    println("hash_h");
-    println(hash_h);
-    assert_gt(POW_DIFFICULTY, 0x000eeed5c0ff5b4932f1dc3ffcc9fc2fbc06e49f9d1df500be9087c111aafd40);
-}
-
-#[test]
-fn main_test() {   
+fn main_self_relay_test() {   
     let amount: Field = 69;
-    let recipient_address: Field = 0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc;
+    let recipient_address: Field = 0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266;
     let fee_data: FeeData = FeeData {
         relayer_address:  0x0,
         priority_fee: 0,
@@ -275,18 +245,18 @@ fn main_test() {
         max_fee: 0,
         fee_token:  0x0,
     };
-    let account_note_hash: Field = 0x1cf3e0a0bcd72bb0493c0152e7d0ac4694d57837ff0325f90fa51cdaf987109f;       
-    let account_note_nullifier: Field = 0x17cc264432e41c214370017559210b64fadffb7a1a58dc96ae0a63ddb9a6c107; 
-    let root: Field = 0x15bf4f7f86b425ebc180c2766514c2e4248895309e0662d65ce764667fb4e410;                    
+    let account_note_hash: Field = 0x2f6309cea9989e1ec41c979bc46268b8b4af0c3a254abdb61d1cbcafcf635af1;       
+    let account_note_nullifier: Field = 0x2881d0cd38b6fd276055a7224ccae1767edb7a8f6f5d7ba9a400890b4de7440f; 
+    let root: Field = 0x2cee62c3bf8bfc06f798dcce5741cefc8a33256bb12a7dad54a172d3c7c14286;                    
     let signature_data: SignatureData = SignatureData {
-        public_key_x: [186,87,52,216,247,9,23,25,71,30,127,126,214,185,223,23,13,199,12,198,97,202,5,230,136,96,26,217,132,240,104,176],
-        public_key_y: [214,115,81,229,240,96,115,9,36,153,51,106,176,131,158,248,165,33,175,211,52,229,56,7,32,95,162,240,142,236,116,244],
-        signature: [166,24,154,103,72,1,100,43,81,197,204,171,19,255,196,81,62,95,34,133,121,96,139,189,97,75,3,43,157,253,49,22,67,113,115,90,169,18,210,199,57,204,91,86,72,81,14,38,100,151,151,165,135,9,183,148,81,28,101,14,248,52,84,133],
+        public_key_x: [131,24,83,91,84,16,93,74,122,174,96,192,143,196,95,150,135,24,27,79,223,198,37,189,26,117,63,167,57,127,237,117],
+        public_key_y: [53,71,241,28,168,105,102,70,242,243,172,176,142,49,1,106,250,194,62,99,12,93,17,245,159,97,254,245,123,13,42,165],
+        signature: [223,118,106,179,82,199,49,184,98,124,55,3,17,37,247,78,224,8,244,150,44,209,133,66,242,196,201,85,152,127,146,127,49,130,113,16,22,227,50,67,83,152,156,86,78,255,155,82,17,180,22,64,117,105,195,100,70,169,168,153,149,3,76,132],
     }; 
-    let pow_nonce: Field = 0xf712c21959944178a16658fd5c0528bc33ebb19480b1611e1c3b94b3defa441;                  
-    let total_received: Field = 1260;              
+    let pow_nonce: Field = 0x1f9c133899fb4014f6ca925eb0efb1ec8b58a739a4c6670789ddd012e8dc0867;                  
+    let total_received: Field = 1000000000000000000000000;              
     let prev_total_spent: Field = 0;            
-    let viewing_key: Field = 0x1e8d63b4b35cf2bb6cefc2cb699ca28811b8172de4270de23ad4d1f1a53bc6aa;                 
+    let viewing_key: Field = 0xec9fea12e189e3fcb76abf10d20b16670e13a9af87f6b7c2d67b06698f59d58;                 
     let prev_account_nonce: Field = 0;               
     let prev_account_note_merkle: MerkleData = MerkleData {
         depth: 0,
@@ -294,9 +264,9 @@ fn main_test() {
         siblings:[0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0]
     };
     let total_received_merkle: MerkleData = MerkleData {
-        depth: 2,
-        indices:[1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        siblings:[0x15007c73a650ff7b36dfb19153f3754dafa69b7197fb3b36fff9e1e5d9274fa6,0x29e5b85f9fa19b2a4c30f6dc328b8bd3b6b60f466739c4eb5f39cb3e4937406d,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0]
+        depth: 1,
+        indices:[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        siblings:[0xf394bd886f4af241740967609a02e56cfe9795eb0251d2551ccbd63c83669b3,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0]
     };
     main(
         amount,

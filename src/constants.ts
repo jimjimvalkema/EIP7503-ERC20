@@ -1,3 +1,6 @@
+import { getAddress, padHex } from "viem";
+import { FeeData } from "./types.js";
+
 export const TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414Cn; // UTF8("total_received").toHex()
 export const TOTAL_SPENT_DOMAIN = 0x5350454E545F544F54414Cn; // UTF8("total_spent").toHex()
 export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("zkwormhole")].map(b=>b.toString(16)).join('') as Hex
@@ -16,3 +19,12 @@ You are about to create your viewing key for your zkwormhole account! \n
 Yay! :D Becarefull signing this on untrusted websites.
 Here is some salt: TODO
 `
+
+export const zeroAddress = getAddress(padHex("0x00", { size: 20 }))
+export const SELF_RELAY_FEE_DATA: FeeData = {
+    relayerAddress: zeroAddress,
+    priorityFee: 0n,
+    conversionRate: 0n,
+    maxFee: 0n,
+    feeToken: zeroAddress,
+}
