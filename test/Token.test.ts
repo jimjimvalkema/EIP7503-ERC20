@@ -5,18 +5,14 @@ import { network } from "hardhat";
 
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
-import { fromHex, padHex, Hash, parseEventLogs, recoverPublicKey, toHex, Hex, getAddress, hashMessage, hexToBytes, toPrefixedMessage, keccak256, toBytes, GetContractReturnType, getContract } from "viem";
+import { padHex, Hash, recoverPublicKey, toHex, Hex, hashMessage, toPrefixedMessage, keccak256, getContract } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 
-import { UltraHonkBackend } from '@aztec/bb.js';
-import { Noir } from '@noir-lang/noir_js';
-import { extractPubKeyFromSig, getPrivateAccount, hashAccountNote, hashNullifier, hashPow, hashTotalReceivedLeaf, signPrivateTransfer } from "../src/hashing.js";
+import { getPrivateAccount, hashPow } from "../src/hashing.js";
 import { POW_DIFFICULTY, SELF_RELAY_FEE_DATA } from "../src/constants.js";
-import { getTree, syncPrivateAccountData } from "../src/syncing.js";
+import { getTree, syncPrivateWallet } from "../src/syncing.js";
 import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
-import { FeeData, MerkleData, UnformattedPrivateProofInputs, UnformattedPublicProofInputs } from "../src/types.js";
-import { treasure } from "viem/chains";
-import { formatProofInputs, generateProof, getAccountNoteMerkle, getBackend, getMerkleProofs, getProofInputs, getTotalReceivedMerkle, verifyProof } from "../src/proving.js";
+import { generateProof, getBackend, getProofInputs, verifyProof } from "../src/proving.js";
 import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { makePrivateTx } from "../src/transact.js";
 
@@ -175,14 +171,14 @@ describe("Token", async function () {
         it("should make a noir test that for a private tx by self relaying and verify a proof for carol", async function () {
             const carolPrivate = await getPrivateAccount({ wallet: carol })
             await wormholeToken.write.getFreeTokens([carolPrivate.burnAddress]) //sends 1_000_000n token
+            const carolPrivateSynced = await syncPrivateWallet({privateWallet:carolPrivate, wormholeToken})
 
             const amountToReMint = 69n
             const reMintRecipient = (await bob.getAddresses())[0]
 
-            const alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeToken, privateWallet: carolPrivate })
             const formattedProofInputs = await getProofInputs({
                 wormholeToken: wormholeToken,
-                syncedPrivateWallet: alicePrivateSynced,
+                privateWallet: carolPrivateSynced,
                 publicClient: publicClient,
                 amountToReMint: amountToReMint,
                 recipient: reMintRecipient,
@@ -195,13 +191,14 @@ describe("Token", async function () {
             const carolPrivate = await getPrivateAccount({ wallet: carol })
             await wormholeToken.write.getFreeTokens([carolPrivate.burnAddress]) //sends 1_000_000n token
 
+            const carolPrivateSynced = await syncPrivateWallet({privateWallet:carolPrivate, wormholeToken})
+
             const amountToReMint = 69n
             const reMintRecipient = (await bob.getAddresses())[0]
 
-            const carolPrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeToken, privateWallet: carolPrivate })
             const formattedProofInputs = await getProofInputs({
                 wormholeToken: wormholeToken,
-                syncedPrivateWallet: carolPrivateSynced,
+                privateWallet: carolPrivateSynced,
                 publicClient: publicClient,
                 amountToReMint: amountToReMint,
                 recipient: reMintRecipient,
@@ -223,10 +220,10 @@ describe("Token", async function () {
 
             const amountToReMint = 69n
             const reMintRecipient = bob.account.address
-            let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
+            //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
             const reMintTx1 = await makePrivateTx({
                 wormholeToken: wormholeTokenAlice,
-                syncedPrivateWallet: alicePrivateSynced,
+                privateWallet: alicePrivate,
                 publicClient,
                 amount: amountToReMint,
                 recipient: reMintRecipient,
@@ -241,14 +238,11 @@ describe("Token", async function () {
             assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
             assert.equal(balanceBobPublic, amountToReMint, "bob didn't receive the expected amount of re-minted tokens")
 
-            // sync for the next tx, TODO make it auto detect if it needs to sync wallet based on if that account nonce is nullified
-            alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
-            console.log({alicePrivateSynced})
             // we should be able to do it again!!!
             // TODO add input for a pre-synced tree so we don't resync every time
             const reMintTx2 = await makePrivateTx({
                 wormholeToken: wormholeTokenAlice,
-                syncedPrivateWallet: alicePrivateSynced,
+                privateWallet: alicePrivate,
                 publicClient,
                 amount: amountToReMint,
                 recipient: reMintRecipient,
@@ -258,10 +252,9 @@ describe("Token", async function () {
             assert.equal(balanceBobPublic, amountToReMint*2n, "bob didn't receive the expected amount of re-minted tokens")
 
             // one more time
-            alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
             const reMintTx3 = await makePrivateTx({
                 wormholeToken: wormholeTokenAlice,
-                syncedPrivateWallet: alicePrivateSynced,
+                privateWallet: alicePrivate,
                 publicClient,
                 amount: amountToReMint,
                 recipient: reMintRecipient,

@@ -89,6 +89,7 @@ export function getAccountNoteMerkle({ prevTotalSpent, prevAccountNonce, private
 
 
 export function getTotalReceivedMerkle({ totalReceived, privateWallet, tree }: { tree: LeanIMT<bigint>, totalReceived: bigint, privateWallet: { burnAddress: Address } }) {
+    console.log({ privateAddress: privateWallet.burnAddress, totalReceived: totalReceived })
     const totalReceivedLeaf = hashTotalReceivedLeaf({ privateAddress: privateWallet.burnAddress, totalReceived: totalReceived })
     const totalReceivedIndex = tree.indexOf(totalReceivedLeaf)
     const totalReceivedMerkleProof = tree.generateProof(totalReceivedIndex)
@@ -151,26 +152,47 @@ export async function getPrivInputs(
 }
 
 export async function getProofInputs(
-    { wormholeToken, syncedPrivateWallet, publicClient, amountToReMint, recipient, feeData }:
-        { wormholeToken: WormholeToken | WormholeTokenTest, syncedPrivateWallet: SyncedPrivateWallet, publicClient: PublicClient, recipient: Address, amountToReMint: bigint, feeData: FeeData }
+    { wormholeToken, privateWallet, publicClient, amountToReMint, recipient, feeData }:
+        { wormholeToken: WormholeToken | WormholeTokenTest, privateWallet: SyncedPrivateWallet, publicClient: PublicClient, recipient: Address, amountToReMint: bigint, feeData: FeeData }
 ) {
-    const prevAccountNonce = syncedPrivateWallet.accountNonce
-    const prevTotalSpent = syncedPrivateWallet.totalSpent
-    const totalReceived = syncedPrivateWallet.totalReceived
+    const prevAccountNonce = privateWallet.accountNonce
+    const prevTotalSpent = privateWallet.totalSpent
+    const totalReceived = privateWallet.totalReceived
     const totalSpent = prevTotalSpent + amountToReMint
     const nextAccountNonce = prevAccountNonce + 1n
 
     const { prevAccountNoteMerkle, totalReceivedMerkle, root } = await getMerkleProofs({
-        privateWallet: syncedPrivateWallet,
-        wormholeToken,
-        publicClient,
-        prevAccountNonce,
-        prevTotalSpent,
-        totalReceived
+        privateWallet: privateWallet,
+        wormholeToken: wormholeToken,
+        publicClient: publicClient,
+        prevAccountNonce: prevAccountNonce,
+        prevTotalSpent: prevTotalSpent,
+        totalReceived: totalReceived
     })
-    const pubInputs = getPubInputs({ amountToReMint, recipient, syncedPrivateWallet, prevAccountNonce, totalSpent, nextAccountNonce, root })
-    const privInputs = await getPrivInputs({ amountToReMint, feeData, recipient, syncedPrivateWallet, prevAccountNonce, prevTotalSpent, totalReceived, prevAccountNoteMerkle, totalReceivedMerkle })
-    const formattedInput = formatProofInputs({ pubInputs, privInputs })
+
+    const pubInputs = getPubInputs({
+        amountToReMint: amountToReMint,
+        recipient: recipient,
+        syncedPrivateWallet: privateWallet,
+        prevAccountNonce: prevAccountNonce,
+        totalSpent: totalSpent,
+        nextAccountNonce: nextAccountNonce,
+        root: root
+    })
+
+    const privInputs = await getPrivInputs({
+        amountToReMint: amountToReMint,
+        feeData: feeData,
+        recipient: recipient,
+        syncedPrivateWallet: privateWallet,
+        prevAccountNonce: prevAccountNonce,
+        prevTotalSpent: prevTotalSpent,
+        totalReceived: totalReceived,
+        prevAccountNoteMerkle: prevAccountNoteMerkle,
+        totalReceivedMerkle: totalReceivedMerkle
+    })
+
+    const formattedInput = formatProofInputs({ pubInputs: pubInputs, privInputs: privInputs })
     return formattedInput
 }
 
@@ -196,11 +218,11 @@ export async function generateProof({ proofInputs, backend }: { proofInputs: For
     const noir = new Noir(privateTransferCircuit as CompiledCircuit);
     const { witness } = await noir.execute(proofInputs as InputMap);
     console.log("generating proof")
-    const proof = await backend.generateProof(witness,{ keccakZK: true});
+    const proof = await backend.generateProof(witness, { keccakZK: true });
     return proof
 }
 
 export async function verifyProof({ proof, backend }: { proof: ProofData, backend?: UltraHonkBackend }) {
     backend = backend ?? await getBackend()
-    return await backend.verifyProof(proof,{ keccakZK: true})
+    return await backend.verifyProof(proof, { keccakZK: true })
 }

@@ -38,10 +38,10 @@ export async function getTree(
 }
 
 //you can event scan or just iter over the nullifier mapping!
-// TODO add actual balancce
-export async function syncPrivateAccountData(
+// TODO add actual balance
+export async function syncPrivateWallet(
     {wormholeToken,privateWallet}
-    :{privateWallet:UnsyncedPrivateWallet, wormholeToken:WormholeToken|WormholeTokenTest}
+    :{privateWallet:UnsyncedPrivateWallet|SyncedPrivateWallet, wormholeToken:WormholeToken|WormholeTokenTest}
 ):Promise<SyncedPrivateWallet> {
     let accountNonce = privateWallet.accountNonce ?? 0n
     let totalSpent = privateWallet.totalSpent ?? 0n
@@ -58,10 +58,22 @@ export async function syncPrivateAccountData(
         accountNonce+=1n
         totalSpent+=res-1n 
     }
-
-    const syncedPrivateWallet = {...privateWallet}
+    const totalReceived = await wormholeToken.read.balanceOf([privateWallet.burnAddress]);
+    console.log({totalReceived, addr:privateWallet.burnAddress})
+    const syncedPrivateWallet = {...privateWallet} as SyncedPrivateWallet
     syncedPrivateWallet.totalSpent = totalSpent;
     syncedPrivateWallet.accountNonce = accountNonce;
-    syncedPrivateWallet.totalReceived = await wormholeToken.read.balanceOf([privateWallet.burnAddress]);
-    return syncedPrivateWallet as SyncedPrivateWallet
+    syncedPrivateWallet.totalReceived = totalReceived
+    syncedPrivateWallet.spendableBalance = totalReceived - totalSpent
+    return syncedPrivateWallet
+}
+
+export async function isSyncedPrivateWallet({privateWallet, wormholeToken}:{privateWallet: SyncedPrivateWallet|UnsyncedPrivateWallet, wormholeToken: WormholeToken | WormholeTokenTest}) {
+    if ("accountNonce" in privateWallet) {
+        const nextNullifier = hashNullifier({accountNonce: (privateWallet as SyncedPrivateWallet).accountNonce, viewingKey:privateWallet.viewingKey});
+        const res = await wormholeToken.read.nullifiers([nextNullifier]);
+        return !Boolean(res); //0n === not spend, any other amount = spend
+    } else {
+        return false
+    }
 }

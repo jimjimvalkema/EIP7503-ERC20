@@ -101,4 +101,5 @@ export interface SyncedPrivateWallet extends UnsyncedPrivateWallet{
     accountNonce: bigint;
     totalSpent: bigint;
     totalReceived: bigint;
+    spendableBalance: bigint;
 }
