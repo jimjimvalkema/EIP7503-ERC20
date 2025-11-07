@@ -18,7 +18,7 @@ export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
 export const MAX_TREE_DEPTH = 40;
 
 export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
-
+    11155111:9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a
 }
 
 export const VIEWING_KEY_SIG_MESSAGE = `

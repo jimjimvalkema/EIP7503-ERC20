@@ -1,9 +1,7 @@
 import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { FIELD_MODULUS, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_RECEIVED_DOMAIN as TOTAL_RECEIVED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
+import { POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_RECEIVED_DOMAIN as TOTAL_RECEIVED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { FeeData, SignatureData, SyncedPrivateWallet, UnsyncedPrivateWallet } from "./types.js";
-import { toBigInt } from "@aztec/aztec.js";
-
 export function verifyPowNonce({ pubKeyX, powNonce, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, powNonce: bigint, difficulty?: bigint }) {
     const powHash = hashPow({ pubKeyX, powNonce });
     return powHash > difficulty
@@ -94,6 +92,7 @@ export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY 
 }
 
 export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESSAGE }: { wallet: WalletClient, message?: string }):Promise<UnsyncedPrivateWallet> {
+    console.log(wallet.account?.address, "a")
     const signature = await wallet.signMessage({ message: message, account: wallet.account?.address as Address })
     const hash = hashMessage(message);
     const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature })
@@ -107,11 +106,11 @@ export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESS
 export async function signPrivateTransfer({ recipientAddress, amount, feeData, privateWallet }: { privateWallet: UnsyncedPrivateWallet|SyncedPrivateWallet, recipientAddress: Address, amount: bigint, feeData: FeeData }) {
     const poseidonHash = toHex(hashSignatureInputs({ recipientAddress, amount, feeData }), {size:32})
     // blind signing yay!
-    const signature = await privateWallet.viem.wallet.request({
-        method: 'eth_sign',
-        params: [(privateWallet.viem.wallet.account?.address as Address), poseidonHash],
-    });
-    //const signature = await privateWallet.viem.wallet.signMessage({ message: { raw:poseidonHash}, account:privateWallet.viem.wallet.account as Account })
+    // const signature = await privateWallet.viem.wallet.request({
+    //     method: 'eth_sign',
+    //     params: [(privateWallet.viem.wallet.account?.address as Address), poseidonHash],
+    // });
+    const signature = await privateWallet.viem.wallet.signMessage({ message: { raw:poseidonHash}, account:privateWallet.viem.wallet.account as Account })
     const preImageOfKeccak = toPrefixedMessage({raw:poseidonHash})
     const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);
 

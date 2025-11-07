@@ -1,58 +1,99 @@
 <!DOCTYPE html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ERC20-EIP7503</title>
   <style>
-    .outer {
-        display: flex;
-        justify-content: space-between;
-        width: 100%;
+    body {
+      font-size: 1.5rem;
     }
+
+    .outer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      width: 100%;
+    }
+
     .inner {
-        width: 47%;
-        border: 1px solid black;
-        padding: 10px;
-        word-wrap: break-word;
+      flex: 1 1 200px;
+      min-width: 25em;
+      border: 1px solid black;
+      padding: 10px;
+      word-wrap: break-word;
+      font-size: 100%;
+    }
+
+    button,
+    input {
+      font-size: 80%;
+      /* Ensure it pulls from body */
+      min-height: inherit;
+      /* Minimum tap target size */
+      cursor: pointer;
     }
   </style>
 </head>
+
 <body>
-  <script  crossorigin type="module" src="./main.js"></script>
   <div class="outer">
-    <div id="faucet" class="inner">
-      <h1><span class="tokenName">TOKENNAME</span> Faucet</h1>
-
-      <label for="mintAmountInput">amount</label>
-      <input value="420" max="1000" type="number" name="mintAmountInput" id="mintAmountInput" required />
-      <button id="mintBtn">get <span class="ticker">ticker</span></button>
+    <div id="walletUi" class="inner"> 
+      <h1>Connect Wallet</h1>
+      <h3>public</h3> 
+      <button id="connectPublicWalletBtn">connect public wallet</button>
       <br>
-      user balance: <span class="userBalance">USERBALANCE</span>
-    </div>
-    <div id="privateUi" class="inner">
-      <h1>Deposit To Private Address</h1>
-      <label for="privateAddressInputLabel">private address</label>
-      <input placeholder="generate new if left empty" type="text" name="privateAddressInput" id="privateAddressInput" />
+      public address: <span class="publicAddress"></span> 
       <br>
-      <label for="privateAmountInput">set privateAmount</label>
-      <input value="420" type="number" name="privateAmount" id="privateAmount" required />
-      <button id="depositBtn">deposit</button>
+      balance: <span class="publicBalance"></span>
+      <h3>private</h3>  
+      <button id="connectPrivateWalletBtn">connect private wallet</button>
+      <br>
+      burn address: <span class="burnAddress"></span>
+      <br>
+      burned balance: <span class="privateBurnedBalance"></span>
+      <br>
+      private spent balance: <span class="privateSpentBalance"></span>
+      <br>
+      spendable balance: <span class="privateSpendableBalance"></span>
+    </div>
+    <div id="faucetUi" class="inner">
+      <h1><span class="tokenName">tokenName</span> Faucet</h1>
+      <button id="mintBtn">
+        get
+        <span class="amountFreeTokens">amountFreeTokens</span>
+        <span class="ticker">ticker</span>
+        free tokens
+      </button>
+    </div>
+    <div id="transferUi" class="inner">
+      <h1>Transfer</h1>
+      <label for="transferRecipientInput">address</label>
+      <input placeholder="0x..." type="text" name="transferRecipientInput" id="transferRecipientInput" />
+      <button id="setToPrivateWalletBtn">set to burn address</button>
+      <button id="setToPublicWalletBtn">set to public address</button>
+      <br>
+      <label for="transferAmountInput">set amount</label>
+      <input value="420" type="number" name="transferAmount" id="transferAmountInput" required />
+      <button id="transferBtn">transfer</button>
     </div>
 
-    <div id="privateTransferUi" class="inner">
-      <h1>Make Private Transfer</h1>
-      
-      <label for="privateAddresses">private addresses</label>
-      <ul id="privateAddresses">
-        <li>
-          test
-
-        </li>
-      </ul>
+    <div id="privateRemintUi" class="inner">
+      <h1>Make Private (Remint)Transfer </h1>
+      <label for="privateTransferRecipientInput">address</label>
+      <input placeholder="0x..." type="text" name="privateTransferRecipientInput" id="privateTransferRecipientInput" />
+      <button id="setPrivateTransferToPrivateWalletBtn">set to burn address</button>
+      <button id="setPrivateTransferToPublicWalletBtn">set to public address</button>
+      <br>
+      <label for="privateTransferAmountInput">set amount</label>
+      <input value="420" type="number" name="privateTransferAmountInput" id="privateTransferAmountInput" required />
+      <button id="privateTransferBtn">transfer</button>
     </div>
-
-
   </div>
 
-  <div id="errors" ></div>
-  <div id="messages" ></div>
+  <div id="errors"></div>
+  <div id="messages"></div>
 
+  <script crossorigin type="module" src="./main.ts"></script>
 </body>
 </html>

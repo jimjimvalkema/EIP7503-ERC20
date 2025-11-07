@@ -3,6 +3,7 @@
   "name": "ERC20-EIP7503",
   "license": "Apache-2.0",
   "devDependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@nomicfoundation/hardhat-ignition": "^3.0.0",
     "@nomicfoundation/hardhat-ignition-viem": "^3.0.0",
     "@nomicfoundation/hardhat-keystore": "^3.0.2",
@@ -14,11 +15,13 @@
     "@nomicfoundation/hardhat-viem-assertions": "^3.0.0",
     "@nomicfoundation/ignition-core": "^3.0.0",
     "@types/argparse": "^2.0.17",
+    "@types/minimatch": "^6.0.0",
     "@types/node": "^22.8.5",
     "forge-std": "foundry-rs/forge-std#v1.9.4",
     "typescript": "~5.8.0",
     "viem": "^2.38.6",
-    "vite": "^5.3.4"
+    "vite": "^5.3.4",
+    "vite-plugin-node-polyfills": "^0.24.0"
   },
   "scripts": {
     "solidity": "hardhat compile;",
@@ -32,19 +35,22 @@
     "website": "cd website; yarn vite"
   },
   "dependencies": {
-    "@aztec/aztec.js": "^2.0.4",
+    "@aztec/aztec.js": "2.0.3",
     "@aztec/bb.js": "3.0.0-nightly.20251030-2",
     "@noir-lang/noir_js": "1.0.0-beta.14",
     "@openzeppelin/contracts": "^5.2.0",
-    "@warptoad/gigabridge-js": "0.0.5",
+    "@warptoad/gigabridge-js": "0.0.7",
     "@zk-kit/lean-imt": "2.2.4",
     "argparse": "^2.0.1",
     "args-parser": "^1.3.0",
     "es-main": "^1.4.0",
+    "esbuild": "^0.25.12",
     "hardhat": "3.0.12",
     "poseidon-lite": "^0.2.0",
     "poseidon-solidity": "^0.0.5",
+    "rollup-plugin-copy": "^3.5.0",
     "ts-node": "^10.9.2",
+    "vite-plugin-wasm": "^3.5.0",
     "zk-kit-lean-imt-custom-hash": "2.1.1"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"

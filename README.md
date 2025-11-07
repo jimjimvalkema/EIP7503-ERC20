@@ -5,7 +5,6 @@ setup secrets:
 `yarn hardhat keystore set ETHERSCAN_API_KEY`  
 
 deploy main contracts:  
-*TODO this doesn't verify shit*
 ```shell
 yarn hardhat ignition deploy ignition/modules/wormtoken.ts --verify --network sepolia
 ```  

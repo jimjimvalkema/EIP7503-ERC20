@@ -1,6 +1,6 @@
-import { queryEventInChunks } from "@warptoad/gigabridge-js"
+import { queryEventInChunks } from "@warptoad/gigabridge-js/viem-utils"
 import { LeanIMTHashFunction, LeanIMT } from "@zk-kit/lean-imt"
-import { Address, PublicClient } from "viem"
+import { PublicClient } from "viem"
 import { WormholeTokenTest } from "../test/Token.test.js"
 import { WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.js"
 import { SyncedPrivateWallet, UnsyncedPrivateWallet, WormholeToken } from "./types.js"

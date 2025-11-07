@@ -1,6 +1,6 @@
-import { Address, getAddress, getContract, GetEnsAddressParameters, Hex, PublicClient, toHex, WalletClient, zeroAddress } from "viem";
+import { Address, getAddress, getContract, Hex, PublicClient, toHex, WalletClient, zeroAddress } from "viem";
 import { WormholeTokenTest } from "../test/Token.test.js";
-import { FeeData, FormattedProofInputs, RelayerInputs, SyncedPrivateWallet, UnformattedProofInputs, UnformattedPublicProofInputs, UnsyncedPrivateWallet, WormholeToken } from "./types.js";
+import { RelayerInputs, SyncedPrivateWallet, UnformattedPublicProofInputs, UnsyncedPrivateWallet, WormholeToken } from "./types.js";
 import { EMPTY_FEE_DATA, FEE_ESTIMATOR_DATA } from "./constants.js";
 import { formatProofInputs, generateProof, getUnformattedProofInputs } from "./proving.js";
 import { ProofData, UltraHonkBackend } from "@aztec/bb.js";
