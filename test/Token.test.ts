@@ -9,7 +9,7 @@ import { padHex, Hash, recoverPublicKey, toHex, Hex, hashMessage, toPrefixedMess
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 
 import { getPrivateAccount, hashPow } from "../src/hashing.js";
-import { POW_DIFFICULTY, EMPTY_FEE_DATA } from "../src/constants.js";
+import { POW_DIFFICULTY, EMPTY_FEE_DATA, WormholeTokenContractName, PrivateTransferVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName } from "../src/constants.js";
 import { getTree, syncPrivateWallet } from "../src/syncing.js";
 import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { formatProofInputs, generateProof, getBackend, getUnformattedProofInputs, verifyProof } from "../src/proving.js";
@@ -20,11 +20,6 @@ import { RelayerInputs, UnsyncedPrivateWallet } from "../src/types.js";
 console.log({ POW_DIFFICULTY: padHex(toHex(POW_DIFFICULTY), { size: 32, dir: "left" }) })
 
 const logNoirTests = false
-
-const WormholeTokenContractName = "WormholeToken"
-const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
-const PrivateTransferVerifierContractName = "PrivateTransferVerifier"
-const ZKTranscriptLibContractName = "ZKTranscriptLib"
 const provingThreads = 1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
 
 export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
@@ -46,7 +41,8 @@ describe("Token", async function () {
 
 
     beforeEach(async function () {
-        await deployPoseidon2Huff(publicClient, deployer, padHex("0x00", { size: 32 }))
+        const poseidon2Create2Salt = padHex("0x00", { size: 32 })
+        await deployPoseidon2Huff(publicClient, deployer, poseidon2Create2Salt)
         leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [], { libraries: {} });
         const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName, [], { libraries: {} });
         PrivateTransferVerifier = await viem.deployContract(PrivateTransferVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });

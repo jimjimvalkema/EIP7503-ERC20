@@ -1,4 +1,4 @@
-import { hexToBigInt, hexToBytes, Hex, Address, PublicClient, WalletClient, toHex } from "viem"
+import { hexToBytes, Hex, Address, PublicClient, toHex } from "viem"
 import { FeeData, FormattedProofInputs, MerkleData, SignatureData, SyncedPrivateWallet, UnformattedPrivateProofInputs, UnformattedProofInputs, UnformattedPublicProofInputs, WormholeToken } from "./types.js"
 import { MAX_TREE_DEPTH, EMPTY_FEE_DATA } from "./constants.js"
 import { hashAccountNote, hashNullifier, hashTotalReceivedLeaf, signPrivateTransfer } from "./hashing.js"

@@ -59,15 +59,19 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     {
         privateTransferVerifier = _privateTransferVerifier;
     }
+ 
+    function hashPoseidon2T3(uint256[3] memory input) public view returns (uint256) {
+        (, bytes memory result) = POSEIDON2_ADDRESS.staticcall(abi.encode(input));
+        return uint256(bytes32(result));
+    }
 
     // The function used for hashing the balanceLeaf
-    function hashBalanceLeaf(address _to, uint256 _newBalance) public view returns (uint256) {
+    function hashBalanceLeaf(address _to, uint256 _newBalance) private view returns (uint256) {
         uint256[3] memory input;
         input[0] = _addressToUint256(_to);
         input[1] = _newBalance;
         input[2] = TOTAL_RECEIVED_DOMAIN;
-        (, bytes memory result) = POSEIDON2_ADDRESS.staticcall(abi.encode(input));
-        return uint256(bytes32(result));
+        return hashPoseidon2T3(input);
     }
 
     function _insertInMerkleTree(uint256 leaf) override internal {

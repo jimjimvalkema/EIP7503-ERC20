@@ -1,4 +1,5 @@
 import { ArgumentParser } from 'argparse';
+import esMain from 'es-main';
 import fs from "fs/promises";
 
 export interface lineReplacement {
@@ -40,4 +41,10 @@ async function main() {
     ]
     await lineReplacer(args.file, lineReplacements)
 }
-await main()
+
+if (esMain(import.meta)) {
+    await main().catch((err) => {
+        console.error('Error in main:', err);
+        process.exit(1);
+    });
+}
