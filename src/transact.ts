@@ -83,7 +83,7 @@ export async function relayTx({ relayerInputs, ethWallet, publicClient, wormhole
 
     const wormholeTokenRelayer = getContract({ client: { public: publicClient, wallet: ethWallet }, abi: wormholeToken.abi, address: wormholeToken.address });
     const transactionInputs = getTransactionInputs({ pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof })
-    return await wormholeTokenRelayer.write.privateTransfer(transactionInputs, { account: relayerInputs.pubInputs.recipientAddress, chain: publicClient.chain })
+    return await wormholeTokenRelayer.write.privateTransfer(transactionInputs, { account: ethWallet.account?.address, chain: publicClient.chain })
 }
 
 export async function proofAndSelfRelay(

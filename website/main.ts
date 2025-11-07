@@ -55,7 +55,7 @@ function logUi(message: string, replace = false) {
 
 async function txInUi(txHash: Hex) {
   //TODO make href
-  logUi(`tx sent at: https://etherscan.io/tx/${txHash}`)
+  logUi(`tx sent at: https://sepolia.etherscan.io/tx/${txHash}`)
   await publicClient.waitForTransactionReceipt({
       hash: txHash,
       confirmations: 1
