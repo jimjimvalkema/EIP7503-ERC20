@@ -2,6 +2,7 @@ import { Address, GetContractReturnType, Hex, PublicClient, WalletClient } from 
 import { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/artifacts.js";
 import { SignMessageReturnType } from "viem/accounts";
 import { InputMap } from "@noir-lang/noir_js";
+import { ProofData } from "@aztec/bb.js";
 
 export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Required<{ public?: PublicClient; wallet?: WalletClient; }>>
 
@@ -86,20 +87,32 @@ export interface FormattedProofInputs extends InputMap {
 
 export interface UnsyncedPrivateWallet {
     pubKey: { x: Hex, y: Hex };
-    viewingKey:bigint,
+    viewingKey: bigint,
     powNonce: bigint;
-    burnAddress:Address, 
-    viem:{wallet:WalletClient},
-    accountNonce?:bigint, 
-    totalSpent?:bigint, 
-    totalReceived?:bigint
+    burnAddress: Address,
+    viem: { wallet: WalletClient },
+    accountNonce?: bigint,
+    totalSpent?: bigint,
+    totalReceived?: bigint
 }
 
 
-export interface SyncedPrivateWallet extends UnsyncedPrivateWallet{
-    burnAddress:Address;
+export interface SyncedPrivateWallet extends UnsyncedPrivateWallet {
+    burnAddress: Address;
     accountNonce: bigint;
     totalSpent: bigint;
     totalReceived: bigint;
     spendableBalance: bigint;
+}
+
+
+export interface RelayerInputs {
+    pubInputs: UnformattedPublicProofInputs;
+    zkProof: ProofData;
+}
+
+export interface SignatureData {
+    publicKeyX: Hex,
+    publicKeyY: Hex,
+    signature: Hex
 }

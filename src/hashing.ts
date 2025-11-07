@@ -1,7 +1,7 @@
 import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { FIELD_MODULUS, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_RECEIVED_DOMAIN as TOTAL_RECEIVED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
-import { FeeData, SyncedPrivateWallet, UnsyncedPrivateWallet } from "./types.js";
+import { FeeData, SignatureData, SyncedPrivateWallet, UnsyncedPrivateWallet } from "./types.js";
 import { toBigInt } from "@aztec/aztec.js";
 
 export function verifyPowNonce({ pubKeyX, powNonce, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, powNonce: bigint, difficulty?: bigint }) {
@@ -94,7 +94,7 @@ export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY 
 }
 
 export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESSAGE }: { wallet: WalletClient, message?: string }):Promise<UnsyncedPrivateWallet> {
-    const signature = await wallet.signMessage({ message: message, account: (await wallet.getAddresses())[0] })
+    const signature = await wallet.signMessage({ message: message, account: wallet.account?.address as Address })
     const hash = hashMessage(message);
     const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature })
     const viewingKey = getViewingKey({ signature: signature })
@@ -109,8 +109,9 @@ export async function signPrivateTransfer({ recipientAddress, amount, feeData, p
     // blind signing yay!
     const signature = await privateWallet.viem.wallet.request({
         method: 'eth_sign',
-        params: [(await privateWallet.viem.wallet.getAddresses())[0], poseidonHash],
+        params: [(privateWallet.viem.wallet.account?.address as Address), poseidonHash],
     });
+    //const signature = await privateWallet.viem.wallet.signMessage({ message: { raw:poseidonHash}, account:privateWallet.viem.wallet.account as Account })
     const preImageOfKeccak = toPrefixedMessage({raw:poseidonHash})
     const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);
 
@@ -121,5 +122,5 @@ export async function signPrivateTransfer({ recipientAddress, amount, feeData, p
         publicKeyX: pubKeyX,
         publicKeyY: pubKeyY,
         signature: signature
-    }
+    } as SignatureData
 }

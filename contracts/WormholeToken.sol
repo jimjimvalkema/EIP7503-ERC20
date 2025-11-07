@@ -72,7 +72,18 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
 
     function _insertInMerkleTree(uint256 leaf) override internal {
         leanIMTPoseidon2.insert(tree, leaf);
+        emit NewLeaf(leaf);
+        roots[leanIMTPoseidon2.root(tree)] = true;
     }
+
+    function _insertManyInMerkleTree(uint256[] memory leafs) internal {
+        leanIMTPoseidon2.insertMany(tree, leafs);
+        for (uint i = 0; i < leafs.length; i++) {
+            emit NewLeaf(leafs[i]);
+        }
+        roots[leanIMTPoseidon2.root(tree)] = true;
+    }
+
 
     function _updateBalanceInMerkleTree(address _to, uint256 _newBalance) override internal {        
         // tx.origin is always a EOA, so no need to do a merkle tree insertion, saves gas on defi interactions for example someone buying the token
@@ -93,35 +104,30 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
             // it's already in there! (rarely happens but can happen if an EOA receives an amount that results in a balance it had before)
             return;
         } else {
-            leanIMTPoseidon2.insert(tree,leaf);
-            roots[leanIMTPoseidon2.root(tree)] = true;
-            emit NewLeaf(leaf);
+            _insertInMerkleTree(leaf);
         }
     }
 
     function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256 _accountNoteHash) override internal {        
-        // check if account == tx.origin or if its a contract, since in that case it's not a private address.
+        // check if account == tx.origin since in that case it's not a private address.
         // and we only need to insert _accountNoteHash
         // tx.origin is always a EOA
-        if (tx.origin == _to || _to.code.length > 0) {
-            leanIMTPoseidon2.insert(tree,_accountNoteHash);
-            emit NewLeaf(_accountNoteHash);
+        if (tx.origin == _to ) {
+            _insertInMerkleTree( _accountNoteHash);
         } else {
             uint256 accountBalanceLeaf = hashBalanceLeaf(_to, _newBalance);
 
             if (leanIMTPoseidon2.has(tree,accountBalanceLeaf)) {
                 // accountBalanceLeaf is already in there! so we only insert _accountNoteHash
                 // note: _accountNoteHash is always unique, remember it is poseidon(totalSpend,viewingKey,nonce)
-                leanIMTPoseidon2.insert(tree, _accountNoteHash);
+                _insertInMerkleTree( _accountNoteHash);
             } else {
-                uint256[] memory inserts = new uint256[](2);
-                inserts[0] = accountBalanceLeaf;
-                inserts[1] = _accountNoteHash;
-                leanIMTPoseidon2.insertMany(tree, inserts);
-                roots[leanIMTPoseidon2.root(tree)] = true;
-                emit NewLeaf(accountBalanceLeaf);
-                emit NewLeaf(_accountNoteHash);
+                uint256[] memory leafs = new uint256[](2);
+                leafs[0] = accountBalanceLeaf;
+                leafs[1] = _accountNoteHash;
+                _insertManyInMerkleTree(leafs);
             }
+
         }
     }
 

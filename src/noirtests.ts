@@ -24,10 +24,10 @@ fn verify_sig() {
 `
 }
 
-export function noir_test_main_self_relay(proofInput: FormattedProofInputs) {
+export function noir_test_main_self_relay(proofInput: FormattedProofInputs, testName="main_self_relay_test") {
     return `
 #[test]
-fn main_self_relay_test() {   
+fn ${testName}() {   
     let amount: Field = ${BigInt(proofInput.amount).toString()};
     let recipient_address: Field = ${proofInput.recipient_address};
     let fee_data: FeeData = FeeData {

@@ -59,7 +59,6 @@ export async function syncPrivateWallet(
         totalSpent+=res-1n 
     }
     const totalReceived = await wormholeToken.read.balanceOf([privateWallet.burnAddress]);
-    console.log({totalReceived, addr:privateWallet.burnAddress})
     const syncedPrivateWallet = {...privateWallet} as SyncedPrivateWallet
     syncedPrivateWallet.totalSpent = totalSpent;
     syncedPrivateWallet.accountNonce = accountNonce;

@@ -1,6 +1,6 @@
 import { hexToBigInt, hexToBytes, Hex, Address, PublicClient, WalletClient, toHex } from "viem"
-import { FeeData, FormattedProofInputs, MerkleData, SyncedPrivateWallet, UnformattedPrivateProofInputs, UnformattedProofInputs, UnformattedPublicProofInputs, WormholeToken } from "./types.js"
-import { MAX_TREE_DEPTH, SELF_RELAY_FEE_DATA } from "./constants.js"
+import { FeeData, FormattedProofInputs, MerkleData, SignatureData, SyncedPrivateWallet, UnformattedPrivateProofInputs, UnformattedProofInputs, UnformattedPublicProofInputs, WormholeToken } from "./types.js"
+import { MAX_TREE_DEPTH, EMPTY_FEE_DATA } from "./constants.js"
 import { hashAccountNote, hashNullifier, hashTotalReceivedLeaf, signPrivateTransfer } from "./hashing.js"
 import { LeanIMT } from "@zk-kit/lean-imt"
 import { WormholeTokenTest } from "../test/Token.test.js"
@@ -67,6 +67,7 @@ export function padArray<T>({ arr, size, value, dir }: { arr: T[], size: number,
 }
 
 export function getAccountNoteMerkle({ prevTotalSpent, prevAccountNonce, privateWallet, tree }: { tree: LeanIMT<bigint>, prevTotalSpent: bigint, prevAccountNonce: bigint, privateWallet: { viewingKey: bigint } }) {
+    //console.log("proving",{ totalSpent: prevTotalSpent, accountNonce: prevAccountNonce, viewingKey: privateWallet.viewingKey })
     const prevAccountNoteHash = hashAccountNote({ totalSpent: prevTotalSpent, accountNonce: prevAccountNonce, viewingKey: privateWallet.viewingKey })
     let prevAccountNoteMerkle: MerkleData;
     if (prevAccountNonce !== 0n) {
@@ -89,7 +90,6 @@ export function getAccountNoteMerkle({ prevTotalSpent, prevAccountNonce, private
 
 
 export function getTotalReceivedMerkle({ totalReceived, privateWallet, tree }: { tree: LeanIMT<bigint>, totalReceived: bigint, privateWallet: { burnAddress: Address } }) {
-    console.log({ privateAddress: privateWallet.burnAddress, totalReceived: totalReceived })
     const totalReceivedLeaf = hashTotalReceivedLeaf({ privateAddress: privateWallet.burnAddress, totalReceived: totalReceived })
     const totalReceivedIndex = tree.indexOf(totalReceivedLeaf)
     const totalReceivedMerkleProof = tree.generateProof(totalReceivedIndex)
@@ -116,13 +116,14 @@ export async function getMerkleProofs(
 }
 
 export function getPubInputs(
-    { amountToReMint, recipient, syncedPrivateWallet, prevAccountNonce, totalSpent, nextAccountNonce, root }:
-        { amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, totalSpent: bigint, nextAccountNonce: bigint, root: bigint }) {
+    { amountToReMint, recipient, syncedPrivateWallet, prevAccountNonce, totalSpent, nextAccountNonce, root, feeData }:
+        { amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, totalSpent: bigint, nextAccountNonce: bigint, root: bigint, feeData:FeeData }) {
+    //console.log("inserting:",{ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
     const accountNoteHash = hashAccountNote({ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
     const accountNoteNullifier = hashNullifier({ accountNonce: prevAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
 
     ///-----------
-    const feeData = SELF_RELAY_FEE_DATA
+    feeData = feeData ?? EMPTY_FEE_DATA
     const pubInputs: UnformattedPublicProofInputs = {
         amount: amountToReMint,
         recipientAddress: recipient,
@@ -134,10 +135,9 @@ export function getPubInputs(
     return pubInputs
 }
 
-export async function getPrivInputs(
-    { amountToReMint, feeData, recipient, syncedPrivateWallet, prevAccountNonce, prevTotalSpent, totalReceived, prevAccountNoteMerkle, totalReceivedMerkle }:
-        { amountToReMint: bigint, feeData: FeeData, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint, prevAccountNoteMerkle: MerkleData, totalReceivedMerkle: MerkleData }) {
-    const signatureData = await signPrivateTransfer({ recipientAddress: recipient, amount: amountToReMint, feeData: feeData, privateWallet: syncedPrivateWallet })
+export function getPrivInputs(
+    { signatureData, syncedPrivateWallet, prevAccountNonce, prevTotalSpent, totalReceived, prevAccountNoteMerkle, totalReceivedMerkle }:
+        { signatureData:SignatureData, amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint, prevAccountNoteMerkle: MerkleData, totalReceivedMerkle: MerkleData }) {
     const privInputs: UnformattedPrivateProofInputs = {
         signatureData: signatureData,
         powNonce: syncedPrivateWallet.powNonce,
@@ -151,7 +151,7 @@ export async function getPrivInputs(
     return privInputs
 }
 
-export async function getProofInputs(
+export async function getUnformattedProofInputs(
     { wormholeToken, privateWallet, publicClient, amountToReMint, recipient, feeData }:
         { wormholeToken: WormholeToken | WormholeTokenTest, privateWallet: SyncedPrivateWallet, publicClient: PublicClient, recipient: Address, amountToReMint: bigint, feeData: FeeData }
 ) {
@@ -160,7 +160,7 @@ export async function getProofInputs(
     const totalReceived = privateWallet.totalReceived
     const totalSpent = prevTotalSpent + amountToReMint
     const nextAccountNonce = prevAccountNonce + 1n
-
+    const signatureData = await signPrivateTransfer({ recipientAddress: recipient, amount: amountToReMint, feeData: feeData, privateWallet: privateWallet })
     const { prevAccountNoteMerkle, totalReceivedMerkle, root } = await getMerkleProofs({
         privateWallet: privateWallet,
         wormholeToken: wormholeToken,
@@ -177,12 +177,13 @@ export async function getProofInputs(
         prevAccountNonce: prevAccountNonce,
         totalSpent: totalSpent,
         nextAccountNonce: nextAccountNonce,
-        root: root
+        root: root,
+        feeData: feeData,
     })
 
-    const privInputs = await getPrivInputs({
+    const privInputs = getPrivInputs({
+        signatureData:signatureData,
         amountToReMint: amountToReMint,
-        feeData: feeData,
         recipient: recipient,
         syncedPrivateWallet: privateWallet,
         prevAccountNonce: prevAccountNonce,
@@ -192,8 +193,8 @@ export async function getProofInputs(
         totalReceivedMerkle: totalReceivedMerkle
     })
 
-    const formattedInput = formatProofInputs({ pubInputs: pubInputs, privInputs: privInputs })
-    return formattedInput
+    const unformattedProofInputs = {pubInputs,privInputs}
+    return unformattedProofInputs as UnformattedProofInputs
 }
 
 export function getAvailableThreads() {

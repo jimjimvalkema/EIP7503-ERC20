@@ -1,5 +1,7 @@
 import { getAddress, padHex } from "viem";
-import { FeeData } from "./types.js";
+import { FeeData, RelayerInputs } from "./types.js";
+import feeEstimatorRelayerData from "./feeEstimatorRelayerData.json"
+import { convertRelayerInputsJson } from "./transact.js";
 
 export const TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414Cn; // UTF8("total_received").toHex()
 export const TOTAL_SPENT_DOMAIN = 0x5350454E545F544F54414Cn; // UTF8("total_spent").toHex()
@@ -21,10 +23,12 @@ Here is some salt: TODO
 `
 
 export const zeroAddress = getAddress(padHex("0x00", { size: 20 }))
-export const SELF_RELAY_FEE_DATA: FeeData = {
+export const EMPTY_FEE_DATA: FeeData = {
     relayerAddress: zeroAddress,
     priorityFee: 0n,
     conversionRate: 0n,
     maxFee: 0n,
     feeToken: zeroAddress,
 }
+
+export const FEE_ESTIMATOR_DATA:RelayerInputs = convertRelayerInputsJson(feeEstimatorRelayerData)
