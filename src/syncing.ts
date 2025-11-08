@@ -34,6 +34,11 @@ export async function getTree(
     const sortedEvents = events.sort((a: any, b: any) => Number(a.args.index - b.args.index))
     const leafs = sortedEvents.map((event) => event.args.leaf)
     const tree = new LeanIMT(poseidon2IMTHashFunc, leafs)
+    const isValidRoot = await wormholeToken.read.roots([tree.root])
+    console.log({isValidRoot})
+    if(isValidRoot === false){
+        throw new Error("getTree synced but got invalid root")
+    }
     return tree
 }
 

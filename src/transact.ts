@@ -1,10 +1,11 @@
-import { Address, getAddress, getContract, Hex, PublicClient, toHex, WalletClient, zeroAddress } from "viem";
+import { Address, getAddress, getContract, Hex, PublicClient, toBytes, toHex, WalletClient, zeroAddress } from "viem";
 import { WormholeTokenTest } from "../test/Token.test.js";
-import { RelayerInputs, SyncedPrivateWallet, UnformattedPublicProofInputs, UnsyncedPrivateWallet, WormholeToken } from "./types.js";
-import { EMPTY_FEE_DATA, FEE_ESTIMATOR_DATA } from "./constants.js";
+import { RelayerInputs, RelayerInputsHex, SyncedPrivateWallet, UnformattedPublicProofInputs, UnsyncedPrivateWallet, WormholeToken } from "./types.js";
+import { EMPTY_FEE_DATA } from "./constants.js";
 import { formatProofInputs, generateProof, getUnformattedProofInputs } from "./proving.js";
 import { ProofData, UltraHonkBackend } from "@aztec/bb.js";
 import { syncPrivateWallet } from "./syncing.js";
+import { noir_test_main_self_relay } from "./noirtests.js";
 
 export function getTransactionInputs({ pubProofInputs, zkProof }: { zkProof: ProofData, pubProofInputs: UnformattedPublicProofInputs }) {
     const feeData = {
@@ -83,7 +84,7 @@ export async function relayTx({ relayerInputs, ethWallet, publicClient, wormhole
 
     const wormholeTokenRelayer = getContract({ client: { public: publicClient, wallet: ethWallet }, abi: wormholeToken.abi, address: wormholeToken.address });
     const transactionInputs = getTransactionInputs({ pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof })
-    return await wormholeTokenRelayer.write.privateTransfer(transactionInputs, { account: ethWallet.account?.address, chain: publicClient.chain })
+    return await wormholeTokenRelayer.write.privateTransfer(transactionInputs, { account: ethWallet.account?.address as Address, chain: publicClient.chain })
 }
 
 export async function proofAndSelfRelay(
@@ -97,38 +98,61 @@ export async function proofAndSelfRelay(
     return await relayTx({ relayerInputs, ethWallet, publicClient, wormholeToken })
 }
 
-export function convertRelayerInputsJson(json:any):RelayerInputs {
+export function convertRelayerInputsFromHex(relayerInputs:RelayerInputsHex):RelayerInputs {
     return {
         pubInputs:{
-                amount: BigInt(json.pubInputs.amount),
-                recipientAddress: getAddress(json.pubInputs.recipientAddress),
+                amount: BigInt(relayerInputs.pubInputs.amount),
+                recipientAddress: getAddress(relayerInputs.pubInputs.recipientAddress),
                 feeData: {
-                    relayerAddress: getAddress(json.pubInputs.feeData.relayerAddress),
-                    priorityFee: BigInt(json.pubInputs.feeData.priorityFee),
-                    conversionRate: BigInt(json.pubInputs.feeData.conversionRate),
-                    maxFee: BigInt(json.pubInputs.feeData.maxFee),
-                    feeToken: getAddress(json.pubInputs.feeData.feeToken),
+                    relayerAddress: getAddress(relayerInputs.pubInputs.feeData.relayerAddress),
+                    priorityFee: BigInt(relayerInputs.pubInputs.feeData.priorityFee),
+                    conversionRate: BigInt(relayerInputs.pubInputs.feeData.conversionRate),
+                    maxFee: BigInt(relayerInputs.pubInputs.feeData.maxFee),
+                    feeToken: getAddress(relayerInputs.pubInputs.feeData.feeToken),
                 },
-                accountNoteHash: BigInt(json.pubInputs.accountNoteHash),
-                accountNoteNullifier: BigInt(json.pubInputs.accountNoteNullifier),
-                root: BigInt(json.pubInputs.root),
+                accountNoteHash: BigInt(relayerInputs.pubInputs.accountNoteHash),
+                accountNoteNullifier: BigInt(relayerInputs.pubInputs.accountNoteNullifier),
+                root: BigInt(relayerInputs.pubInputs.root),
         },
         zkProof:{
-            proof: new Uint8Array(json.zkProof.proof),
-            publicInputs:json.zkProof.publicInputs
+            proof: toBytes(relayerInputs.zkProof.proof),
+            publicInputs:relayerInputs.zkProof.publicInputs as string[]
+        }
+    }
+}
+
+export function convertRelayerInputsToHex(relayerInputs:RelayerInputs):RelayerInputsHex {
+    return {
+        pubInputs:{
+                amount: toHex(relayerInputs.pubInputs.amount),
+                recipientAddress: getAddress(relayerInputs.pubInputs.recipientAddress),
+                feeData: {
+                    relayerAddress: getAddress(relayerInputs.pubInputs.feeData.relayerAddress),
+                    priorityFee: toHex(relayerInputs.pubInputs.feeData.priorityFee),
+                    conversionRate: toHex(relayerInputs.pubInputs.feeData.conversionRate),
+                    maxFee: toHex(relayerInputs.pubInputs.feeData.maxFee),
+                    feeToken: getAddress(relayerInputs.pubInputs.feeData.feeToken),
+                },
+                accountNoteHash: toHex(relayerInputs.pubInputs.accountNoteHash),
+                accountNoteNullifier: toHex(relayerInputs.pubInputs.accountNoteNullifier),
+                root: toHex(relayerInputs.pubInputs.root),
+        },
+        zkProof:{
+            proof: toHex(relayerInputs.zkProof.proof),
+            publicInputs:relayerInputs.zkProof.publicInputs as Hex[]
         }
     }
 }
 
 
 // This requires that account from FEE_ESTIMATOR_DATA had funds at one point and had the same root existed
-export async function estimateGasUsage({wormholeToken, wallet}:{wormholeToken:WormholeToken|WormholeTokenTest, wallet:WalletClient}) {
-    const relayerInputs = FEE_ESTIMATOR_DATA
-    relayerInputs.pubInputs.feeData.feeToken = wormholeToken.address
-    const rootNeeded = FEE_ESTIMATOR_DATA.pubInputs.root
-    const rootExist = Boolean(await wormholeToken.read.roots([rootNeeded]))
-    if (!rootExist) {throw new Error(`to estimate gas usage the contract needs to have root: ${rootNeeded}, but it was not found`) }
-    const txInputs = getTransactionInputs({ pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof })
-    const gas = await wormholeToken.estimateGas.privateTransfer(txInputs,{account: wallet.account?.address as Address})
-    return gas
-}
+// export async function estimateGasUsage({wormholeToken, wallet}:{wormholeToken:WormholeToken|WormholeTokenTest, wallet:WalletClient}) {
+//     const relayerInputs = FEE_ESTIMATOR_DATA
+//     relayerInputs.pubInputs.feeData.feeToken = wormholeToken.address
+//     const rootNeeded = FEE_ESTIMATOR_DATA.pubInputs.root
+//     const rootExist = Boolean(await wormholeToken.read.roots([rootNeeded]))
+//     if (!rootExist) {throw new Error(`to estimate gas usage the contract needs to have root: ${rootNeeded}, but it was not found`) }
+//     const txInputs = getTransactionInputs({ pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof })
+//     const gas = await wormholeToken.estimateGas.privateTransfer(txInputs,{account: wallet.account?.address as Address})
+//     return gas
+// }

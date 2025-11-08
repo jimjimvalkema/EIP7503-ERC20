@@ -1,7 +1,7 @@
 import { getAddress, padHex } from "viem";
-import { FeeData, RelayerInputs } from "./types.js";
+import { FeeData, RelayerInputs, RelayerInputsHex } from "./types.js";
 import feeEstimatorRelayerData from "./feeEstimatorRelayerData.json"
-import { convertRelayerInputsJson } from "./transact.js";
+import { convertRelayerInputsToHex } from "./transact.js";
 
 export const WormholeTokenContractName = "WormholeToken"
 export const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
@@ -36,4 +36,4 @@ export const EMPTY_FEE_DATA: FeeData = {
     feeToken: zeroAddress,
 }
 
-export const FEE_ESTIMATOR_DATA:RelayerInputs = convertRelayerInputsJson(feeEstimatorRelayerData)
+//export const FEE_ESTIMATOR_DATA:RelayerInputsHex = convertRelayerInputsToHex(feeEstimatorRelayerData as RelayerInputs)

@@ -73,9 +73,10 @@ export function getAccountNoteMerkle({ prevTotalSpent, prevAccountNonce, private
     if (prevAccountNonce !== 0n) {
         const prevAccountNoteHashIndex = tree.indexOf(prevAccountNoteHash)
         const prevAccountNoteMerkleProof = tree.generateProof(prevAccountNoteHashIndex)
+        const depth = BigInt(prevAccountNoteMerkleProof.siblings.length)
         prevAccountNoteMerkle = {
-            depth: BigInt(prevAccountNoteMerkleProof.siblings.length), // TODO double check this
-            indices: prevAccountNoteMerkleProof.index.toString(2).split('').map((v) => BigInt(v)), // todo slice this in the right size. Maybe it need reverse?
+            depth: depth, // TODO double check this
+            indices: padArray({arr:prevAccountNoteMerkleProof.index.toString(2).split('').reverse().map((v) => BigInt(v)), dir:"right", size:Number(depth) }), // todo slice this in the right size. Maybe it need reverse?
             siblings: prevAccountNoteMerkleProof.siblings
         }
     } else {
@@ -93,9 +94,10 @@ export function getTotalReceivedMerkle({ totalReceived, privateWallet, tree }: {
     const totalReceivedLeaf = hashTotalReceivedLeaf({ privateAddress: privateWallet.burnAddress, totalReceived: totalReceived })
     const totalReceivedIndex = tree.indexOf(totalReceivedLeaf)
     const totalReceivedMerkleProof = tree.generateProof(totalReceivedIndex)
+    const depth = BigInt(totalReceivedMerkleProof.siblings.length)
     const totalReceivedMerkle: MerkleData = {
-        depth: BigInt(totalReceivedMerkleProof.siblings.length), // TODO double check this
-        indices: totalReceivedMerkleProof.index.toString(2).split('').map((v) => BigInt(v)), // todo slice this in the right size. Maybe it need reverse?
+        depth: depth,
+        indices: padArray({arr:totalReceivedMerkleProof.index.toString(2).split('').reverse().map((v) => BigInt(v)), dir:"right", size:Number(depth)}),
         siblings: totalReceivedMerkleProof.siblings
     }
     return totalReceivedMerkle

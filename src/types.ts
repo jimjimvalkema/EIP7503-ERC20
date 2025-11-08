@@ -20,6 +20,14 @@ export interface FeeData {
     feeToken: Address,
 }
 
+export interface FeeDataHex {
+    relayerAddress: Address,
+    priorityFee: Hex,
+    conversionRate: Hex,
+    maxFee: Hex,
+    feeToken: Hex,
+}
+
 export interface UnformattedPublicProofInputs {
     amount: bigint,
     recipientAddress: Address,
@@ -27,6 +35,16 @@ export interface UnformattedPublicProofInputs {
     accountNoteHash: bigint,
     accountNoteNullifier: bigint,
     root: bigint,
+}
+
+export interface UnformattedPublicProofInputsHex {
+    amount: Hex,
+    recipientAddress: Address,
+    feeData: FeeDataHex,
+    accountNoteHash: Hex,
+    accountNoteNullifier: Hex,
+    root: Hex,
+
 }
 
 
@@ -109,6 +127,14 @@ export interface SyncedPrivateWallet extends UnsyncedPrivateWallet {
 export interface RelayerInputs {
     pubInputs: UnformattedPublicProofInputs;
     zkProof: ProofData;
+}
+
+export interface RelayerInputsHex {
+    pubInputs: UnformattedPublicProofInputsHex;
+    zkProof: {
+        proof:Hex,
+        publicInputs:Hex[]
+    };
 }
 
 export interface SignatureData {
