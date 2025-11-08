@@ -28,7 +28,7 @@ const backend = await getBackend(window.navigator.hardwareConcurrency)
 
 const publicClient = createPublicClient({
   chain: sepolia, // Your target chain
-  transport: http('https://sepolia.infura.io/v3/2LPfLOYBTHSHfLWYSv8xib2Y7OA'), // Public RPC URL
+  transport: http('https://sepolia.infura.io/v3/OOPS'), // Public RPC URL
 })
 const wormholeToken = getContract({ abi: WormholeTokenArtifact.abi, address: wormholeTokenAddress, client: { public: publicClient } }) as unknown as WormholeToken
 setNonWalletInfo(wormholeToken)
