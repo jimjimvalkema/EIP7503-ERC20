@@ -7,11 +7,11 @@ You can clone the repo and try-out the ui or try it on sepolia here: https://eip
 * Base layer of ethereum
 * No re-usable addresses: `nullifier=hash(0x01,secret)` and the `address=hash(secret)` which means you cannot re-use that address
 * No Hardware wallet support: because `address=hash(secret)` and the secret is a private input for the circuit, the hardware wallet would need to make the zk-proof on device which is not possible on the ledger, trezor, etc
-* Uses the state-trie for inclusion proof (a hexanary tree with keccak), this slow to proof and requires ton of ram.
+* Uses the state-trie for inclusion proof (a hexanary tree with keccak), this is slow to proof and requires ton of ram.
 
 
 ## This repo 
-* Is on the application layer (a contract) (but can/should be implemented on base layer as well!!)
+* Is on the application layer (a contract) *(but can/should be implemented on base layer as well!!)*
 * Uses a in-contract binary merkle tree with the poseidon2 hash function. 
 * Re usable address: The balance tracking is split into 2, the total received and total spend.  
 The total received is just the burned balance.  
@@ -21,9 +21,11 @@ The total spend is tracked inside a note based commitment scheme.
 
 ## nullifier and balance tracking
 Instead of nullifying the entire address the circuit checks: `assert(burned_balance - total_spend >= amount_spend_in_tx)`.  
-The `total_spend` is tracked in an account based note system where:   `note_hash=poseidon2Hash(total_spent, account_nonce, viewing_key)` and   `nullifier=poseidon2Hash(account_nonce, viewing_key)`  
-The circuit does a inclusion proof of `prev_note_hash`, nullifies it and then creates a new note hash with the new total amount spend that is:  
-`new_note_hash=poseidon2Hash(prev_total_spent+amount_spend_in_tx, account_nonce+1, viewing_key)`.  
+The `total_spend` is tracked in an account based note system where:   
+`note_hash=poseidon2Hash(total_spent, account_nonce, viewing_key)` and   
+`nullifier=poseidon2Hash(account_nonce, viewing_key)`    
+The circuit does an inclusion proof of `prev_note_hash`, nullifies it and then creates a new note hash with the new total amount spend that is:   
+`new_note_hash=poseidon2Hash(prev_total_spent+amount_spend_in_tx, account_nonce+1, viewing_key)`.    
 On the first spend the inclusion proof of `prev_note_hash` is skipped (since it doesn't exist), but there is a nullifier is emitted, ensuring this can only happen once.  
   
 The `burned_balance` is tracked by the contract in the merkle tree with a leaf that is `leaf=poseidon2Hash(recipient_address, balance)` and the circuit uses that to make inclusion proof.  
@@ -43,10 +45,15 @@ assert_lt(pow_hash, POW_DIFFICULTY);
 `address_hash` then has the first 12 bytes set to 0, so it the same length as ethereum address *(this is also the cause of that collision attack vector 😬).*
 
 ## optimizations
-Merkle tree: The balances tracked in the merkle tree update on **every** transfer, even if a user never intends to use any privacy. This is to preserve privacy. However this can optimized by:
+Merkle tree: The balances tracked in the merkle tree update on **every** transfer, even if a user never intends to use any privacy. This is to preserve plausible deniability. However this can optimized by:
 * Only updating the recipient in the transfer, since burn addresses will never be senders! *(note that this does make the balance inaccurate for non burn addresses)*
 * skipping merkle tree updates when `tx.origin==recipient`, since then the recipient is for sure a EOA and not a burn address.  
 * WARNING: you might be tempted to check if recipient is a contract with `recipient.code!=0x00`, but this incentives EOAs to set code or user to use smart contract wallet to save on gas. **This breaks plausible deniability**.
+
+## relayer
+The relayer logic does accounting based on the baseFee which makes it more fair then the relayer in ex: tornadocash.   
+Currently the ui has no relayer and just stores the proofs in localstorage to be self relayed from a different account.  
+But the contract and circuit does support external relays and it is tested in `test/Token.test.ts`
 
 ## WARNINGS
 * The value `POW_DIFFICULTY` has been set to an arbitrary number and **IS LIKELY INSECURE**   
