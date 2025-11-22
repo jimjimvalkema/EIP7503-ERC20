@@ -32,6 +32,7 @@ export interface UnformattedPublicProofInputs {
     amount: bigint,
     recipientAddress: Address,
     feeData: FeeData,
+    signatureHash: bigint,
     accountNoteHash: bigint,
     accountNoteNullifier: bigint,
     root: bigint,
@@ -39,6 +40,7 @@ export interface UnformattedPublicProofInputs {
 
 export interface UnformattedPublicProofInputsHex {
     amount: Hex,
+    signatureHash: Hex,
     recipientAddress: Address,
     feeData: FeeDataHex,
     accountNoteHash: Hex,
@@ -54,7 +56,7 @@ export interface UnformattedPrivateProofInputs {
         publicKeyY: Hex,
         signature: SignMessageReturnType
     },
-    powNonce: bigint,
+    sharedSecret: bigint,
     totalReceived: bigint,
     prevTotalSpent: bigint,
     viewingKey: bigint,
@@ -70,14 +72,15 @@ export interface UnformattedProofInputs {
 
 export interface FormattedProofInputs extends InputMap {
     amount: Hex;
-    recipient_address: Hex;
-    fee_data: {
-        relayer_address: Hex;
-        priority_fee: Hex;
-        conversion_rate: Hex;
-        max_fee: Hex;
-        fee_token: Hex;
-    };
+    signature_hash: Hex[];
+    // recipient_address: Hex;
+    // fee_data: {
+    //     relayer_address: Hex;
+    //     priority_fee: Hex;
+    //     conversion_rate: Hex;
+    //     max_fee: Hex;
+    //     fee_token: Hex;
+    // };
     account_note_hash: Hex;
     account_note_nullifier: Hex;
     root: Hex;
@@ -86,7 +89,7 @@ export interface FormattedProofInputs extends InputMap {
         public_key_y: Hex[];
         signature: Hex[];
     };
-    pow_nonce: Hex;
+    shared_secret: Hex;
     total_received: Hex;
     prev_total_spent: Hex;
     viewing_key: Hex;
@@ -106,7 +109,7 @@ export interface FormattedProofInputs extends InputMap {
 export interface UnsyncedPrivateWallet {
     pubKey: { x: Hex, y: Hex };
     viewingKey: bigint,
-    powNonce: bigint;
+    sharedSecret: bigint;
     burnAddress: Address,
     viem: { wallet: WalletClient },
     accountNonce?: bigint,

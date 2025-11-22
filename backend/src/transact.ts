@@ -5,7 +5,7 @@ import { EMPTY_FEE_DATA } from "./constants.js";
 import { formatProofInputs, generateProof, getUnformattedProofInputs } from "./proving.js";
 import { ProofData, UltraHonkBackend } from "@aztec/bb.js";
 import { syncPrivateWallet } from "./syncing.js";
-import { noir_test_main_self_relay } from "./noirtests.js";
+//import { noir_test_main_self_relay } from "./noirtests.js";
 
 export function getTransactionInputs({ pubProofInputs, zkProof }: { zkProof: ProofData, pubProofInputs: UnformattedPublicProofInputs }) {
     const feeData = {
@@ -102,6 +102,7 @@ export function convertRelayerInputsFromHex(relayerInputs:RelayerInputsHex):Rela
     return {
         pubInputs:{
                 amount: BigInt(relayerInputs.pubInputs.amount),
+                signatureHash:BigInt(relayerInputs.pubInputs.signatureHash),
                 recipientAddress: getAddress(relayerInputs.pubInputs.recipientAddress),
                 feeData: {
                     relayerAddress: getAddress(relayerInputs.pubInputs.feeData.relayerAddress),
@@ -126,6 +127,7 @@ export function convertRelayerInputsToHex(relayerInputs:RelayerInputs):RelayerIn
         pubInputs:{
                 amount: toHex(relayerInputs.pubInputs.amount),
                 recipientAddress: getAddress(relayerInputs.pubInputs.recipientAddress),
+                signatureHash: toHex(relayerInputs.pubInputs.signatureHash),
                 feeData: {
                     relayerAddress: getAddress(relayerInputs.pubInputs.feeData.relayerAddress),
                     priorityFee: toHex(relayerInputs.pubInputs.feeData.priorityFee),

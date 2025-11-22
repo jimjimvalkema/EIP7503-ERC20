@@ -23,11 +23,12 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
-    "@lucide/svelte": "^0.554.0",
+    "@lucide/svelte": "^0.544.0",
+    "lucide-svelte": "^0.554.0",
     "@noble/curves": "^2.0.1",
     "@scopelift/stealth-address-sdk": "^1.0.0-beta.2",
-    "clsx": "^2.1.1",
     "graphql": "^16.12.0",
+    "clsx": "^2.1.1",
     "tailwind": "^4.0.0",
     "tailwind-merge": "^3.4.0",
     "tailwind-variants": "^3.1.1",
