@@ -115,51 +115,69 @@ struct MerkleData {
     siblings: [Field; MAX_TREE_DEPTH],
 }
 
-fn main(
-    //----- public inputs
-    amount: pub Field,
-    signature_hash: pub [u8;32],
-    // recipient_address: pub Field,
-    // fee_data: pub FeeData,
-    account_note_hash: pub Field,       // tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-    account_note_nullifier: pub Field,  // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
-    root: pub Field,                    // root of merkle tree we use to privately proof total_received, prev_nullifier are on the chain.
+
+struct BurnAddressProofData {
+    amount: Field
+    account_note_hash: Field,       
+    account_note_nullifier: Field, 
+    root: Field,                    
     //-----very privacy sensitive data -----
-    signature_data: SignatureData,      // contains hash(prev_account_nonce,amount,recipient_address)
-    shared_secret: Field,               // to limit the collision attacks between EOAs and private_addresses, 
-    total_received: Field,              // the "balanceOf" of the private_address
-    prev_total_spent: Field,            // needed to verify total_received-prev_total_spent > amount. and to create nullifier_value=hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-    viewing_key: Field,                 // used as randomness to blind commitments. Prob just take sig.#r from `sig = ethers.Signature.from( await signer.signMessage(message))`
-    prev_account_nonce: Field,               // starts at 0, increments by one every private transaction (not a ethereum account nonce, its zkwormhole account!)
+    pub_key_x_field: Field,
+    signature_data: SignatureData,      
+    shared_secret: Field,               
+    total_received: Field,              
+    prev_total_spent: Field,            
+    viewing_key: Field,                 
+    prev_account_nonce: Field,               
+    prev_account_note_merkle: MerkleData,
+    total_received_merkle: MerkleData,
+}
+
+pub fn spendFromBurnAddresses(
+    amount:Field,
+    burnAddressProofData: BurnAddressProofData[]
+) {
+    let mut total_spend = 0;
+    for index in 0 .. burnAddressProofData.len {
+        // TODO maybe we need to watch out for overflows here. 
+        total_spend += burnAddressProofData[index].amount;
+        spendFromBurnAddress(
+            burnAddressProofData[index].amount
+            burnAddressProofData[index].account_note_hash,
+            burnAddressProofData[index].account_note_nullifier,
+            burnAddressProofData[index].root,                    
+            burnAddressProofData[index].pub_key_x_field,
+            burnAddressProofData[index].signature_data,    
+            burnAddressProofData[index].shared_secret,         
+            burnAddressProofData[index].total_received,          
+            burnAddressProofData[index].prev_total_spent,           
+            burnAddressProofData[index].viewing_key,          
+            burnAddressProofData[index].prev_account_nonce,               
+            burnAddressProofData[index].prev_account_note_merkle,
+            burnAddressProofData[index].total_received_merkle,
+        )
+    } 
+    assert(total_spend==amount, "resulting total_spend from all aggregated burn addresses does not match up with amount send in this tx");   
+}
+
+
+pub spendFromBurnAddress(
+    amount: Field
+    account_note_hash: Field,       
+    account_note_nullifier: Field, 
+    root: Field,                    
+    //-----very privacy sensitive data -----
+    pub_key_x_field: Field,
+    signature_data: SignatureData,      
+    shared_secret: Field,               
+    total_received: Field,              
+    prev_total_spent: Field,            
+    viewing_key: Field,                 
+    prev_account_nonce: Field,               
     prev_account_note_merkle: MerkleData,
     total_received_merkle: MerkleData,
 ) {
-    // less constraints then assert(lt(a, b)) but i cant attach a error message :(
-    // prevents promising the relayer more fees then can be spend
-    //assert_lt(max_fee, amount); // "max_fee needs to be lower then the amount"
-
-    //------------ merkle proof of total_received and private_address ------------
-
-    // @TODO do we need more inputs to commit to in the signature?
-    // we commit to this in the signature so if a users machine is compromised, at least the attacker cant mess with these values, provided it's signed by a hardware wallet
-    // TODO we prob need to use keccak here, or maybe we can blind sign in viem
-    // let poseidon_message_hash: [u8; 32] = hash_signature_inputs(recipient_address,amount,fee_data);
-    // let keccak_message_pre_img: [u8; 60] = ETH_SIGN_PREFIX.concat( poseidon_message_hash);
-    // let keccak_message_hash: [u8; 32] = keccak256(keccak_message_pre_img, keccak_message_pre_img.len());
-    let valid_signature: bool = std::ecdsa_secp256k1::verify_signature(
-        signature_data.public_key_x,
-        signature_data.public_key_y,
-        signature_data.signature,
-        signature_hash,
-    );
-
-    assert(valid_signature, "invalid signature");
-    // slice off the first byte so it fits in the field
-    let mut small_pub_key_x: [u8; 32] = signature_data.public_key_x;
-    small_pub_key_x[0] = 0;
-    let pub_key_x_field: Field = Field::from_be_bytes(small_pub_key_x);
     let private_address: Field = get_private_address(pub_key_x_field, shared_secret);
-
     let total_received_leaf: Field = hash_total_received_leaf(private_address, total_received);
 
     // calculate the root from the merkle proof and assert it is the same as `root`
@@ -202,23 +220,4 @@ fn main(
         computed_account_note_hash == account_note_hash,
         "public input: computed_account_note_hash, doesn't match the one computed in the circuit",
     );
-}
-
-#[test]
-fn verify_sig() {
-    let signature_data:SignatureData = SignatureData {
-        public_key_x: [244,28,215,192,211,91,249,255,187,119,71,137,203,63,135,230,202,61,19,185,192,191,226,1,143,87,250,143,0,5,152,234],
-        public_key_y: [44,245,100,66,161,117,80,1,185,140,4,112,174,182,209,93,233,149,135,167,249,202,162,217,82,145,96,36,87,96,205,129],
-        signature: [14,128,49,202,4,250,111,112,29,6,97,171,208,190,254,167,44,251,221,247,135,155,141,136,119,129,69,35,219,88,71,177,82,85,103,13,229,15,221,25,122,149,21,17,81,157,29,41,50,66,167,84,146,131,99,55,88,96,21,175,143,96,27,9]
-    };
-    let message_hash:[u8;32] = 0x0000000000000000000000000000000000000000000000000000000000420690.to_be_bytes();
-
-    let valid_signature: bool = std::ecdsa_secp256k1::verify_signature(
-        signature_data.public_key_x,
-        signature_data.public_key_y,
-        signature_data.signature,
-        message_hash,
-    );
-
-    assert(valid_signature, "invalid signature");
 }

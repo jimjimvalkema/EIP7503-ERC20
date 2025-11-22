@@ -1,6 +1,6 @@
 [package]
 name = "private_transfer"
-type = "bin"
+type = "lib"
 authors = [""]
 compiler_version = "1.0.0"
 
