@@ -2,13 +2,18 @@
 
 import { connectedAccount, currentProvider, signMessage } from '$lib/providers'
 import { getStealthMetaAddress } from '$lib/stealth/prepare-keys'
-import { toHex } from 'viem';
+import { recoverPublicKey, stringToHex, toHex, type Hex } from 'viem';
+  import ResolveStealthAddy from './ResolveStealthAddy.svelte';
 
 let spendingKey: string | null = null
 let viewingKey: string | null = null
 
 let spendingPublicKey: string | null = null
 let viewingPublicKey: string | null = null
+
+let userPublicKey: string | null = null
+
+let isCreated = $state(false);
 
 const generateStealthMetaAddress = async (message: string = "Stealth Meta Address") => {
     if (!$connectedAccount) {
@@ -22,13 +27,20 @@ const generateStealthMetaAddress = async (message: string = "Stealth Meta Addres
     }
 
     const signature = await signMessage(message, $connectedAccount, $currentProvider)
+
+    const publicKey = await recoverPublicKey({
+        hash: stringToHex(message),
+        signature: signature as Hex
+    })
+
     try {
         const result = await getStealthMetaAddress(toHex(signature), message)
 
-        spendingKey = result.spendingKey
-        viewingKey = result.viewingKey
+        spendingKey = toHex(result.spendingKey)
+        viewingKey = toHex(result.viewingKey)
         spendingPublicKey = result.spendingPublicKey
         viewingPublicKey = result.viewingPublicKey
+        userPublicKey = publicKey
 
         isCreated = true
     } catch (error) {
@@ -37,7 +49,8 @@ const generateStealthMetaAddress = async (message: string = "Stealth Meta Addres
     }
 }
 
-let isCreated = false;
+// remove 0x from the beginning of the second key
+const stealthMetaAddressURI = $derived(viewingPublicKey && spendingPublicKey ? `st:eth:${viewingPublicKey}${spendingPublicKey.replace('0x', '')}` : null)
 
 </script>
 
@@ -50,10 +63,8 @@ let isCreated = false;
 
     {#if isCreated}
         <p>
-            Your stealth meta address has been created
-        </p>
-
-        <p>
+            Your user public key is: {userPublicKey}
+            <br />
             Your spending public key is: {spendingPublicKey}
             <br />
             Your viewing public key is: {viewingPublicKey}
@@ -68,6 +79,12 @@ let isCreated = false;
             <br />
             Your viewing key is: {viewingKey}
         </p>
+
+        {#if stealthMetaAddressURI}
+            <div class="flex flex-row gap-2">
+                <ResolveStealthAddy stealthMetaAddressURI={stealthMetaAddressURI} />
+            </div>
+        {/if}
     {/if}
 
     {#if !isCreated}

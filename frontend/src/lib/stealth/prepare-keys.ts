@@ -1,6 +1,7 @@
 import { hashMessage, hexToBytes, toHex, type Signature } from 'viem'
 import * as secp256k1 from '@noble/curves/secp256k1.js';
 import type { HexString } from '@scopelift/stealth-address-sdk/dist/utils/crypto/types';
+import { generateStealthAddress } from '@scopelift/stealth-address-sdk';
 
 /**
  * Normalize private key to ensure it's a valid secp256k1 private key
@@ -70,15 +71,39 @@ export const deriveStealthKeys = async (signature: Uint8Array, staticMessage: st
     };
   }
 
+/**
+ * Convert Uint8Array to hex string
+ */
+function arrayToHex(array: Uint8Array): string {
+  return Array.from(array)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export const getStealthMetaAddress = async (signature: HexString, staticMessage: string = "Stealth Meta Address") => {
     const { spendingKey, viewingKey } = await deriveStealthKeys(Uint8Array.from(hexToBytes(signature)), staticMessage);
+
+    const spendingPublicKey = secp256k1.secp256k1.getPublicKey(Uint8Array.from(spendingKey), true);
+    const viewingPublicKey = secp256k1.secp256k1.getPublicKey(Uint8Array.from(viewingKey), true);
 
     return {
         spendingKey,
         viewingKey,
-        spendingPublicKey: toHex(secp256k1.secp256k1.getPublicKey(spendingKey, true)),
-        viewingPublicKey: toHex(secp256k1.secp256k1.getPublicKey(viewingKey, true)),
+        spendingPublicKey: '0x' + arrayToHex(spendingPublicKey),
+        viewingPublicKey: '0x' + arrayToHex(viewingPublicKey),
     }
+}
+
+export const getStealthAddy = async (stealthMetaAddressURI: string, ephemeralPrivateKey: Uint8Array) => {
+  // 7 chars = st:eth:
+  if (stealthMetaAddressURI.startsWith('st:eth:')) stealthMetaAddressURI = stealthMetaAddressURI.slice(7)
+
+  const { ephemeralPublicKey, stealthAddress } = generateStealthAddress({ stealthMetaAddressURI });
+
+  return {
+    ephemeralPublicKey: toHex(ephemeralPublicKey),
+    stealthAddress, // shared seccret 
+  }
 
 }
 
