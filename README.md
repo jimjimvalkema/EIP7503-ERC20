@@ -16,7 +16,7 @@ You can clone the repo and try-out the ui or try it on sepolia here: https://eip
 * Re usable address: The balance tracking is split into 2, the total received and total spend.  
 The total received is just the burned balance.  
 The total spend is tracked inside a note based commitment scheme.   
-* Hardware wallet support: `address=poseidon2Hash(public_key,pow_nonce,"ZKWORMHOLE")` the circuit verifies a secp256k1 signature that authorize that pub_key to spend the funds. Here the hardware wallet can create the signature and then the users machine can create the proof.    
+* Hardware wallet support: `address=poseidon2Hash(public_key,shared_secret,"ZKWORMHOLE")` the circuit verifies a secp256k1 signature that authorize that pub_key to spend the funds. Here the hardware wallet can create the signature and then the users machine can create the proof.    
 
 
 ## nullifier and balance tracking
@@ -32,13 +32,13 @@ The `burned_balance` is tracked by the contract in the merkle tree with a leaf t
 *note some code is different then the source for simplicity like the domain separators being omitted here ex:TOTAL_RECEIVED_DOMAIN*
 
 ## burn address and the 10$ billion collision attack (eip-3607)
-The address scheme is `address=poseidon2Hash(public_key,pow_nonce,"ZKWORMHOLE")`   
+The address scheme is `address=poseidon2Hash(public_key,shared_secret,"ZKWORMHOLE")`   
 `"ZKWORMHOLE"`: is a string add as an extra measure to make sure zkwormhole addresses never collide with ethereum address even if they switched to poseidon2. `public_key` here is the x coordinate of the secp256k1 public key.  
-`pow_nonce`: a number that results in a valid PoW hash that makes finding a collision with EOA addresses much harder.
+`shared_secret`: a number that results in a valid PoW hash that makes finding a collision with EOA addresses much harder.
 The PoW is verified like this:   
 ```rs
-let address_hash: Field = Poseidon2::hash([pub_key,pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
-let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
+let address_hash: Field = Poseidon2::hash([pub_key,shared_secret, PRIVATE_ADDRESS_TYPE], 3);
+let pow_hash: Field = Poseidon2::hash([shared_secret, address_hash], 2); 
 assert_lt(pow_hash, POW_DIFFICULTY); 
 ```  
 

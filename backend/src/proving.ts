@@ -14,14 +14,15 @@ export function formatProofInputs({ pubInputs, privInputs }: UnformattedProofInp
     const proofInputs: FormattedProofInputs = {
         //----- public inputs
         amount: toHex(pubInputs.amount),
-        recipient_address: pubInputs.recipientAddress,
-        fee_data: {
-            relayer_address: pubInputs.feeData.relayerAddress,
-            priority_fee: toHex(pubInputs.feeData.priorityFee),
-            conversion_rate: toHex(pubInputs.feeData.conversionRate),
-            max_fee: toHex(pubInputs.feeData.maxFee),
-            fee_token: pubInputs.feeData.feeToken,
-        },
+        signature_hash: padArray({ size: 32, dir: "left", arr: [...hexToBytes(toHex(pubInputs.signatureHash))].map((v) => toHex(v)) }),
+        // recipient_address: pubInputs.recipientAddress,
+        // fee_data: {
+        //     relayer_address: pubInputs.feeData.relayerAddress,
+        //     priority_fee: toHex(pubInputs.feeData.priorityFee),
+        //     conversion_rate: toHex(pubInputs.feeData.conversionRate),
+        //     max_fee: toHex(pubInputs.feeData.maxFee),
+        //     fee_token: pubInputs.feeData.feeToken,
+        // },
         account_note_hash: toHex(pubInputs.accountNoteHash),
         account_note_nullifier: toHex(pubInputs.accountNoteNullifier),
         root: toHex(pubInputs.root),
@@ -31,7 +32,7 @@ export function formatProofInputs({ pubInputs, privInputs }: UnformattedProofInp
             public_key_y: padArray({ size: 32, dir: "left", arr: [...hexToBytes(privInputs.signatureData.publicKeyY, { size: 32 })].map((v) => toHex(v)) }),
             signature: padArray({ size: 64, dir: "left", arr: [...hexToBytes(privInputs.signatureData.signature.slice(0, 2 + 128) as Hex)].map((v) => toHex(v)) }), // we need to skip the last byte
         },
-        pow_nonce: toHex(privInputs.powNonce),
+        shared_secret: toHex(privInputs.sharedSecret),
         total_received: toHex(privInputs.totalReceived),
         prev_total_spent: toHex(privInputs.prevTotalSpent),
         viewing_key: toHex(privInputs.viewingKey),
@@ -118,16 +119,16 @@ export async function getMerkleProofs(
 }
 
 export function getPubInputs(
-    { amountToReMint, recipient, syncedPrivateWallet, prevAccountNonce, totalSpent, nextAccountNonce, root, feeData }:
-        { amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, totalSpent: bigint, nextAccountNonce: bigint, root: bigint, feeData:FeeData }) {
+    { amountToReMint, syncedPrivateWallet, prevAccountNonce, totalSpent, nextAccountNonce, root, signatureHash, recipient, feeData }:
+        { amountToReMint: bigint, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, totalSpent: bigint, nextAccountNonce: bigint, root: bigint, signatureHash:bigint, recipient:Address, feeData?:FeeData }) {
     //console.log("inserting:",{ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
     const accountNoteHash = hashAccountNote({ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
-    const accountNoteNullifier = hashNullifier({ accountNonce: prevAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
-
+    const accountNoteNullifier = hashNullifier({ accountNonce: prevAccountNonce, viewingKey: syncedPrivateWallet.viewingKey }) 
     ///-----------
     feeData = feeData ?? EMPTY_FEE_DATA
     const pubInputs: UnformattedPublicProofInputs = {
         amount: amountToReMint,
+        signatureHash: signatureHash, 
         recipientAddress: recipient,
         feeData: feeData,
         accountNoteHash: accountNoteHash,
@@ -142,7 +143,7 @@ export function getPrivInputs(
         { signatureData:SignatureData, amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint, prevAccountNoteMerkle: MerkleData, totalReceivedMerkle: MerkleData }) {
     const privInputs: UnformattedPrivateProofInputs = {
         signatureData: signatureData,
-        powNonce: syncedPrivateWallet.powNonce,
+        sharedSecret: syncedPrivateWallet.sharedSecret,
         totalReceived: totalReceived,
         prevTotalSpent: prevTotalSpent,
         viewingKey: syncedPrivateWallet.viewingKey,
@@ -162,7 +163,11 @@ export async function getUnformattedProofInputs(
     const totalReceived = privateWallet.totalReceived
     const totalSpent = prevTotalSpent + amountToReMint
     const nextAccountNonce = prevAccountNonce + 1n
-    const signatureData = await signPrivateTransfer({ recipientAddress: recipient, amount: amountToReMint, feeData: feeData, privateWallet: privateWallet })
+    const {signatureData, signatureHash, poseidonHash, preImageOfKeccak} = await signPrivateTransfer({ recipientAddress: recipient, amount: amountToReMint, feeData: feeData, privateWallet: privateWallet })
+    const contractFormattedPreFix = await wormholeToken.read._getMessageWithEthPrefix([poseidonHash]);
+    console.log({
+        preImageOfKeccak_______:preImageOfKeccak,
+        contractFormattedPreFix, isEqual: preImageOfKeccak===contractFormattedPreFix })
     const { prevAccountNoteMerkle, totalReceivedMerkle, root } = await getMerkleProofs({
         privateWallet: privateWallet,
         wormholeToken: wormholeToken,
@@ -174,13 +179,13 @@ export async function getUnformattedProofInputs(
 
     const pubInputs = getPubInputs({
         amountToReMint: amountToReMint,
+        signatureHash: signatureHash,
         recipient: recipient,
         syncedPrivateWallet: privateWallet,
         prevAccountNonce: prevAccountNonce,
         totalSpent: totalSpent,
         nextAccountNonce: nextAccountNonce,
         root: root,
-        feeData: feeData,
     })
 
     const privInputs = getPrivInputs({

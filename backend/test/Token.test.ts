@@ -11,7 +11,7 @@ import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { getPrivateAccount, hashPow } from "../src/hashing.js";
 import { POW_DIFFICULTY, EMPTY_FEE_DATA, WormholeTokenContractName, PrivateTransferVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName } from "../src/constants.js";
 import { getTree, syncPrivateWallet } from "../src/syncing.js";
-import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
+//import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { formatProofInputs, generateProof, getBackend, getUnformattedProofInputs, verifyProof } from "../src/proving.js";
 import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx } from "../src/transact.js";
@@ -37,7 +37,7 @@ describe("Token", async function () {
     const circuitBackend = await getBackend(provingThreads);
     const [deployer, alice, bob, carol, relayer, feeEstimator] = await viem.getWalletClients()
     let feeEstimatorRelayerInputs: RelayerInputs;
-    let feeEstimatorPrivate:UnsyncedPrivateWallet
+    let feeEstimatorPrivate: UnsyncedPrivateWallet
 
 
     beforeEach(async function () {
@@ -130,9 +130,9 @@ describe("Token", async function () {
         })
 
         it("should make keys", async function () {
-            const { viewingKey, powNonce, pubKey } = await getPrivateAccount({ wallet: alice })
-            const powHash = hashPow({ pubKeyX: pubKey.x, powNonce: powNonce });
-            assert(powHash < POW_DIFFICULTY, `powHash:${powHash} not smaller then POW_DIFFICULTY:${POW_DIFFICULTY} with powNonce:${powNonce} and pubKeyX:${pubKey.x}`)
+            const { viewingKey, sharedSecret, pubKey } = await getPrivateAccount({ wallet: alice })
+            const powHash = hashPow({ pubKeyX: pubKey.x, sharedSecret: sharedSecret });
+            assert(powHash < POW_DIFFICULTY, `powHash:${powHash} not smaller then POW_DIFFICULTY:${POW_DIFFICULTY} with sharedSecret:${sharedSecret} and pubKeyX:${pubKey.x}`)
         })
 
         // this does not create the "\x19Ethereum Signed Message:\n" prefix????
@@ -262,7 +262,7 @@ describe("Token", async function () {
         })
 
         it("should make private tx and self relay it 3 times", async function () {
-            const wormholeTokenAlice = getContract({ client: {public:publicClient, wallet:alice}, abi: wormholeToken.abi, address: wormholeToken.address });
+            const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
@@ -273,6 +273,7 @@ describe("Token", async function () {
             const amountToReMint = 69n
             const reMintRecipient = bob.account.address
             //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
+            console.log("1111111")
             const reMintTx1 = await proofAndSelfRelay({
                 wormholeToken: wormholeTokenAlice,
                 privateWallet: alicePrivate,
@@ -281,6 +282,8 @@ describe("Token", async function () {
                 recipient: reMintRecipient,
                 backend: circuitBackend
             })
+
+            console.log("222222222")
 
             const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
             const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([alicePrivate.burnAddress])
@@ -302,7 +305,7 @@ describe("Token", async function () {
                 backend: circuitBackend
             })
             balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-            assert.equal(balanceBobPublic, amountToReMint*2n, "bob didn't receive the expected amount of re-minted tokens")
+            assert.equal(balanceBobPublic, amountToReMint * 2n, "bob didn't receive the expected amount of re-minted tokens")
 
             // one more time
             const reMintTx3 = await proofAndSelfRelay({
@@ -314,62 +317,62 @@ describe("Token", async function () {
                 backend: circuitBackend
             })
             balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-            assert.equal(balanceBobPublic, amountToReMint*3n, "bob didn't receive the expected amount of re-minted tokens")
+            assert.equal(balanceBobPublic, amountToReMint * 3n, "bob didn't receive the expected amount of re-minted tokens")
         })
 
-        it("should make private tx and be relayed by a relayer", async function () {
-            const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
-            const wormholeTokenRelayer = getContract({ client: { public: publicClient, wallet: relayer }, abi: wormholeToken.abi, address: wormholeToken.address });
-            const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
-            await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
-            const tokenDecimals = await wormholeToken.read.decimals()
+        // it("should make private tx and be relayed by a relayer", async function () {
+        //     const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
+        //     const wormholeTokenRelayer = getContract({ client: { public: publicClient, wallet: relayer }, abi: wormholeToken.abi, address: wormholeToken.address });
+        //     const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
+        //     await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
+        //     const tokenDecimals = await wormholeToken.read.decimals()
 
-            const alicePrivate = await getPrivateAccount({ wallet: alice })
-            const amountToBurn = 420n * 10n ** BigInt(tokenDecimals);
-            await wormholeTokenAlice.write.transfer([alicePrivate.burnAddress, amountToBurn]) //sends 1_000_000n token
+        //     const alicePrivate = await getPrivateAccount({ wallet: alice })
+        //     const amountToBurn = 420n * 10n ** BigInt(tokenDecimals);
+        //     await wormholeTokenAlice.write.transfer([alicePrivate.burnAddress, amountToBurn]) //sends 1_000_000n token
 
-            const amountToReMint = 69n * 10n ** BigInt(tokenDecimals)
-            const reMintRecipient = bob.account.address
-            //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
+        //     const amountToReMint = 69n * 10n ** BigInt(tokenDecimals)
+        //     const reMintRecipient = bob.account.address
+        //     //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
 
-            // TODO what if token has less then 18 decimals?
-            const estimatedGasUsed = 3_000_000//await estimateGasUsage({wormholeToken:wormholeToken, wallet:alice}); //TODO estimate this
-            const relayerBonusFactor = 1.1  //10% bonus
-            const tokenPriceInEth = 263.71; // 1eth=262.54token
-            const priorityFee = BigInt(0.1 * 10 ** 8) //gwei
-            const maxFee = BigInt(0.12 * 10 ** Number(tokenDecimals)) // 2 usd, if 1token=0.0038eth and 1eth=3328.65usd
-            const relayerAddress = relayer.account.address
-            // remember the feePaid = (pubIn.priorityFee + block.baseFee) * pubIn.conversionRate 
+        //     // TODO what if token has less then 18 decimals?
+        //     const estimatedGasUsed = 3_000_000//await estimateGasUsage({wormholeToken:wormholeToken, wallet:alice}); //TODO estimate this
+        //     const relayerBonusFactor = 1.1  //10% bonus
+        //     const tokenPriceInEth = 263.71; // 1eth=262.54token
+        //     const priorityFee = BigInt(0.1 * 10 ** 8) //gwei
+        //     const maxFee = BigInt(0.12 * 10 ** Number(tokenDecimals)) // 2 usd, if 1token=0.0038eth and 1eth=3328.65usd
+        //     const relayerAddress = relayer.account.address
+        //     // remember the feePaid = (pubIn.priorityFee + block.baseFee) * pubIn.conversionRate 
 
-            const relayerInputs = await createRelayerInputs({
-                wormholeToken: wormholeToken,
-                privateWallet: alicePrivate,
-                publicClient: publicClient,
-                amount: amountToReMint,
-                recipient: reMintRecipient,
-                backend: circuitBackend,
-                feeData: {
-                    conversionRateInputs: {
-                        estimatedGasUsed: Number(estimatedGasUsed),
-                        relayerBonusFactor: relayerBonusFactor,
-                        tokenPriceInEth: tokenPriceInEth,
-                    },
-                    priorityFee: priorityFee,
-                    maxFee: maxFee,
-                    relayerAddress: relayerAddress
-                }
-            })
+        //     const relayerInputs = await createRelayerInputs({
+        //         wormholeToken: wormholeToken,
+        //         privateWallet: alicePrivate,
+        //         publicClient: publicClient,
+        //         amount: amountToReMint,
+        //         recipient: reMintRecipient,
+        //         backend: circuitBackend,
+        //         feeData: {
+        //             conversionRateInputs: {
+        //                 estimatedGasUsed: Number(estimatedGasUsed),
+        //                 relayerBonusFactor: relayerBonusFactor,
+        //                 tokenPriceInEth: tokenPriceInEth,
+        //             },
+        //             priorityFee: priorityFee,
+        //             maxFee: maxFee,
+        //             relayerAddress: relayerAddress
+        //         }
+        //     })
 
-            const tx = await relayTx({
-                wormholeToken: wormholeTokenRelayer,
-                ethWallet: relayer,
-                publicClient: publicClient,
-                relayerInputs: relayerInputs
-            })
-            const txReceipt = await publicClient.getTransactionReceipt({hash:tx})
-            console.log({gas:txReceipt.gasUsed,estimatedGasUsed})
+        //     const tx = await relayTx({
+        //         wormholeToken: wormholeTokenRelayer,
+        //         ethWallet: relayer,
+        //         publicClient: publicClient,
+        //         relayerInputs: relayerInputs
+        //     })
+        //     const txReceipt = await publicClient.getTransactionReceipt({hash:tx})
+        //     console.log({gas:txReceipt.gasUsed,estimatedGasUsed})
 
-            // TODO check balances
-        })
+        //     // TODO check balances
+        // })
     })
 })

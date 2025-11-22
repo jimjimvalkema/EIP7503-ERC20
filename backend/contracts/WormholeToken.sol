@@ -44,6 +44,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
 
     mapping (address => uint40) private accountIndexes;
     mapping (uint256 => bool) public roots;
+
+    // @TODO @CLEARSING will be remove when clearsign
+    bytes constant ETH_SIGN_PREFIX = hex"19457468657265756d205369676e6564204d6573736167653a0a3332";//abi.encodePacked("\x19Ethereum Signed Message:\n");    
     uint40 currentLeafIndex;
 
     uint256 public amountFreeTokens = 1000000*10**decimals();
@@ -60,7 +63,32 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         privateTransferVerifier = _privateTransferVerifier;
     }
  
+    function _getMessageWithEthPrefix(bytes32 message) public pure returns(bytes memory){
+        return abi.encodePacked(ETH_SIGN_PREFIX, message);
+    }
+
+    function _hashSignatureInputs(address recipientAddress, uint256 amount, FeeData memory feeData) public pure returns(bytes32) {
+        uint256[6] memory input = [
+            (_addressToUint256(recipientAddress)),
+            (amount),
+            (_addressToUint256(feeData.relayerAddress)),
+            (feeData.priorityFee),
+            (feeData.conversionRate),
+            (feeData.maxFee)
+        ];
+
+        bytes32 preKeccak = keccak256(abi.encodePacked(input));
+        // TODO check that bytes32 wont create unexpected zeros
+        bytes32 keccakHash = keccak256(_getMessageWithEthPrefix(preKeccak));
+        return keccakHash;
+    }
+
     function hashPoseidon2T3(uint256[3] memory input) public view returns (uint256) {
+        (, bytes memory result) = POSEIDON2_ADDRESS.staticcall(abi.encode(input));
+        return uint256(bytes32(result));
+    }
+
+    function hashPoseidon2T6(uint256[6] memory input) public view returns (uint256) {
         (, bytes memory result) = POSEIDON2_ADDRESS.staticcall(abi.encode(input));
         return uint256(bytes32(result));
     }
@@ -151,26 +179,21 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
 
     function _formatPublicInputs(
         uint256 _amount,
-        address _to,
-        FeeData calldata _feeData,
+        bytes32 _signatureHash,
         uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root
     ) public pure returns (bytes32[] memory) {
-        bytes32[] memory publicInputs = new bytes32[](10);
+        bytes32[] memory publicInputs = new bytes32[](36);
 
         publicInputs[0] = bytes32(uint256(_amount));
-        publicInputs[1] = bytes32(_addressToUint256(_to));
-        //-- feeData --
-        publicInputs[2] = bytes32(_addressToUint256(_feeData.relayerAddress));
-        publicInputs[3] = bytes32(_feeData.priorityFee);
-        publicInputs[4] = bytes32(_feeData.conversionRate);
-        publicInputs[5] = bytes32(_feeData.maxFee);
-        publicInputs[6] = bytes32(_addressToUint256(_feeData.feeToken));
-        //------------
-        publicInputs[7] = bytes32(_accountNoteHash);
-        publicInputs[8] = bytes32(_accountNoteNullifier);
-        publicInputs[9] = bytes32(_root);
+        uint256 signatureHashOffset = 1;
+        for (uint256 i = 0; i < 32; i++) {
+            publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
+        }
+        publicInputs[33] = bytes32(_accountNoteHash);
+        publicInputs[34] = bytes32(_accountNoteNullifier);
+        publicInputs[35] = bytes32(_root);
 
         return publicInputs;
     }
@@ -194,8 +217,10 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     ) public {
         require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
         require(roots[_root], "invalid root");
+        require(_feeData.maxFee <= _amount, "maxFee is larger than the amount send");
         // +1 to protect nullifier logic on txs where amount is 0
-        nullifiers[_accountNoteNullifier] = _amount +1 ;
+        nullifiers[_accountNoteNullifier] = _amount +1;
+        bytes32 signatureHash = _hashSignatureInputs(_to, _amount, _feeData);
     
         if (_feeData.relayerAddress == address(0)) {
             //-- self relay --
@@ -217,7 +242,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
             emit PrivateTransfer(_accountNoteNullifier, _amount);
         }
 
-        bytes32[] memory publicInputs = _formatPublicInputs(_amount,_to, _feeData, _accountNoteHash, _accountNoteNullifier, _root);
+        bytes32[] memory publicInputs = _formatPublicInputs(_amount, signatureHash, _accountNoteHash, _accountNoteNullifier, _root);
         if (!IVerifier(privateTransferVerifier).verify(_snarkProof, publicInputs)) {
             revert VerificationFailed();
         }
