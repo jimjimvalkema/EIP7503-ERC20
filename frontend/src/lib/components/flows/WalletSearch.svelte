@@ -1,11 +1,13 @@
 <script lang="ts">
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
+  import SkeletonCard from "$lib/components/SkeletonCard.svelte";
   import {
     resolveWalletAddress,
     formatAddressForDisplay,
   } from "$lib/utils/wallet";
   import { hasMetakey } from "$lib/utils/metakey";
+  import { ensCache } from "$lib/store/ensCache";
   import type { Address } from "viem";
   import { AlertCircle, CheckCircle2, Search } from "@lucide/svelte";
 
@@ -46,6 +48,9 @@
 
       resolvedAddress = resolved;
       displayName = await formatAddressForDisplay(resolved, true);
+      
+      // Cache the ENS name
+      ensCache.set(resolved, displayName !== resolved ? displayName : null);
 
       // Check for metakey
       metakeyExists = await hasMetakey(searchInput.trim());
@@ -103,15 +108,24 @@
     </div>
   {/if}
 
-  {#if resolvedAddress}
+  {#if searching}
+    <SkeletonCard />
+  {:else if resolvedAddress}
     <div class="space-y-3 p-4 bg-card border border-border rounded-md">
       <div>
         <p class="text-xs text-muted-foreground mb-1">Resolved Address</p>
-        <p class="font-mono text-sm">{displayName}</p>
+        <p class="font-mono text-sm">{resolvedAddress} ({displayName})</p>
       </div>
 
       <div class="flex items-center gap-2">
-        {#if metakeyExists === true}
+        {#if searching}
+          <div class="flex items-center gap-2 w-full">
+            <div
+              class="animate-spin rounded-full h-4 w-4 border border-primary border-t-transparent"
+            ></div>
+            <p class="text-sm text-muted-foreground">Checking for MetaKey...</p>
+          </div>
+        {:else if metakeyExists === true}
           <CheckCircle2 size={20} class="text-green-500" />
           <div>
             <p class="font-medium text-sm">MetaKey Found</p>
@@ -130,11 +144,17 @@
         {/if}
       </div>
 
-      {#if metakeyExists === true}
+      {#if searching}
+        <div
+          class="p-3 bg-blue-500/10 border border-blue-500/20 rounded text-sm text-blue-700"
+        >
+          Searching and verifying MetaKey...
+        </div>
+      {:else if metakeyExists === true}
         <Button onclick={handleSelect} disabled={loading} class="w-full">
           {loading ? "Processing..." : "Continue"}
         </Button>
-      {:else}
+      {:else if metakeyExists === false}
         <div
           class="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded text-sm text-yellow-700"
         >

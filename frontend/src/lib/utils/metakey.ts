@@ -1,6 +1,6 @@
-import { type Address } from "viem";
+import { type Address, isAddress } from "viem";
 import { getEnsText, setEnsText } from "../ens";
-import { resolveWalletAddress } from "./wallet";
+import { resolveWalletAddress, getEnsName } from "./wallet";
 
 const METAKEY_RECORD_KEY = "metaKey";
 
@@ -32,26 +32,37 @@ export function isValidMetakey(metakey: string): boolean {
  * @returns The metakey if it exists, or null
  */
 export async function getMetakey(addressOrEns: string): Promise<string | null> {
-  try {
-    // Resolve to ensure we're working with a valid address/ENS
-    const resolved = await resolveWalletAddress(addressOrEns);
-    if (!resolved) {
-      console.warn(`Could not resolve address: ${addressOrEns}`);
-      return null;
-    }
+	try {
+		// Resolve to ensure we're working with a valid address/ENS
+		const resolved = await resolveWalletAddress(addressOrEns);
+		if (!resolved) {
+			console.warn(`Could not resolve address: ${addressOrEns}`);
+			return null;
+		}
 
-    // Try to get metakey from ENS record
-    const metakey = await getEnsText(addressOrEns, METAKEY_RECORD_KEY);
+		// If input was a raw address, do reverse lookup to get ENS name
+		let queryTarget = addressOrEns;
+		if (isAddress(addressOrEns)) {
+			const ensName = await getEnsName(resolved);
+			if (!ensName) {
+				console.warn(`No ENS name found for address: ${addressOrEns}`);
+				return null;
+			}
+			queryTarget = ensName;
+		}
 
-    if (metakey && isValidMetakey(metakey)) {
-      return metakey;
-    }
+		// Try to get metakey from ENS record using the ENS name
+		const metakey = await getEnsText(queryTarget, METAKEY_RECORD_KEY);
 
-    return null;
-  } catch (error) {
-    console.error(`Failed to get metakey for ${addressOrEns}:`, error);
-    return null;
-  }
+		if (metakey && isValidMetakey(metakey)) {
+			return metakey;
+		}
+
+		return null;
+	} catch (error) {
+		console.error(`Failed to get metakey for ${addressOrEns}:`, error);
+		return null;
+	}
 }
 
 /**

@@ -4,6 +4,7 @@
 	import { Alert, AlertTitle, AlertDescription } from '$lib/components/ui/alert';
 	import { getBalanceForAddress, hasSufficientBalanceForAddress } from '$lib/utils/balance';
 	import { isConnectedToTargetChain, switchToTargetChain, getTargetChainInfo } from '$lib/utils/chain';
+	import { estimateGasCost } from '$lib/utils/transaction';
 	import type { Address } from 'viem';
 	import { AlertCircle, Info, AlertTriangle } from '@lucide/svelte';
 
@@ -23,6 +24,8 @@
 	let isValidating = $state(false);
 	let isOnCorrectChain = $state<boolean | null>(null);
 	let chainInfo = $state(getTargetChainInfo());
+	let gasEstimate = $state<any>(null);
+	let isLoadingGas = $state(false);
 
 	async function loadMaxBalance() {
 		try {
@@ -179,9 +182,27 @@
 		}
 	}
 
+	async function loadGasEstimate() {
+		try {
+			isLoadingGas = true;
+			gasEstimate = await estimateGasCost(amount);
+		} catch (err) {
+			console.error('Failed to estimate gas:', err);
+		} finally {
+			isLoadingGas = false;
+		}
+	}
+
 	// Load balance on mount
 	$effect(() => {
 		loadMaxBalance();
+	});
+
+	// Update gas estimate when amount changes
+	$effect(() => {
+		if (amount && isOnCorrectChain === true) {
+			loadGasEstimate();
+		}
 	});
 </script>
 
@@ -271,6 +292,25 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- Gas Estimate Display -->
+		{#if gasEstimate && amount && !isLoadingGas}
+			<Alert class="border-blue-700 bg-blue-950">
+				<Info size={16} class="text-blue-400" />
+				<AlertTitle class="text-blue-300">Estimated Gas Fee</AlertTitle>
+				<AlertDescription class="text-blue-200">
+					<div class="flex justify-between items-center">
+						<span>{gasEstimate.gasPrice} Gwei</span>
+						<span class="font-mono font-semibold">≈ {gasEstimate.totalGasCost} ETH</span>
+					</div>
+				</AlertDescription>
+			</Alert>
+		{:else if isLoadingGas}
+			<Alert>
+				<Info size={16} />
+				<AlertTitle>Calculating gas...</AlertTitle>
+			</Alert>
+		{/if}
 	{/if}
 
 	<!-- Error message -->

@@ -2,12 +2,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Alert, AlertTitle, AlertDescription } from '$lib/components/ui/alert';
+	import WalletHeader from '$lib/components/WalletHeader.svelte';
+	import WalletConnectModal from '$lib/components/WalletConnectModal.svelte';
 	import { router } from '$lib/store/router';
 	import type { Address } from 'viem';
 	import { ArrowLeft, Check } from '@lucide/svelte';
 	import Copy from '@lucide/svelte/icons/copy';
 
 	let currentStep = $state<'setup' | 'display'>('setup');
+	let walletModalOpen = $state(false);
 	let connectedAddress: Address | null = $state(null);
 	let metakeyValue: string | null = $state(null);
 	let totalBalance = $state('0');
@@ -49,6 +52,8 @@
 </script>
 
 <main class="min-h-screen bg-background p-4">
+	<WalletHeader onOpenWalletModal={() => (walletModalOpen = true)} />
+	
 	<div class="max-w-2xl mx-auto">
 		<!-- Header -->
 		<div class="flex items-center gap-3 mb-8">
@@ -178,4 +183,10 @@
 			</Card>
 		{/if}
 	</div>
+
+	<WalletConnectModal
+		open={walletModalOpen}
+		onOpenChange={(open) => (walletModalOpen = open)}
+		onConnect={() => {}}
+	/>
 </main>

@@ -1,10 +1,17 @@
-import { type Address, parseEther, toHex } from 'viem';
+import { type Address, parseEther, toHex, formatGwei, formatEther } from 'viem';
 import { TARGET_CHAIN_ID } from './chain';
 
 export interface TransactionResult {
 	hash: string;
 	receipt?: any;
 	error?: string;
+}
+
+export interface GasEstimate {
+	gasLimit: bigint;
+	gasPrice: string; // in gwei
+	maxFeePerGas?: string; // in gwei
+	totalGasCost: string; // in ETH
 }
 
 /**
@@ -210,4 +217,44 @@ export function getExplorerUrl(hash: string): string {
  */
 export function formatTxHash(hash: string): string {
 	return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
+}
+
+/**
+ * Estimate gas cost for ETH transfer
+ * @param amount - Amount in ETH (as string)
+ * @param provider - Optional EIP-1193 provider, defaults to window.ethereum
+ * @returns Gas estimation details
+ */
+export async function estimateGasCost(
+	amount: string,
+	provider?: any
+): Promise<GasEstimate | null> {
+	try {
+		const eth = provider || window.ethereum;
+
+		if (!eth) {
+			return null;
+		}
+
+		// Get current gas price
+		const gasPriceHex = await eth.request({ method: 'eth_gasPrice' });
+		const gasPriceBigInt = BigInt(gasPriceHex as string);
+		const gasPriceGwei = parseFloat(formatGwei(gasPriceBigInt));
+
+		// Standard gas limit for ETH transfer
+		const gasLimit = 21000n;
+
+		// Calculate total cost
+		const totalGasWei = gasPriceBigInt * gasLimit;
+		const totalGasEth = formatEther(totalGasWei);
+
+		return {
+			gasLimit,
+			gasPrice: gasPriceGwei.toFixed(2),
+			totalGasCost: totalGasEth,
+		};
+	} catch (error) {
+		console.error('Gas estimation error:', error);
+		return null;
+	}
 }

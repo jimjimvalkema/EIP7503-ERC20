@@ -1,6 +1,12 @@
 <script lang="ts">
   import "../app.css";
+  import Toast from "$lib/components/Toast.svelte";
+  import ErrorBoundary from "$lib/components/ErrorBoundary.svelte";
   let { children } = $props();
 </script>
 
-{@render children?.()}
+<ErrorBoundary>
+  {@render children?.()}
+</ErrorBoundary>
+
+<Toast />

@@ -7,6 +7,8 @@
 		getExplorerUrl,
 		formatTxHash,
 	} from '$lib/utils/transaction';
+	import { transactions } from '$lib/store/transactions';
+	import { ensCache } from '$lib/store/ensCache';
 	import type { Address } from 'viem';
 	import { Check, AlertCircle, Loader2, ExternalLink } from '@lucide/svelte';
 
@@ -64,10 +66,28 @@
 			transactionHash = result.hash;
 			onSuccess?.(result.hash);
 
+			// Record transaction in history
+			const accounts = await window.ethereum?.request({ method: 'eth_accounts' });
+			const fromAddress = accounts?.[0] || 'Unknown';
+			const toEnsName = ensCache.get(recipientAddress) || recipientName || null;
+			
+			transactions.add({
+				hash: result.hash,
+				from: fromAddress,
+				to: recipientAddress,
+				toEnsName: toEnsName,
+				amount: amount,
+				timestamp: Date.now(),
+				status: 'pending',
+				explorerUrl: getExplorerUrl(result.hash),
+			});
+
 			// Try to wait for receipt
 			isWaitingForReceipt = true;
 			try {
 				transactionReceipt = await waitForTransactionReceipt(result.hash, 60000);
+				// Update status to confirmed
+				transactions.updateStatus(result.hash, 'confirmed');
 			} catch (err) {
 				console.warn('Receipt not received within timeout, but tx was sent:', err);
 			} finally {

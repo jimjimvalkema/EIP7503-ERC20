@@ -3,7 +3,8 @@
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { router } from '$lib/store/router';
 	import WalletConnectModal from '$lib/components/WalletConnectModal.svelte';
-	import { Wallet } from '@lucide/svelte';
+	import WalletHeader from '$lib/components/WalletHeader.svelte';
+	import TransactionHistory from '$lib/components/TransactionHistory.svelte';
 
 	let walletModalOpen = $state(false);
 
@@ -22,16 +23,7 @@
 </script>
 
 <main class="min-h-screen flex flex-col items-center justify-center p-4 bg-background">
-	<div class="absolute top-4 right-4">
-		<Button
-			onclick={() => (walletModalOpen = true)}
-			variant="outline"
-			class="gap-2"
-		>
-			<Wallet size={18} />
-			Connect Wallet
-		</Button>
-	</div>
+	<WalletHeader onOpenWalletModal={() => (walletModalOpen = true)} />
 
 	<div class="w-full max-w-2xl">
 		<div class="text-center mb-12">
@@ -39,7 +31,7 @@
 			<p class="text-lg text-muted-foreground">Send and receive crypto with MetaKeys</p>
 		</div>
 
-		<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
 			<!-- Send Card -->
 			<Card class="flex flex-col h-full hover:shadow-lg transition-shadow">
 				<CardHeader class="flex-1">
@@ -82,6 +74,9 @@
 				</CardContent>
 			</Card>
 		</div>
+
+		<!-- Transaction History -->
+		<TransactionHistory />
 	</div>
 </main>
 

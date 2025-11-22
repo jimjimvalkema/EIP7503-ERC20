@@ -11,9 +11,13 @@
   import WalletSearch from "$lib/components/flows/WalletSearch.svelte";
   import SendAmount from "$lib/components/flows/SendAmount.svelte";
   import SendTransaction from "$lib/components/flows/SendTransaction.svelte";
+  import WalletHeader from "$lib/components/WalletHeader.svelte";
+  import WalletConnectModal from "$lib/components/WalletConnectModal.svelte";
   import { router } from "$lib/store/router";
   import type { Address } from "viem";
   import { ArrowLeft, CheckCircle2 } from "@lucide/svelte";
+
+  let walletModalOpen = $state(false);
 
   let selectedAddress: Address | null = $state(null);
   let ensName: string | null = $state(null);
@@ -77,6 +81,8 @@
 </script>
 
 <main class="min-h-screen bg-background p-4">
+  <WalletHeader onOpenWalletModal={() => (walletModalOpen = true)} />
+  
   <div class="max-w-2xl mx-auto">
     <!-- Header -->
     <div class="flex items-center gap-3 mb-8">
@@ -204,4 +210,10 @@
         </CardContent>
     </Card>
   </div>
+
+  <WalletConnectModal
+    open={walletModalOpen}
+    onOpenChange={(open) => (walletModalOpen = open)}
+    onConnect={() => {}}
+  />
 </main>
