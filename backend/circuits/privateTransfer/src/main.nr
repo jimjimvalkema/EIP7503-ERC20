@@ -126,7 +126,7 @@ fn main(
     root: pub Field,                    // root of merkle tree we use to privately proof total_received, prev_nullifier are on the chain.
     //-----very privacy sensitive data -----
     signature_data: SignatureData,      // contains hash(prev_account_nonce,amount,recipient_address)
-    shared_secret: Field,                    // to limit the collision attacks between EOAs and private_addresses, 
+    shared_secret: Field,               // to limit the collision attacks between EOAs and private_addresses, 
     total_received: Field,              // the "balanceOf" of the private_address
     prev_total_spent: Field,            // needed to verify total_received-prev_total_spent > amount. and to create nullifier_value=hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
     viewing_key: Field,                 // used as randomness to blind commitments. Prob just take sig.#r from `sig = ethers.Signature.from( await signer.signMessage(message))`

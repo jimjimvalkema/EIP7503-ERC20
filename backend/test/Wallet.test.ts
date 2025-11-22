@@ -17,8 +17,6 @@ import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx } from "../src/transact.js";
 import { RelayerInputs, UnsyncedPrivateWallet } from "../src/types.js";
 
-//console.log({ POW_DIFFICULTY: padHex(toHex(POW_DIFFICULTY), { size: 32, dir: "left" }) })
-
 const logNoirTests = false
 const provingThreads = 1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
 
@@ -106,119 +104,63 @@ describe("Token", async function () {
             const gasString = JSON.stringify(gas, (key, value) => typeof value === 'bigint' ? Number(value) : value, 2)
         })
 
-        it("should make a proof for a self relayed tx and verify it in js", async function () {
+        it("should make keys", async function () {
             const sharedSecret = 0n
-            const carolPrivate = await getPrivateAccount({ wallet: carol, sharedSecret })
-            await wormholeToken.write.getFreeTokens([carolPrivate.burnAddress]) //sends 1_000_000n token
-
-            const carolPrivateSynced = await syncPrivateWallet({ privateWallet: carolPrivate, wormholeToken })
-
-            const amountToReMint = 69n
-            const reMintRecipient = bob.account.address
-
-            const unFormattedProofInputs = await getUnformattedProofInputs({
-                wormholeToken: wormholeToken,
-                privateWallet: carolPrivateSynced,
-                publicClient: publicClient,
-                amountToReMint: amountToReMint,
-                recipient: reMintRecipient,
-                feeData: EMPTY_FEE_DATA
-            })
-            const formattedProofInputs = formatProofInputs(unFormattedProofInputs)
-            const proof = await generateProof({ proofInputs: formattedProofInputs, backend: circuitBackend })
-            const isValid = await verifyProof({ proof, backend: circuitBackend })
-            assert(isValid, "proof invalid")
+            const { viewingKey, pubKey } = await getPrivateAccount({ wallet: alice, sharedSecret })
+            const powHash = hashPow({ pubKeyX: pubKey.x, sharedSecret: sharedSecret });
+            //assert(powHash < POW_DIFFICULTY, `powHash:${powHash} not smaller then POW_DIFFICULTY:${POW_DIFFICULTY} with sharedSecret:${sharedSecret} and pubKeyX:${pubKey.x}`)
         })
 
-        it("should make private tx and self relay it", async function () {
-            const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
-            const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
-            await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
-
-            const sharedSecret = 0n
-            const alicePrivate = await getPrivateAccount({ wallet: alice, sharedSecret })
-            const amountToBurn = 420n;
-            await wormholeTokenAlice.write.transfer([alicePrivate.burnAddress, amountToBurn]) //sends 1_000_000n token
-
-            const amountToReMint = 69n
-            const reMintRecipient = bob.account.address
-            //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
-            const reMintTx1 = await proofAndSelfRelay({
-                wormholeToken: wormholeTokenAlice,
-                privateWallet: alicePrivate,
-                publicClient,
-                amount: amountToReMint,
-                recipient: reMintRecipient,
-                backend: circuitBackend
-            })
-
-            const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
-            const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([alicePrivate.burnAddress])
-            let balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-
-            assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
-            assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
-            assert.equal(balanceBobPublic, amountToReMint, "bob didn't receive the expected amount of re-minted tokens")
+        // this does not create the "\x19Ethereum Signed Message:\n" prefix????
+        // my poseidon hashes do in signPrivateTransfer() 
+        it("should make me a test to verify a signature in noir", async function () {
+            // there is an extra byte in this?
+            const hash = padHex("0x420690", { size: 32 });
+            const signature = await deployer.request({
+                method: 'eth_sign',
+                params: [deployer.account.address, hash],
+            });
+            const publicKey = await recoverPublicKey({
+                hash: hash,
+                signature: signature
+            });
+            // first byte is cringe
+            const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
+            const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
+            const rawSigHex = "0x" + signature.slice(0, 2 + 128) as Hex
+            //if (logNoirTests) { console.log(noir_verify_sig({ pubKeyXHex, pubKeyYHex, rawSigHex, hash })) }
         })
 
-        it("should make private tx and self relay it 3 times", async function () {
-            const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
-            const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
-            await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
+        it("should not matter what was signed to extract public key", async function () {
+            const expectedPubKeyAlice = "0x04ba5734d8f7091719471e7f7ed6b9df170dc70cc661ca05e688601ad984f068b0d67351e5f06073092499336ab0839ef8a521afd334e53807205fa2f08eec74f4"
+            const getKeys = async (message: string) => {
+                const poseidonHash = toHex(poseidon2Hash([BigInt('0x' + new TextEncoder().encode(message).reduce((s, b) => s + b.toString(16).padStart(2, '0'), ''))]), { size: 32 });
 
-            const sharedSecret = 0n
-            const alicePrivate = await getPrivateAccount({ wallet: alice, sharedSecret })
-            const amountToBurn = 420n;
-            await wormholeTokenAlice.write.transfer([alicePrivate.burnAddress, amountToBurn]) //sends 1_000_000n token
+                let signature = await alice.request({
+                    method: 'eth_sign',
+                    params: [alice.account.address, poseidonHash],
+                });
 
-            const amountToReMint = 69n
-            const reMintRecipient = bob.account.address
-            //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
-            //console.log("1111111")
-            const reMintTx1 = await proofAndSelfRelay({
-                wormholeToken: wormholeTokenAlice,
-                privateWallet: alicePrivate,
-                publicClient,
-                amount: amountToReMint,
-                recipient: reMintRecipient,
-                backend: circuitBackend
-            })
+                // note: hashMessage needs raw here since
+                const preImageOfKeccak = toPrefixedMessage({ raw: poseidonHash })
+                const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);
+                const publicKey1 = await recoverPublicKey({
+                    hash: KeccakWrappedPoseidonHash,
+                    signature: signature
+                });
 
-            //console.log("222222222")
-
-            const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
-            const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([alicePrivate.burnAddress])
-            let balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-
-            assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
-            assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
-            assert.equal(balanceBobPublic, amountToReMint, "bob didn't receive the expected amount of re-minted tokens")
-
-            // we should be able to do it again!!!
-            // TODO add input for a pre-synced tree so we don't resync every time
-            const realRoot = await wormholeToken.read.root()
-            const reMintTx2 = await proofAndSelfRelay({
-                wormholeToken: wormholeTokenAlice,
-                privateWallet: alicePrivate,
-                publicClient,
-                amount: amountToReMint,
-                recipient: reMintRecipient,
-                backend: circuitBackend
-            })
-            balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-            assert.equal(balanceBobPublic, amountToReMint * 2n, "bob didn't receive the expected amount of re-minted tokens")
-
-            // one more time
-            const reMintTx3 = await proofAndSelfRelay({
-                wormholeToken: wormholeTokenAlice,
-                privateWallet: alicePrivate,
-                publicClient,
-                amount: amountToReMint,
-                recipient: reMintRecipient,
-                backend: circuitBackend
-            })
-            balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-            assert.equal(balanceBobPublic, amountToReMint * 3n, "bob didn't receive the expected amount of re-minted tokens")
+                const signatureOnRaw = await alice.signMessage({ message: { raw: toHex(message) }, account: alice.account });
+                signature = await alice.signMessage({ message, account: alice.account });
+                const keccakHash = hashMessage(message);
+                const publicKey2 = await recoverPublicKey({
+                    hash: keccakHash,
+                    signature: signature
+                });
+                assert.equal(publicKey1, expectedPubKeyAlice)
+                assert.equal(publicKey2, expectedPubKeyAlice)
+            }
+            await getKeys("hello!")
+            await getKeys("hello again!")
         })
     })
 })

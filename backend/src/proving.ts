@@ -165,9 +165,9 @@ export async function getUnformattedProofInputs(
     const nextAccountNonce = prevAccountNonce + 1n
     const {signatureData, signatureHash, poseidonHash, preImageOfKeccak} = await signPrivateTransfer({ recipientAddress: recipient, amount: amountToReMint, feeData: feeData, privateWallet: privateWallet })
     const contractFormattedPreFix = await wormholeToken.read._getMessageWithEthPrefix([poseidonHash]);
-    console.log({
-        preImageOfKeccak_______:preImageOfKeccak,
-        contractFormattedPreFix, isEqual: preImageOfKeccak===contractFormattedPreFix })
+    // console.log({
+    //     preImageOfKeccak_______:preImageOfKeccak,
+    //     contractFormattedPreFix, isEqual: preImageOfKeccak===contractFormattedPreFix })
     const { prevAccountNoteMerkle, totalReceivedMerkle, root } = await getMerkleProofs({
         privateWallet: privateWallet,
         wormholeToken: wormholeToken,
