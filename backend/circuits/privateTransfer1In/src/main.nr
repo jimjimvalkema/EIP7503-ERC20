@@ -1,12 +1,11 @@
-use private_transfer::{spendFromBurnAddresses, BurnAddressPublicProofData, BurnAddressPrivateProofData, SignatureData};
+use privateTransfer::{spendFromBurnAddresses, BurnAddressPublicProofData, BurnAddressPrivateProofData, SignatureData};
 
-global AMOUNT_BURN_ADDRESSES: Field = 1; 
+global AMOUNT_BURN_ADDRESSES: u32 = 1; 
 fn main(
     //----- public inputs
-    signature_hash: pub [u8;32],
-    amount: pub Field,
     root: pub Field,
     amount: pub Field,
+    signature_hash: pub [u8;32],
     burn_address_public_proof_data: pub [BurnAddressPublicProofData; AMOUNT_BURN_ADDRESSES],
     // --- private inputs ---
     signature_data: SignatureData,      

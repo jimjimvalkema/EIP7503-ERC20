@@ -25,13 +25,13 @@
   },
   "scripts": {
     "solidity": "hardhat compile;",
-    "noir:compile": "cd circuits/privateTransfer; nargo compile;",
-    "noir:vk": "cd circuits/privateTransfer; bb write_vk -b ./target/private_transfer.json -o ./target --oracle_hash keccak;",
-    "noir:verifier": "cd circuits/privateTransfer; bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol;",
-    "noir:cp-verifier": "cp circuits/privateTransfer/target/Verifier.sol contracts/PrivateTransferVerifier.sol;",
-    "noir:rename-verifier-3.0.0": "yarn tsx scripts/renameVerifier.ts",
-    "noir:rename-verifier": "yarn tsx scripts/replaceLine.ts --file contracts/PrivateTransferVerifier.sol --remove \"contract HonkVerifier is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_INPUTS) {\" --replace \"contract PrivateTransferVerifier is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_INPUTS) {\"",
-    "noir": "yarn noir:compile; yarn noir:vk; yarn noir:verifier; yarn noir:cp-verifier; yarn noir:rename-verifier-3.0.0",
+    "noir:privateTransfer1In:compile": "cd circuits/privateTransfer1In; nargo compile;",
+    "noir:privateTransfer1In:vk": "cd circuits/privateTransfer1In; bb write_vk -b ./target/privateTransfer1In.json -o ./target --oracle_hash keccak;",
+    "noir:privateTransfer1In:verifier": "cd circuits/privateTransfer1In; bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol;",
+    "noir:privateTransfer1In:cp-verifier": "cp circuits/privateTransfer1In/target/Verifier.sol contracts/privateTransfer1InVerifier.sol;",
+    "noir:privateTransfer1In:rename-verifier": "yarn tsx scripts/renameVerifier.ts --newName privateTransfer1InVerifier --file contracts/privateTransfer1InVerifier.sol",
+    "noir:privateTransfer1In": "yarn noir:privateTransfer1In:compile; yarn noir:privateTransfer1In:vk; yarn noir:privateTransfer1In:verifier; yarn noir:privateTransfer1In:cp-verifier; yarn noir:privateTransfer1In:rename-verifier",
+    "noir":"yarn noir:privateTransfer1In",
     "website": "cd website; yarn vite"
   },
   "dependencies": {

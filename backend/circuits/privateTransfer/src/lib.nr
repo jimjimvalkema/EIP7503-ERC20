@@ -17,8 +17,6 @@ global TOTAL_SPENT_DOMAIN: Field = 0x5350454E545F544F54414C; // UTF8("total_spen
 
 global MAX_TREE_DEPTH: u32 = 40;
 
-//global ETH_SIGN_PREFIX: [u8; 28] = [25,69,116,104,101,114,101,117,109,32,83,105,103,110,101,100,32,77,101,115,115,97,103,101,58,10,51,50];
-
 fn merkle_hasher(leaves: [Field; 2]) -> Field {
     Poseidon2::hash(leaves, 2)
 }
@@ -70,28 +68,14 @@ fn hash_nullifier(account_nonce: Field, viewing_key: Field) -> Field {
     Poseidon2::hash([account_nonce, viewing_key], 2)
 }
 
-// fn hash_signature_inputs(recipient_address: Field, amount: Field, fee_data: FeeData) -> [u8;32] {
-//     Poseidon2::hash(
-//         [
-//             recipient_address,
-//             amount,
-//             fee_data.relayer_address,
-//             fee_data.priority_fee,
-//             fee_data.conversion_rate,
-//             fee_data.max_fee,
-//         ],
-//         6,
-//     ).to_be_bytes()
-// }
-
 fn lower_then_or_equal(a: Field, b: Field) -> bool {
     !gt(a, b)
 }
 
 pub struct SignatureData {
-    public_key_x: [u8; 32],
-    public_key_y: [u8; 32],
-    signature: [u8; 64],
+    pub public_key_x: [u8; 32],
+    pub public_key_y: [u8; 32],
+    pub signature: [u8; 64],
 }
 
 pub struct MerkleData {
