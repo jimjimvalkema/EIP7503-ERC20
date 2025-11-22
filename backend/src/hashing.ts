@@ -76,7 +76,7 @@ export function hashSignatureInputs({ recipientAddress, amount, feeData }: { rec
             ]
         )
     )
-    console.log({keccakHash, len:( keccakHash.length - 2)/2})
+    //console.log({keccakHash, len:( keccakHash.length - 2)/2})
     return keccakHash
 }
 
@@ -96,13 +96,12 @@ export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY 
     return sharedSecret
 }
 
-export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESSAGE }: { wallet: WalletClient, message?: string }): Promise<UnsyncedPrivateWallet> {
-    console.log(wallet.account?.address, "a")
+export async function getPrivateAccount({ wallet, sharedSecret, message = VIEWING_KEY_SIG_MESSAGE }: { wallet: WalletClient,sharedSecret:bigint , message?: string }): Promise<UnsyncedPrivateWallet> {
+    //console.log(wallet.account?.address, "a")
     const signature = await wallet.signMessage({ message: message, account: wallet.account?.address as Address })
     const hash = hashMessage(message);
     const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature })
     const viewingKey = getViewingKey({ signature: signature })
-    const sharedSecret = findPoWNonce({ pubKeyX: pubKeyX, viewingKey: viewingKey })
     const burnAddress = getPrivateAddress({ pubKeyX: pubKeyX, sharedSecret: sharedSecret })
     const accountNonce = 0n
     return { viem: { wallet }, viewingKey, sharedSecret, pubKey: { x: pubKeyX, y: pubKeyY }, burnAddress, accountNonce }
@@ -110,7 +109,7 @@ export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESS
 
 export async function signPrivateTransfer({ recipientAddress, amount, feeData, privateWallet }: { privateWallet: UnsyncedPrivateWallet | SyncedPrivateWallet, recipientAddress: Address, amount: bigint, feeData: FeeData }) {
     const sigHash = hashSignatureInputs({ recipientAddress, amount, feeData })
-    console.log({sigHash})
+    //console.log({sigHash})
     // blind signing yay!
     // const signature = await privateWallet.viem.wallet.request({
     //     method: 'eth_sign',
