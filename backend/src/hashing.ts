@@ -1,4 +1,4 @@
-import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex } from "viem";
+import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, hashTypedData, TypedData } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_RECEIVED_DOMAIN as TOTAL_RECEIVED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { FeeData, SignatureData, SyncedPrivateWallet, UnsyncedPrivateWallet } from "./types.js";
@@ -67,12 +67,12 @@ export function hashSignatureInputs({ recipientAddress, amount, feeData }: { rec
         encodePacked(
             ['uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256'],
             [
-                BigInt(recipientAddress),                    
-                amount,                            
-                BigInt(feeData.relayerAddress),  
-                feeData.priorityFee,    
-                feeData.conversionRate, 
-                feeData.maxFee,         
+                BigInt(recipientAddress),
+                amount,
+                BigInt(feeData.relayerAddress),
+                feeData.priorityFee,
+                feeData.conversionRate,
+                feeData.maxFee,
             ]
         )
     )
@@ -96,7 +96,7 @@ export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY 
     return sharedSecret
 }
 
-export async function getPrivateAccount({ wallet, sharedSecret, message = VIEWING_KEY_SIG_MESSAGE }: { wallet: WalletClient,sharedSecret:bigint , message?: string }): Promise<UnsyncedPrivateWallet> {
+export async function getPrivateAccount({ wallet, sharedSecret, message = VIEWING_KEY_SIG_MESSAGE }: { wallet: WalletClient, sharedSecret: bigint, message?: string }): Promise<UnsyncedPrivateWallet> {
     //console.log(wallet.account?.address, "a")
     const signature = await wallet.signMessage({ message: message, account: wallet.account?.address as Address })
     const hash = hashMessage(message);
@@ -107,30 +107,100 @@ export async function getPrivateAccount({ wallet, sharedSecret, message = VIEWIN
     return { viem: { wallet }, viewingKey, sharedSecret, pubKey: { x: pubKeyX, y: pubKeyY }, burnAddress, accountNonce }
 }
 
-export async function signPrivateTransfer({ recipientAddress, amount, feeData, privateWallet }: { privateWallet: UnsyncedPrivateWallet | SyncedPrivateWallet, recipientAddress: Address, amount: bigint, feeData: FeeData }) {
-    const sigHash = hashSignatureInputs({ recipientAddress, amount, feeData })
-    //console.log({sigHash})
-    // blind signing yay!
-    // const signature = await privateWallet.viem.wallet.request({
-    //     method: 'eth_sign',
-    //     params: [(privateWallet.viem.wallet.account?.address as Address), poseidonHash],
-    // });
-    const signature = await privateWallet.viem.wallet.signMessage({ message: { raw: sigHash }, account: privateWallet.viem.wallet.account as Account })
-    const preImageOfKeccak = toPrefixedMessage({ raw: sigHash })
-    const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);
+export async function signPrivateTransfer({
+    recipientAddress,
+    amount,
+    feeData,
+    privateWallet,
+    wormholeTokenAddress,
+}: {
+    privateWallet: UnsyncedPrivateWallet | SyncedPrivateWallet;
+    recipientAddress: Address;
+    amount: bigint;
+    feeData: FeeData;
+    wormholeTokenAddress: Address;
+}) {
+    const privateTransferTypes = {
+        FeeData: [
+            { name: "relayerAddress", type: "address" },
+            { name: "priorityFee", type: "uint256" },
+            { name: "conversionRate", type: "uint256" },
+            { name: "maxFee", type: "uint256" },
+            { name: "feeToken", type: "address" },
+        ],
+        PrivateTransfer: [
+            { name: "to", type: "address" },
+            { name: "amount", type: "uint256" },
+            { name: "feeData", type: "FeeData" },
+        ],
+    } as const satisfies TypedData;
 
-    const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: KeccakWrappedPoseidonHash, signature: signature })
-    // const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
-    // const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
+    type FeeDataMsg = {
+        relayerAddress: Address;
+        priorityFee: bigint;
+        conversionRate: bigint;
+        maxFee: bigint;
+        feeToken: Address;
+    };
+
+    type PrivateTransferMessage = {
+        to: Address;
+        amount: bigint;
+        feeData: FeeDataMsg;
+    };
+
+    const domain = {
+        name: "SchwarzSchild",
+        version: "1",
+        chainId: BigInt(privateWallet.viem.wallet.chain!.id),
+        verifyingContract: wormholeTokenAddress,
+    } as const;
+
+    const message: PrivateTransferMessage = {
+        to: recipientAddress,
+        amount,
+        feeData,
+    };
+
+    const eip712Digest = hashTypedData({
+        domain,
+        types: privateTransferTypes,
+        primaryType: "PrivateTransfer",
+        message,
+    });
+
+
+    const signature = await privateWallet.viem.wallet.signTypedData({
+        account: privateWallet.viem.wallet.account as Account,
+        domain,
+        types: privateTransferTypes,
+        primaryType: "PrivateTransfer",
+        message,
+    });
+
+    const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({
+        hash: eip712Digest,
+        signature,
+    });
+
+    console.log("\n\n\n TS START \n\n\n")
+
+    console.log(eip712Digest)
+    
+    console.log("\n\n\n TS END \n\n\n")
+
+
+
     return {
         signatureData: {
             publicKeyX: pubKeyX,
             publicKeyY: pubKeyY,
-            signature: signature,
+            signature,
         } as SignatureData,
-        signatureHash: hexToBigInt(KeccakWrappedPoseidonHash),
-        poseidonHash: sigHash,
-        preImageOfKeccak: preImageOfKeccak
-    }
-
+        signatureHash: hexToBigInt(eip712Digest),
+    };
 }
+
+
+
+

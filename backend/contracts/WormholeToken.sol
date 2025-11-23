@@ -4,27 +4,20 @@
 pragma solidity ^0.8.3;
 
 import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol"; 
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.sol";
 import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
 import {IVerifier} from "./PrivateTransferVerifier.sol";
 
 struct FeeData {
-    // relayerAddress = 0 <= self relay, relayerAddress = 1 <= msg.sender will relay, all other will send it to that address like expected
     address relayerAddress;
-    // there is no way for the contract to know what priority fee is set so the spender just has to set it for the relayer (who ofc can choose a different number)
     uint256 priorityFee;
-    // gas usage can change in network upgrades or when the merkle tree grows deeper
-    // price of eth in fee_token * gas_used
     uint256 conversionRate;
-    // in the contract the fee is calculated feeAmountInFeeToken = (pubInput.priority_fee + block.baseFee) * pubInput.conversion_rate
-    // and should feeAmountInFeeToken < max_fee. conversionRate = gasUsage*tokenPriceInWei*relayerBonusFactor. 
-    // ex gasUsage=45000,tokenPriceInEth=0.048961448,relayerBonusFactor=10%
-    // conversionRate = 45000 * 48955645000000000 * 1.1
     uint256 maxFee;
-    // fee_token is not that interesting rn because it really can only be the token it self or eth,
-    // but in the future where it is integrated as a deposit method of a rail-gun like system it can be use full.
     address feeToken;
 }
+
+
 
 error VerificationFailed();
 // accountNoteNullifier is indexed so users can search for it and find out the total amount spend, which is needed to make the next spend the next
@@ -33,10 +26,77 @@ event PrivateTransfer(uint256 indexed accountNoteNullifier, uint256 amount);
 event StorageRootAdded(uint256 blockNumber);
 event NewLeaf(uint256 leaf);
 
-contract WormholeToken is ERC20WithWormHoleMerkleTree {
+contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     // this is so leafs from received balance and spent balance wont get mixed up
     uint256 constant public TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414C; // UTF8("total_received").toHex()
     address internal constant POSEIDON2_ADDRESS = 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C; // yul-recompile-200: 0xb41072641808e6186eF5246fE1990e46EB45B65A gas: 62572, huff: 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C gas:39 627, yul-lib: 0x925e05cfb89f619BE3187Bf13D355A6D1864D24D,
+
+
+    function debugDomain()
+        external
+        view
+        returns (
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32 domainSeparator
+        )
+    {
+        name = "SchwarzSchild";
+        version = "1";
+        chainId = block.chainid;
+        verifyingContract = address(this);
+        domainSeparator = _domainSeparatorV4();
+    }
+
+    function debugPrivateTransferHash(
+        address _to,
+        uint256 _amount,
+        FeeData calldata _feeData
+    )
+        external
+        view
+        returns (bytes32 structHash, bytes32 digest)
+    {
+        structHash = _hashPrivateTransfer(_to, _amount, _feeData);
+        digest = _hashTypedDataV4(structHash);
+    }
+
+    bytes32 private constant _FEE_DATA_TYPEHASH =
+        keccak256(
+            "FeeData(address relayerAddress,uint256 priorityFee,uint256 conversionRate,uint256 maxFee,address feeToken)"
+        );
+
+    bytes32 private constant _PRIVATE_TRANSFER_TYPEHASH =
+        keccak256(
+            "PrivateTransfer(address to,uint256 amount,FeeData feeData)"
+            "FeeData(address relayerAddress,uint256 priorityFee,uint256 conversionRate,uint256 maxFee,address feeToken)"
+        );
+
+    function _hashFeeData(FeeData calldata fee) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _FEE_DATA_TYPEHASH,
+                fee.relayerAddress,
+                fee.priorityFee,
+                fee.conversionRate,
+                fee.maxFee,
+                fee.feeToken
+            )
+        );
+    }
+
+        /**
+         * @notice 
+         * uint256 _amount,
+        address _to,
+        FeeData calldata _feeData,
+        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
+        uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256 _root,
+        bytes calldata _snarkProof
+         */
 
     // @notice accountNoteNullifier = poseidon(nonce, viewingKey)
     // @notice accountNoteHash = poseidon(totalAmountSpent, nonce, viewingKey)
@@ -59,6 +119,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
      */
     constructor(address _privateTransferVerifier)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
+        EIP712("SchwarzSchild", "1") 
     {
         privateTransferVerifier = _privateTransferVerifier;
     }
@@ -67,20 +128,28 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         return abi.encodePacked(ETH_SIGN_PREFIX, message);
     }
 
-    function _hashSignatureInputs(address recipientAddress, uint256 amount, FeeData memory feeData) public pure returns(bytes32) {
-        uint256[6] memory input = [
-            (_addressToUint256(recipientAddress)),
-            (amount),
-            (_addressToUint256(feeData.relayerAddress)),
-            (feeData.priorityFee),
-            (feeData.conversionRate),
-            (feeData.maxFee)
-        ];
+    function _hashPrivateTransfer(
+        address _to,
+        uint256 _amount,
+        FeeData calldata _feeData
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _PRIVATE_TRANSFER_TYPEHASH,
+                _to,
+                _amount,
+                _hashFeeData(_feeData)
+            )
+        );
+    }
 
-        bytes32 preKeccak = keccak256(abi.encodePacked(input));
-        // TODO check that bytes32 wont create unexpected zeros
-        bytes32 keccakHash = keccak256(_getMessageWithEthPrefix(preKeccak));
-        return keccakHash;
+    function _hashSignatureInputs(
+        address _to,
+        uint256 _amount,
+        FeeData calldata _feeData
+    ) public view returns (bytes32) {
+        bytes32 structHash = _hashPrivateTransfer(_to, _amount, _feeData);
+        return _hashTypedDataV4(structHash);
     }
 
     function hashPoseidon2T3(uint256[3] memory input) public view returns (uint256) {

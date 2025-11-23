@@ -77,7 +77,7 @@ export function getAccountNoteMerkle({ prevTotalSpent, prevAccountNonce, private
         const depth = BigInt(prevAccountNoteMerkleProof.siblings.length)
         prevAccountNoteMerkle = {
             depth: depth, // TODO double check this
-            indices: padArray({arr:prevAccountNoteMerkleProof.index.toString(2).split('').reverse().map((v) => BigInt(v)), dir:"right", size:Number(depth) }), // todo slice this in the right size. Maybe it need reverse?
+            indices: padArray({ arr: prevAccountNoteMerkleProof.index.toString(2).split('').reverse().map((v) => BigInt(v)), dir: "right", size: Number(depth) }), // todo slice this in the right size. Maybe it need reverse?
             siblings: prevAccountNoteMerkleProof.siblings
         }
     } else {
@@ -98,7 +98,7 @@ export function getTotalReceivedMerkle({ totalReceived, privateWallet, tree }: {
     const depth = BigInt(totalReceivedMerkleProof.siblings.length)
     const totalReceivedMerkle: MerkleData = {
         depth: depth,
-        indices: padArray({arr:totalReceivedMerkleProof.index.toString(2).split('').reverse().map((v) => BigInt(v)), dir:"right", size:Number(depth)}),
+        indices: padArray({ arr: totalReceivedMerkleProof.index.toString(2).split('').reverse().map((v) => BigInt(v)), dir: "right", size: Number(depth) }),
         siblings: totalReceivedMerkleProof.siblings
     }
     return totalReceivedMerkle
@@ -120,27 +120,29 @@ export async function getMerkleProofs(
 
 export function getPubInputs(
     { amountToReMint, syncedPrivateWallet, prevAccountNonce, totalSpent, nextAccountNonce, root, signatureHash, recipient, feeData }:
-        { amountToReMint: bigint, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, totalSpent: bigint, nextAccountNonce: bigint, root: bigint, signatureHash:bigint, recipient:Address, feeData?:FeeData }) {
+        { amountToReMint: bigint, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, totalSpent: bigint, nextAccountNonce: bigint, root: bigint, signatureHash: bigint, recipient: Address, feeData?: FeeData }) {
     //console.log("inserting:",{ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
     const accountNoteHash = hashAccountNote({ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
-    const accountNoteNullifier = hashNullifier({ accountNonce: prevAccountNonce, viewingKey: syncedPrivateWallet.viewingKey }) 
+    const accountNoteNullifier = hashNullifier({ accountNonce: prevAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
     ///-----------
     feeData = feeData ?? EMPTY_FEE_DATA
     const pubInputs: UnformattedPublicProofInputs = {
         amount: amountToReMint,
-        signatureHash: signatureHash, 
+        signatureHash: signatureHash,
         recipientAddress: recipient,
         feeData: feeData,
         accountNoteHash: accountNoteHash,
         accountNoteNullifier: accountNoteNullifier,
         root: root,
     }
+
+
     return pubInputs
 }
 
 export function getPrivInputs(
     { signatureData, syncedPrivateWallet, prevAccountNonce, prevTotalSpent, totalReceived, prevAccountNoteMerkle, totalReceivedMerkle }:
-        { signatureData:SignatureData, amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint, prevAccountNoteMerkle: MerkleData, totalReceivedMerkle: MerkleData }) {
+        { signatureData: SignatureData, amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint, prevAccountNoteMerkle: MerkleData, totalReceivedMerkle: MerkleData }) {
     const privInputs: UnformattedPrivateProofInputs = {
         signatureData: signatureData,
         sharedSecret: syncedPrivateWallet.sharedSecret,
@@ -163,8 +165,11 @@ export async function getUnformattedProofInputs(
     const totalReceived = privateWallet.totalReceived
     const totalSpent = prevTotalSpent + amountToReMint
     const nextAccountNonce = prevAccountNonce + 1n
-    const {signatureData, signatureHash, poseidonHash, preImageOfKeccak} = await signPrivateTransfer({ recipientAddress: recipient, amount: amountToReMint, feeData: feeData, privateWallet: privateWallet })
-    const contractFormattedPreFix = await wormholeToken.read._getMessageWithEthPrefix([poseidonHash]);
+    const { signatureData, signatureHash } = await signPrivateTransfer({ recipientAddress: recipient, amount: amountToReMint, feeData: feeData, privateWallet: privateWallet, wormholeTokenAddress: wormholeToken.address })
+
+
+
+    //const contractFormattedPreFix = await wormholeToken.read._getMessageWithEthPrefix([poseidonHash]);
     // console.log({
     //     preImageOfKeccak_______:preImageOfKeccak,
     //     contractFormattedPreFix, isEqual: preImageOfKeccak===contractFormattedPreFix })
@@ -186,10 +191,11 @@ export async function getUnformattedProofInputs(
         totalSpent: totalSpent,
         nextAccountNonce: nextAccountNonce,
         root: root,
+        feeData
     })
 
     const privInputs = getPrivInputs({
-        signatureData:signatureData,
+        signatureData: signatureData,
         amountToReMint: amountToReMint,
         recipient: recipient,
         syncedPrivateWallet: privateWallet,
@@ -200,7 +206,9 @@ export async function getUnformattedProofInputs(
         totalReceivedMerkle: totalReceivedMerkle
     })
 
-    const unformattedProofInputs = {pubInputs,privInputs}
+    const unformattedProofInputs = { pubInputs, privInputs }
+
+
     return unformattedProofInputs as UnformattedProofInputs
 }
 

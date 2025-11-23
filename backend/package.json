@@ -32,7 +32,8 @@
     "noir:rename-verifier-3.0.0": "yarn tsx scripts/renameVerifier.ts",
     "noir:rename-verifier": "yarn tsx scripts/replaceLine.ts --file contracts/PrivateTransferVerifier.sol --remove \"contract HonkVerifier is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_INPUTS) {\" --replace \"contract PrivateTransferVerifier is BaseZKHonkVerifier(N, LOG_N, NUMBER_OF_PUBLIC_INPUTS) {\"",
     "noir": "yarn noir:compile; yarn noir:vk; yarn noir:verifier; yarn noir:cp-verifier; yarn noir:rename-verifier-3.0.0",
-    "website": "cd website; yarn vite"
+    "website": "cd website; yarn vite",
+    "test":"yarn hardhat test -vvvv > test.log 2>&1"
   },
   "dependencies": {
     "@aztec/aztec.js": "2.0.3",

@@ -63,7 +63,7 @@ https://github.com/jimjimvalkema/EIP7503-ERC20/blob/7a4850ddc6503442dfbd484ac375
 * This is unaudited and experimental. The poseidon2 contract is also experimental and built with huff: https://github.com/zemse/poseidon2-evm  
 ## deploy
 setup secrets:  
-`yarn hardhat keystore set SEPOLIA_RPC_URL`  
+`yarn hardhat keystore set SEPOLIA_RPC_URL`   
 `yarn hardhat keystore set SEPOLIA_PRIVATE_KEY`  
 `yarn hardhat keystore set ETHERSCAN_API_KEY`  
 
