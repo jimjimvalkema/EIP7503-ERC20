@@ -50,8 +50,8 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
 
 
     function _updateBalanceInMerkleTree(address _to, uint256 _newBalance) virtual internal;
-    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256 _accountNoteHash) virtual internal;
-    function _insertInMerkleTree(uint256 _accountNoteHash) virtual internal;
+    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _accountNoteHashes) virtual internal;
+    function _insertManyInMerkleTree(uint256[] memory _accountNoteHashes) virtual internal;
 
     /**
      * @dev Returns the name of the token.
@@ -231,13 +231,13 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
      * 
      * Same as _update but added _accountNoteHash so it use insertMany to save on gas and _totalSupply doesn't increase
      */
-    function _privateReMint(address to, uint256 value, uint256 _accountNoteHash) internal virtual {
+    function _privateReMint(address to, uint256 value, uint256[] memory _accountNoteHashes) internal virtual {
         if (to == address(0)) {
             unchecked {
                 // Overflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
                 _totalSupply -= value;
             }
-            _insertInMerkleTree(_accountNoteHash);
+            _insertManyInMerkleTree(_accountNoteHashes);
         } else {
             uint256 newBalance;
             unchecked {
@@ -250,7 +250,7 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
             // we only care about `to` since zkwormhole accounts can only receive from the public not spend
             // so the _balances[to] number goes up only :D
             // this inserts both _accountNoteHash and poseidon2(to, newBalance)
-            _updateBalanceInMerkleTree(to, newBalance, _accountNoteHash);
+            _updateBalanceInMerkleTree(to, newBalance, _accountNoteHashes);
         }
         emit Transfer(address(0), to, value);
     }

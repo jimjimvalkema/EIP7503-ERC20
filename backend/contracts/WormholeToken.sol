@@ -51,16 +51,18 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
 
     uint256 public amountFreeTokens = 1000000*10**decimals();
 
-    address public privateTransferVerifier;
+    address public privateTransferVerifier1In;
+    address public privateTransferVerifier4In;
     LeanIMTData public tree;
     
     /**
      * 
      */
-    constructor(address _privateTransferVerifier)
+    constructor(address _privateTransferVerifier1In, address _privateTransferVerifier4In)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
     {
-        privateTransferVerifier = _privateTransferVerifier;
+        privateTransferVerifier1In = _privateTransferVerifier1In;
+        privateTransferVerifier4In = _privateTransferVerifier4In;
     }
  
     function _getMessageWithEthPrefix(bytes32 message) public pure returns(bytes memory){
@@ -102,13 +104,13 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         return hashPoseidon2T3(input);
     }
 
-    function _insertInMerkleTree(uint256 leaf) override internal {
+    function _insertInMerkleTree(uint256 leaf) internal {
         leanIMTPoseidon2.insert(tree, leaf);
         emit NewLeaf(leaf);
         roots[leanIMTPoseidon2.root(tree)] = true;
     }
 
-    function _insertManyInMerkleTree(uint256[] memory leafs) internal {
+    function _insertManyInMerkleTree(uint256[] memory leafs) override internal {
         leanIMTPoseidon2.insertMany(tree, leafs);
         for (uint i = 0; i < leafs.length; i++) {
             emit NewLeaf(leafs[i]);
@@ -140,25 +142,28 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         }
     }
 
-    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256 _accountNoteHash) override internal {        
+    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _accountNoteHashes) override internal {        
         // check if account == tx.origin since in that case it's not a private address.
         // and we only need to insert _accountNoteHash
         // tx.origin is always a EOA
         if (tx.origin == _to ) {
-            _insertInMerkleTree( _accountNoteHash);
+            _insertManyInMerkleTree( _accountNoteHashes);
         } else {
             uint256 accountBalanceLeaf = hashBalanceLeaf(_to, _newBalance);
 
             if (leanIMTPoseidon2.has(tree,accountBalanceLeaf)) {
                 // accountBalanceLeaf is already in there! so we only insert _accountNoteHash
                 // note: _accountNoteHash is always unique, remember it is poseidon(totalSpend,viewingKey,nonce)
-                _insertInMerkleTree( _accountNoteHash);
+                _insertManyInMerkleTree( _accountNoteHashes);
             } else {
-                uint256[] memory leafs = new uint256[](2);
+                uint256[] memory leafs = new uint256[](1+_accountNoteHashes.length);
                 leafs[0] = accountBalanceLeaf;
-                leafs[1] = _accountNoteHash;
+                for (uint i = 0; i < _accountNoteHashes.length; i++) {
+                    leafs[i+1] = _accountNoteHashes[i];
+                }
                 _insertManyInMerkleTree(leafs);
             }
+
 
         }
     }
@@ -180,22 +185,45 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     function _formatPublicInputs(
         uint256 _amount,
         bytes32 _signatureHash,
-        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-        uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256[] memory _accountNoteHashes,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
+        uint256[] memory _accountNoteNullifiers,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root
     ) public pure returns (bytes32[] memory) {
-        bytes32[] memory publicInputs = new bytes32[](36);
+        if (_accountNoteHashes.length == 1) {
+            bytes32[] memory publicInputs = new bytes32[](36);
 
-        publicInputs[0] = bytes32(_root);
-        publicInputs[1] = bytes32(uint256(_amount));
-        uint256 signatureHashOffset = 2;
-        for (uint256 i = 0; i < 32; i++) {
-            publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
+            publicInputs[0] = bytes32(_root);
+            publicInputs[1] = bytes32(uint256(_amount));
+            uint256 signatureHashOffset = 2;
+            for (uint256 i = 0; i < 32; i++) {
+                publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
+            }
+            publicInputs[34] = bytes32(_accountNoteHashes[0]);
+            publicInputs[35] = bytes32(_accountNoteNullifiers[0]);
+
+            return publicInputs;
+
+        } else {
+            bytes32[] memory publicInputs = new bytes32[](42);
+
+            publicInputs[0] = bytes32(_root);
+            publicInputs[1] = bytes32(uint256(_amount));
+            uint256 signatureHashOffset = 2;
+            for (uint256 i = 0; i < 32; i++) {
+                publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
+            }
+            publicInputs[34] = bytes32(_accountNoteHashes[0]);
+            publicInputs[35] = bytes32(_accountNoteHashes[1]);
+            publicInputs[36] = bytes32(_accountNoteHashes[2]);
+            publicInputs[37] = bytes32(_accountNoteHashes[3]);
+            publicInputs[38] = bytes32(_accountNoteNullifiers[0]);
+            publicInputs[39] = bytes32(_accountNoteNullifiers[1]);
+            publicInputs[40] = bytes32(_accountNoteNullifiers[2]);
+            publicInputs[41] = bytes32(_accountNoteNullifiers[3]);
+
+            return publicInputs;
         }
-        publicInputs[34] = bytes32(_accountNoteHash);
-        publicInputs[35] = bytes32(_accountNoteNullifier);
 
-        return publicInputs;
     }
 
     function _calculateFees(FeeData calldata _feeData, uint256 _amount) private view returns(uint256, uint256) {
@@ -210,23 +238,30 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _amount,
         address _to,
         FeeData calldata _feeData,
-        uint256 _accountNoteHash,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-        uint256 _accountNoteNullifier,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
+        uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256[] memory _claimedAmounts,            //TODO this should not be public and should be encrypted instead. Can be unconstrained since it's only for syncing, also circuit should commit to these values otherwise relayer can mess with it or maybe we can commit to it in the signatureHash
         uint256 _root,
         bytes calldata _snarkProof
     ) public {
-        require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
+        for (uint256 i = 0; i < _accountNoteNullifiers.length; i++) {
+            uint256 _accountNoteNullifier = _accountNoteNullifiers[i];
+            uint256 _amountClaimed = _claimedAmounts[i];
+            //require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
+            // +1 to protect nullifier logic on txs where amount is 0
+            nullifiers[_accountNoteNullifier] = _amountClaimed + 1;
+            emit PrivateTransfer(_accountNoteNullifier, _amountClaimed); 
+        }
+        
         require(roots[_root], "invalid root");
         require(_feeData.maxFee <= _amount, "maxFee is larger than the amount send");
-        // +1 to protect nullifier logic on txs where amount is 0
-        nullifiers[_accountNoteNullifier] = _amount +1;
+
         bytes32 signatureHash = _hashSignatureInputs(_to, _amount, _feeData);
     
         if (_feeData.relayerAddress == address(0)) {
             //-- self relay --
             // inserts _accountNoteHash into the merkle tree as well
-            _privateReMint(_to, _amount, _accountNoteHash);
-            emit PrivateTransfer(_accountNoteNullifier, _amount);
+            _privateReMint(_to, _amount, _accountNoteHashes);
         } else {
             //-- use relayer --
             address rewardRecipient = _feeData.relayerAddress;
@@ -236,15 +271,21 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
             }
             (uint256 _relayerReward,uint256 _recipientAmount) = _calculateFees(_feeData, _amount);
              // inserts _accountNoteHash into the merkle tree as well
-            _privateReMint(_to, _recipientAmount, _accountNoteHash);
+            _privateReMint(_to, _recipientAmount, _accountNoteHashes);
             // @note this can cause a separate insert here that could be more efficient with insert many. But in most cases tx.origin == relayerAddress so not worth to optimize this.
             _update(address(0), _feeData.relayerAddress, _relayerReward);
-            emit PrivateTransfer(_accountNoteNullifier, _amount);
         }
 
-        bytes32[] memory publicInputs = _formatPublicInputs(_amount, signatureHash, _accountNoteHash, _accountNoteNullifier, _root);
-        if (!IVerifier(privateTransferVerifier).verify(_snarkProof, publicInputs)) {
-            revert VerificationFailed();
+        bytes32[] memory publicInputs = _formatPublicInputs(_amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers, _root);
+        if (_accountNoteNullifiers.length == 1) {
+            if (!IVerifier(privateTransferVerifier1In).verify(_snarkProof, publicInputs)) {
+                revert VerificationFailed();
+            }
+        } else {
+            if (!IVerifier(privateTransferVerifier4In).verify(_snarkProof, publicInputs)) {
+                revert VerificationFailed();
+            }
         }
+
     }
 }

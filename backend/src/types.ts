@@ -3,7 +3,7 @@ import { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/art
 import { SignMessageReturnType } from "viem/accounts";
 import { InputMap } from "@noir-lang/noir_js";
 import { ProofData } from "@aztec/bb.js";
-import { UnformattedProofInputsPublic } from "./proofInputsTypes.js";
+import { FeeData, FormattedBurnAddressProofDataPublic, UnformattedProofInputsPublic } from "./proofInputsTypes.js";
 
 export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Required<{ public?: PublicClient; wallet?: WalletClient; }>>
 
@@ -33,8 +33,10 @@ export interface UnformattedPublicProofInputsHex {
  
 
 export interface RelayerInputs {
-    pubInputs: UnformattedProofInputsPublic;
+    pubInputs: FormattedBurnAddressProofDataPublic[];
+    feeData:FeeData
     zkProof: ProofData;
+    claimedAmounts: bigint[]
 }
 
 export interface RelayerInputsHex {

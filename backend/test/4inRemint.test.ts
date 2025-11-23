@@ -9,7 +9,7 @@ import { padHex, Hash, recoverPublicKey, toHex, Hex, hashMessage, toPrefixedMess
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 
 import { getPrivateAccount, hashPow } from "../src/hashing.js";
-import { POW_DIFFICULTY, EMPTY_FEE_DATA, WormholeTokenContractName, PrivateTransfer1InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName } from "../src/constants.js";
+import { POW_DIFFICULTY, EMPTY_FEE_DATA, WormholeTokenContractName, PrivateTransfer1InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName, PrivateTransfer4InVerifierContractName } from "../src/constants.js";
 import { getTree, syncPrivateWallet } from "../src/syncing.js";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { formatProofInputs, generateProof, getBackend, getUnformattedProofInputs, verifyProof } from "../src/proving.js";
@@ -32,7 +32,8 @@ describe("Token", async function () {
     const { viem } = await network.connect();
     const publicClient = await viem.getPublicClient();
     let wormholeToken: ContractReturnType<typeof WormholeTokenContractName>;
-    let PrivateTransferVerifier: ContractReturnType<typeof PrivateTransfer1InVerifierContractName>;
+    let PrivateTransferVerifier1In: ContractReturnType<typeof PrivateTransfer1InVerifierContractName>;
+    let PrivateTransferVerifier4In: ContractReturnType<typeof PrivateTransfer4InVerifierContractName>;
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
     const circuitBackend = await getBackend(1,provingThreads);
     const [deployer, alice, bob, carol, relayer, feeEstimator] = await viem.getWalletClients()
@@ -45,9 +46,10 @@ describe("Token", async function () {
         await deployPoseidon2Huff(publicClient, deployer, poseidon2Create2Salt)
         leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [], { libraries: {} });
         const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName, [], { libraries: {} });
-        PrivateTransferVerifier = await viem.deployContract(PrivateTransfer1InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
+        PrivateTransferVerifier1In = await viem.deployContract(PrivateTransfer1InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
+        PrivateTransferVerifier4In = await viem.deployContract(PrivateTransfer4InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
         //PrivateTransferVerifier = await viem.deployContract(PrivateTransferVerifierContractName, [], { client: { wallet: deployer }, libraries: { } });
-        wormholeToken = await viem.deployContract(WormholeTokenContractName, [PrivateTransferVerifier.address], { client: { wallet: deployer }, libraries: { leanIMTPoseidon2: leanIMTPoseidon2.address } },);
+        wormholeToken = await viem.deployContract(WormholeTokenContractName, [PrivateTransferVerifier1In.address, PrivateTransferVerifier4In.address], { client: { wallet: deployer }, libraries: { leanIMTPoseidon2: leanIMTPoseidon2.address } },);
 
         const sharedSecret = 0n
         feeEstimatorPrivate = await getPrivateAccount({ wallet: feeEstimator, sharedSecret })

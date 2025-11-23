@@ -5,25 +5,27 @@ import { EMPTY_FEE_DATA } from "./constants.js";
 import { formatProofInputs, generateProof, getUnformattedProofInputs } from "./proving.js";
 import { ProofData, UltraHonkBackend } from "@aztec/bb.js";
 import { syncPrivateWallet } from "./syncing.js";
-import { UnformattedProofInputsPublic } from "./proofInputsTypes.js";
+import { FeeData, FormattedBurnAddressProofDataPublic, UnformattedProofInputsPublic } from "./proofInputsTypes.js";
+import { toBigInt } from "@aztec/aztec.js";
 //import { noir_test_main_self_relay } from "./noirtests.js";
 
-export function getTransactionInputs({ pubProofInputs, zkProof }: { zkProof: ProofData, pubProofInputs: UnformattedProofInputsPublic }) {
+export function getTransactionInputs({ pubProofInputs, zkProof,claimedAmounts, unformattedFeeData,unformattedPubInputs }: {unformattedPubInputs:UnformattedProofInputsPublic, unformattedFeeData:FeeData,zkProof: ProofData, pubProofInputs: FormattedBurnAddressProofDataPublic[],claimedAmounts:bigint[] }) {
     const feeData = {
-        relayerAddress: getAddress(pubProofInputs.feeData.relayerAddress),
-        priorityFee: BigInt(pubProofInputs.feeData.priorityFee),
-        conversionRate: BigInt(pubProofInputs.feeData.conversionRate),
-        maxFee: BigInt(pubProofInputs.feeData.maxFee),
-        feeToken: getAddress(pubProofInputs.feeData.feeToken)
+        relayerAddress: getAddress(unformattedFeeData.relayerAddress),
+        priorityFee: BigInt(unformattedFeeData.priorityFee),
+        conversionRate: BigInt(unformattedFeeData.conversionRate),
+        maxFee: BigInt(unformattedFeeData.maxFee),
+        feeToken: getAddress(unformattedFeeData.feeToken)
     };
 
-    const inputs: [bigint, Hex, typeof feeData, bigint, bigint, bigint, Hex] = [
-        BigInt(pubProofInputs.amount),
-        getAddress(pubProofInputs.recipient_address),
+    const inputs: [bigint, Hex, typeof feeData, bigint[], bigint[],bigint[], bigint, Hex] = [
+        BigInt(unformattedPubInputs.amount),
+        getAddress(unformattedPubInputs.recipient_address),
         feeData,
-        BigInt(pubProofInputs.burn_address_public_proof_data[0].account_note_hash),
-        BigInt(pubProofInputs.burn_address_public_proof_data[0].account_note_nullifier),
-        BigInt(pubProofInputs.root),
+        (pubProofInputs.burn_address_public_proof_data.map((v)=>BigInt(v.account_note_hash))),
+        (pubProofInputs.burn_address_public_proof_data.map((v)=>BigInt(v.account_note_nullifier))),
+        claimedAmounts,
+        BigInt(unformattedPubInputs.root),
         toHex(zkProof.proof) as Hex
     ]
     return inputs
@@ -75,36 +77,40 @@ export async function createRelayerInputs(
     //console.log("formattedProofInputs",formattedProofInputs)
     console.log({circuitSize})
     const zkProof = await generateProof({ proofInputs: formattedProofInputs, backend, circuitSize })
-    const relayerInputs = {
-        pubInputs: unformattedProofInputs.publicInputs,
-        zkProof: zkProof
+    const relayerInputs:RelayerInputs = {
+        pubInputs: formattedProofInputs.burn_address_public_proof_data,
+        feeData: unformattedProofInputs.publicInputs.feeData,
+        zkProof: zkProof,
+        claimedAmounts:amountsToClaim
+
     }
-    return relayerInputs as RelayerInputs
+    return relayerInputs
 }
 
 export async function relayTx({ relayerInputs, ethWallet, publicClient, wormholeToken }: { relayerInputs: RelayerInputs, ethWallet: WalletClient, publicClient: PublicClient, wormholeToken: WormholeToken | WormholeTokenTest }) {
     // set relayer address and check it
-    let relayerAddress = relayerInputs.pubInputs.feeData.relayerAddress;
+    let relayerAddress = relayerInputs.feeData.relayerAddress;
     const walletAddress = ethWallet.account?.address as Address//(await ethWallet.getAddresses())[0]
     relayerAddress = relayerAddress === zeroAddress ? walletAddress : relayerAddress
     if (relayerAddress !== walletAddress) {
-        throw new Error(`you are not the relayer. You are: ${walletAddress} but the relayer is: ${relayerInputs.pubInputs.feeData.relayerAddress}`)
+        throw new Error(`you are not the relayer. You are: ${walletAddress} but the relayer is: ${relayerInputs.feeData.relayerAddress}`)
     }
 
     const wormholeTokenRelayer = getContract({ client: { public: publicClient, wallet: ethWallet }, abi: wormholeToken.abi, address: wormholeToken.address });
-    const transactionInputs = getTransactionInputs({ pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof })
+    const transactionInputs = getTransactionInputs({feeData:relayerInputs.feeData, pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof, claimedAmounts:relayerInputs.claimedAmounts })
     //console.log({transactionInputs})
-    const formattedProofInputsOnChain = await wormholeToken.read._formatPublicInputs([
-        relayerInputs.pubInputs.amount,
-        toHex(relayerInputs.pubInputs.signature_hash),
-        relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_hash,  
-        relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_nullifier,
-        relayerInputs.pubInputs.root
-    ])
+    // const formattedProofInputsOnChain = await wormholeToken.read._formatPublicInputs([
+    //     relayerInputs.pubInputs.amount,
+    //     toHex(relayerInputs.pubInputs.signature_hash),
+    //     relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_hash,  
+    //     relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_nullifier,
+    //     relayerInputs.pubInputs.root
+    // ])
     // console.log({
     //     formattedProofInputsOnChain,
     //     bbjsPubInputs______________: relayerInputs.zkProof.publicInputs
     // })
+    console.log({transactionInputs})
     return await wormholeTokenRelayer.write.privateTransfer(transactionInputs, { account: ethWallet.account?.address as Address, chain: publicClient.chain })
 }
 
