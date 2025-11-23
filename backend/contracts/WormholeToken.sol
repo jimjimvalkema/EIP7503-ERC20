@@ -186,14 +186,14 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     ) public pure returns (bytes32[] memory) {
         bytes32[] memory publicInputs = new bytes32[](36);
 
-        publicInputs[0] = bytes32(uint256(_amount));
-        uint256 signatureHashOffset = 1;
+        publicInputs[0] = bytes32(_root);
+        publicInputs[1] = bytes32(uint256(_amount));
+        uint256 signatureHashOffset = 2;
         for (uint256 i = 0; i < 32; i++) {
             publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
         }
-        publicInputs[33] = bytes32(_accountNoteHash);
-        publicInputs[34] = bytes32(_accountNoteNullifier);
-        publicInputs[35] = bytes32(_root);
+        publicInputs[34] = bytes32(_accountNoteHash);
+        publicInputs[35] = bytes32(_accountNoteNullifier);
 
         return publicInputs;
     }

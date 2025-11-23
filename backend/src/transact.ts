@@ -66,6 +66,7 @@ export async function createRelayerInputs(
         }
     })
     const formattedProofInputs = formatProofInputs(unformattedProofInputs)
+    //console.log("formattedProofInputs",formattedProofInputs)
     const zkProof = await generateProof({ proofInputs: formattedProofInputs, backend })
     const relayerInputs = {
         pubInputs: unformattedProofInputs.publicInputs,
@@ -85,6 +86,18 @@ export async function relayTx({ relayerInputs, ethWallet, publicClient, wormhole
 
     const wormholeTokenRelayer = getContract({ client: { public: publicClient, wallet: ethWallet }, abi: wormholeToken.abi, address: wormholeToken.address });
     const transactionInputs = getTransactionInputs({ pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof })
+    //console.log({transactionInputs})
+    const formattedProofInputsOnChain = await wormholeToken.read._formatPublicInputs([
+        relayerInputs.pubInputs.amount,
+        toHex(relayerInputs.pubInputs.signature_hash),
+        relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_hash,  
+        relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_nullifier,
+        relayerInputs.pubInputs.root
+    ])
+    // console.log({
+    //     formattedProofInputsOnChain,
+    //     bbjsPubInputs______________: relayerInputs.zkProof.publicInputs
+    // })
     return await wormholeTokenRelayer.write.privateTransfer(transactionInputs, { account: ethWallet.account?.address as Address, chain: publicClient.chain })
 }
 

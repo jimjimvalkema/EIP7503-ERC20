@@ -2,41 +2,6 @@ import { InputMap } from "@noir-lang/noir_js";
 import { Address, Hex, SignMessageReturnType } from "viem";
 import { MAX_TREE_DEPTH } from "./constants.js"
 
-export interface UnFormattedSignatureData {
-    publicKeyX: Hex,
-    publicKeyY: Hex,
-    signature: SignMessageReturnType
-}
-
-export interface UnFormattedBurnAddressProofDataPublic {
-    amount: bigint,
-    account_note_hash: bigint,
-    account_note_nullifier: bigint,
-
-}
-
-export interface UnFormattedMerkleData {
-    depth: bigint,
-    indices: bigint[],                          // [u8;40]
-    siblings: bigint[],                         // [u8;40]
-}
-
-export interface UnFormattedBurnAddressProofDataPrivate {
-    total_received: bigint,
-    prev_total_spent: bigint,
-    prev_account_nonce: bigint,
-    prev_account_note_merkle: UnFormattedMerkleData,
-    total_received_merkle: UnFormattedMerkleData,
-
-}
-
-export interface FeeData {
-    relayerAddress: Address,
-    priorityFee: bigint,
-    conversionRate: bigint,
-    maxFee: bigint,
-    feeToken: Address,
-}
 
 export interface UnformattedProofInputsPublic {
     root: bigint,
@@ -52,6 +17,42 @@ export interface UnformattedProofInputsPrivate {
     shared_secret: bigint,
     viewing_key: bigint,
     burn_address_private_proof_data: UnFormattedBurnAddressProofDataPrivate[],
+}
+
+export interface UnFormattedBurnAddressProofDataPublic {
+    account_note_hash: bigint,
+    account_note_nullifier: bigint,
+
+}
+export interface UnFormattedBurnAddressProofDataPrivate {
+    total_received: bigint,
+    prev_total_spent: bigint,
+    prev_account_nonce: bigint,
+    prev_account_note_merkle: UnFormattedMerkleData,
+    total_received_merkle: UnFormattedMerkleData,
+    amount: bigint,
+}
+
+export interface UnFormattedSignatureData {
+    publicKeyX: Hex,
+    publicKeyY: Hex,
+    signature: SignMessageReturnType
+}
+
+export interface UnFormattedMerkleData {
+    depth: bigint,
+    indices: bigint[],                          // [u8;40]
+    siblings: bigint[],                         // [u8;40]
+}
+
+
+
+export interface FeeData {
+    relayerAddress: Address,
+    priorityFee: bigint,
+    conversionRate: bigint,
+    maxFee: bigint,
+    feeToken: Address,
 }
 
 export interface UnformattedProofInputs {
@@ -73,7 +74,6 @@ export interface FormattedProofInputs extends InputMap {
 }
 
 export interface FormattedBurnAddressProofDataPublic extends InputMap {
-    amount: Hex,
     account_note_hash: Hex,
     account_note_nullifier: Hex,
 }
@@ -96,5 +96,6 @@ export interface FormattedBurnAddressProofDataPrivate extends InputMap {
     prev_account_nonce: Hex,
     prev_account_note_merkle: FormattedMerkleData,
     total_received_merkle: FormattedMerkleData,
+    amount: Hex
 }
 //----------------------------

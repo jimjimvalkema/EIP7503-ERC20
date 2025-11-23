@@ -88,7 +88,6 @@ pub struct MerkleData {
 
 
 pub struct BurnAddressPublicProofData {
-    amount: Field,
     account_note_hash: Field,       
     account_note_nullifier: Field,                   
 }
@@ -100,6 +99,7 @@ pub struct BurnAddressPrivateProofData {
     prev_account_nonce: Field,               
     prev_account_note_merkle: MerkleData,
     total_received_merkle: MerkleData,
+    amount: Field
 }
 
 pub fn spendFromBurnAddresses(
@@ -112,14 +112,14 @@ pub fn spendFromBurnAddresses(
     viewing_key: Field,
     burn_address_private_proof_data: [BurnAddressPrivateProofData],
 ) {
-    let mut total_spend = 0;
+    let mut total_spend: Field = 0;
     for i in 0..burn_address_private_proof_data.len() {
-        let public_data = burn_address_public_proof_data[i];
-        let private_data = burn_address_private_proof_data[i];
+        let public_data: BurnAddressPublicProofData = burn_address_public_proof_data[i];
+        let private_data: BurnAddressPrivateProofData = burn_address_private_proof_data[i];
         spendFromBurnAddress(
             //public
             root,
-            public_data.amount,
+            private_data.amount,
             public_data.account_note_hash,
             public_data.account_note_nullifier,
 
@@ -135,7 +135,7 @@ pub fn spendFromBurnAddresses(
             private_data.total_received_merkle,
         );
 
-        total_spend = total_spend + public_data.amount;
+        total_spend = total_spend + private_data.amount;
     }
 
     assert(total_spend == amount, "aggregated burn address amounts do not match target amount");

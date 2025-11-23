@@ -15,7 +15,6 @@ export function formatProofInputs({ publicInputs, privateInputs }: UnformattedPr
     const burnAddressPublicProofDataFormatted: FormattedBurnAddressProofDataPublic[] = publicInputs.burn_address_public_proof_data.map(
         (inputs) => {
             return {
-                amount: toHex(inputs.amount),
                 account_note_hash: toHex(inputs.account_note_hash),
                 account_note_nullifier: toHex(inputs.account_note_nullifier),
             }
@@ -37,6 +36,7 @@ export function formatProofInputs({ publicInputs, privateInputs }: UnformattedPr
                     indices: padArray({ arr: inputs.total_received_merkle.indices, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
                     depth: toHex(inputs.total_received_merkle.depth),
                 },
+                amount: toHex(inputs.amount),
             }
         }
     );
@@ -140,8 +140,7 @@ export function getPubInputs(
         feeData: feeData,
         // @TODO @jimjim dude this should make multiple if more then one address is use
         burn_address_public_proof_data: [{
-            // @TODO @jimjim also programmatically select which amount to use
-            amount: amountToReMint,
+            // @TODO @jimjim also programmatically select which amount to use,
             account_note_hash: accountNoteHash,
             account_note_nullifier: accountNoteNullifier,
         }],
@@ -151,16 +150,18 @@ export function getPubInputs(
 }
 
 export function getPrivInputs(
-    { signatureData, syncedPrivateWallet, prevAccountNonce, prevTotalSpent, totalReceived, prevAccountNoteMerkle, totalReceivedMerkle }:
-        { signatureData: SignatureData, amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint, prevAccountNoteMerkle: UnFormattedMerkleData, totalReceivedMerkle: UnFormattedMerkleData }) {
+    {amountToReMint, signatureData, syncedPrivateWallet, prevAccountNonce, prevTotalSpent, totalReceived, prevAccountNoteMerkle, totalReceivedMerkle }:
+        {signatureData: SignatureData, amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint, prevAccountNoteMerkle: UnFormattedMerkleData, totalReceivedMerkle: UnFormattedMerkleData }) {
     const privInputs: UnformattedProofInputsPrivate = {
-         // @TODO @jimjim dude this should make multiple if more then one address is use
-        burn_address_private_proof_data:[{
+        // @TODO @jimjim dude this should make multiple if more then one address is use
+        burn_address_private_proof_data: [{
             total_received: totalReceived,
             prev_total_spent: prevTotalSpent,
             prev_account_nonce: prevAccountNonce,
             prev_account_note_merkle: prevAccountNoteMerkle,
             total_received_merkle: totalReceivedMerkle,
+            // @jimjim @TODO here amount is the same as the amount that the user will re-mint, this will not be the case when spending more than 1
+            amount: amountToReMint
         }],
         shared_secret: syncedPrivateWallet.sharedSecret,
         viewing_key: syncedPrivateWallet.viewingKey,
@@ -212,7 +213,7 @@ export async function getUnformattedProofInputs(
         prevTotalSpent: prevTotalSpent,
         totalReceived: totalReceived,
         prevAccountNoteMerkle: prevAccountNoteMerkle,
-        totalReceivedMerkle: totalReceivedMerkle
+        totalReceivedMerkle: totalReceivedMerkle,
     })
 
     const unformattedProofInputs: UnformattedProofInputs = { publicInputs, privateInputs }
