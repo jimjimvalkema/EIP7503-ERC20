@@ -6,7 +6,7 @@ pragma solidity ^0.8.3;
 import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol"; 
 import {LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.sol";
 import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
-import {IVerifier} from "./PrivateTransferVerifier.sol";
+import {IVerifier} from "./privateTransfer1InVerifier.sol";
 
 struct FeeData {
     // relayerAddress = 0 <= self relay, relayerAddress = 1 <= msg.sender will relay, all other will send it to that address like expected

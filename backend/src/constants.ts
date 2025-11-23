@@ -1,11 +1,12 @@
 import { getAddress, padHex } from "viem";
-import { FeeData, RelayerInputs, RelayerInputsHex } from "./types.js";
+import { RelayerInputs, RelayerInputsHex } from "./types.js";
 import feeEstimatorRelayerData from "./feeEstimatorRelayerData.json"
-import { convertRelayerInputsToHex } from "./transact.js";
+//import { convertRelayerInputsToHex } from "./transact.js";
+import { FeeData } from "./proofInputsTypes.js";
 
 export const WormholeTokenContractName = "WormholeToken"
 export const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
-export const PrivateTransferVerifierContractName = "PrivateTransferVerifier"
+export const PrivateTransfer1InVerifierContractName = "privateTransfer1InVerifier"
 export const ZKTranscriptLibContractName = "ZKTranscriptLib"
 
 export const TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414Cn; // UTF8("total_received").toHex()
@@ -15,7 +16,7 @@ export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034
 export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
 export const POW_LEADING_ZEROS = 3n;
 export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
-export const MAX_TREE_DEPTH = 40;
+export const MAX_TREE_DEPTH = 40 as const;
 
 export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
     11155111:9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a

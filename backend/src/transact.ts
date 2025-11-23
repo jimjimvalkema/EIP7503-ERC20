@@ -1,13 +1,14 @@
 import { Address, getAddress, getContract, Hex, PublicClient, toBytes, toHex, WalletClient, zeroAddress } from "viem";
 import { WormholeTokenTest } from "../test/Token.test.js";
-import { RelayerInputs, RelayerInputsHex, SyncedPrivateWallet, UnformattedPublicProofInputs, UnsyncedPrivateWallet, WormholeToken } from "./types.js";
+import { RelayerInputs, RelayerInputsHex, SyncedPrivateWallet, UnsyncedPrivateWallet, WormholeToken } from "./types.js";
 import { EMPTY_FEE_DATA } from "./constants.js";
 import { formatProofInputs, generateProof, getUnformattedProofInputs } from "./proving.js";
 import { ProofData, UltraHonkBackend } from "@aztec/bb.js";
 import { syncPrivateWallet } from "./syncing.js";
+import { UnformattedProofInputsPublic } from "./proofInputsTypes.js";
 //import { noir_test_main_self_relay } from "./noirtests.js";
 
-export function getTransactionInputs({ pubProofInputs, zkProof }: { zkProof: ProofData, pubProofInputs: UnformattedPublicProofInputs }) {
+export function getTransactionInputs({ pubProofInputs, zkProof }: { zkProof: ProofData, pubProofInputs: UnformattedProofInputsPublic }) {
     const feeData = {
         relayerAddress: getAddress(pubProofInputs.feeData.relayerAddress),
         priorityFee: BigInt(pubProofInputs.feeData.priorityFee),
@@ -18,10 +19,10 @@ export function getTransactionInputs({ pubProofInputs, zkProof }: { zkProof: Pro
 
     const inputs: [bigint, Hex, typeof feeData, bigint, bigint, bigint, Hex] = [
         BigInt(pubProofInputs.amount),
-        getAddress(pubProofInputs.recipientAddress),
+        getAddress(pubProofInputs.recipient_address),
         feeData,
-        BigInt(pubProofInputs.accountNoteHash),
-        BigInt(pubProofInputs.accountNoteNullifier),
+        BigInt(pubProofInputs.burn_address_public_proof_data[0].account_note_hash),
+        BigInt(pubProofInputs.burn_address_public_proof_data[0].account_note_nullifier),
         BigInt(pubProofInputs.root),
         toHex(zkProof.proof) as Hex
     ]
@@ -67,7 +68,7 @@ export async function createRelayerInputs(
     const formattedProofInputs = formatProofInputs(unformattedProofInputs)
     const zkProof = await generateProof({ proofInputs: formattedProofInputs, backend })
     const relayerInputs = {
-        pubInputs: unformattedProofInputs.pubInputs,
+        pubInputs: unformattedProofInputs.publicInputs,
         zkProof: zkProof
     }
     return relayerInputs as RelayerInputs
@@ -98,53 +99,53 @@ export async function proofAndSelfRelay(
     return await relayTx({ relayerInputs, ethWallet, publicClient, wormholeToken })
 }
 
-export function convertRelayerInputsFromHex(relayerInputs:RelayerInputsHex):RelayerInputs {
-    return {
-        pubInputs:{
-                amount: BigInt(relayerInputs.pubInputs.amount),
-                signatureHash:BigInt(relayerInputs.pubInputs.signatureHash),
-                recipientAddress: getAddress(relayerInputs.pubInputs.recipientAddress),
-                feeData: {
-                    relayerAddress: getAddress(relayerInputs.pubInputs.feeData.relayerAddress),
-                    priorityFee: BigInt(relayerInputs.pubInputs.feeData.priorityFee),
-                    conversionRate: BigInt(relayerInputs.pubInputs.feeData.conversionRate),
-                    maxFee: BigInt(relayerInputs.pubInputs.feeData.maxFee),
-                    feeToken: getAddress(relayerInputs.pubInputs.feeData.feeToken),
-                },
-                accountNoteHash: BigInt(relayerInputs.pubInputs.accountNoteHash),
-                accountNoteNullifier: BigInt(relayerInputs.pubInputs.accountNoteNullifier),
-                root: BigInt(relayerInputs.pubInputs.root),
-        },
-        zkProof:{
-            proof: toBytes(relayerInputs.zkProof.proof),
-            publicInputs:relayerInputs.zkProof.publicInputs as string[]
-        }
-    }
-}
+// export function convertRelayerInputsFromHex(relayerInputs:RelayerInputsHex):RelayerInputs {
+//     return {
+//         pubInputs:{
+//                 amount: BigInt(relayerInputs.pubInputs.amount),
+//                 signatureHash:BigInt(relayerInputs.pubInputs.signatureHash),
+//                 recipientAddress: getAddress(relayerInputs.pubInputs.recipientAddress),
+//                 feeData: {
+//                     relayerAddress: getAddress(relayerInputs.pubInputs.feeData.relayerAddress),
+//                     priorityFee: BigInt(relayerInputs.pubInputs.feeData.priorityFee),
+//                     conversionRate: BigInt(relayerInputs.pubInputs.feeData.conversionRate),
+//                     maxFee: BigInt(relayerInputs.pubInputs.feeData.maxFee),
+//                     feeToken: getAddress(relayerInputs.pubInputs.feeData.feeToken),
+//                 },
+//                 accountNoteHash: BigInt(relayerInputs.pubInputs.accountNoteHash),
+//                 accountNoteNullifier: BigInt(relayerInputs.pubInputs.accountNoteNullifier),
+//                 root: BigInt(relayerInputs.pubInputs.root),
+//         },
+//         zkProof:{
+//             proof: toBytes(relayerInputs.zkProof.proof),
+//             publicInputs:relayerInputs.zkProof.publicInputs as string[]
+//         }
+//     }
+// }
 
-export function convertRelayerInputsToHex(relayerInputs:RelayerInputs):RelayerInputsHex {
-    return {
-        pubInputs:{
-                amount: toHex(relayerInputs.pubInputs.amount),
-                recipientAddress: getAddress(relayerInputs.pubInputs.recipientAddress),
-                signatureHash: toHex(relayerInputs.pubInputs.signatureHash),
-                feeData: {
-                    relayerAddress: getAddress(relayerInputs.pubInputs.feeData.relayerAddress),
-                    priorityFee: toHex(relayerInputs.pubInputs.feeData.priorityFee),
-                    conversionRate: toHex(relayerInputs.pubInputs.feeData.conversionRate),
-                    maxFee: toHex(relayerInputs.pubInputs.feeData.maxFee),
-                    feeToken: getAddress(relayerInputs.pubInputs.feeData.feeToken),
-                },
-                accountNoteHash: toHex(relayerInputs.pubInputs.accountNoteHash),
-                accountNoteNullifier: toHex(relayerInputs.pubInputs.accountNoteNullifier),
-                root: toHex(relayerInputs.pubInputs.root),
-        },
-        zkProof:{
-            proof: toHex(relayerInputs.zkProof.proof),
-            publicInputs:relayerInputs.zkProof.publicInputs as Hex[]
-        }
-    }
-}
+// export function convertRelayerInputsToHex(relayerInputs:RelayerInputs):RelayerInputsHex {
+//     return {
+//         pubInputs:{
+//                 amount: toHex(relayerInputs.pubInputs.amount),
+//                 recipientAddress: getAddress(relayerInputs.pubInputs.recipientAddress),
+//                 signatureHash: toHex(relayerInputs.pubInputs.signatureHash),
+//                 feeData: {
+//                     relayerAddress: getAddress(relayerInputs.pubInputs.feeData.relayerAddress),
+//                     priorityFee: toHex(relayerInputs.pubInputs.feeData.priorityFee),
+//                     conversionRate: toHex(relayerInputs.pubInputs.feeData.conversionRate),
+//                     maxFee: toHex(relayerInputs.pubInputs.feeData.maxFee),
+//                     feeToken: getAddress(relayerInputs.pubInputs.feeData.feeToken),
+//                 },
+//                 accountNoteHash: toHex(relayerInputs.pubInputs.accountNoteHash),
+//                 accountNoteNullifier: toHex(relayerInputs.pubInputs.accountNoteNullifier),
+//                 root: toHex(relayerInputs.pubInputs.root),
+//         },
+//         zkProof:{
+//             proof: toHex(relayerInputs.zkProof.proof),
+//             publicInputs:relayerInputs.zkProof.publicInputs as Hex[]
+//         }
+//     }
+// }
 
 
 // This requires that account from FEE_ESTIMATOR_DATA had funds at one point and had the same root existed
