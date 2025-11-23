@@ -1,5 +1,5 @@
 import { Address, getAddress, getContract, Hex, PublicClient, toBytes, toHex, WalletClient, zeroAddress } from "viem";
-import { WormholeTokenTest } from "../test/Token.test.js";
+import { WormholeTokenTest } from "../test/1inRemint.test.js";
 import { RelayerInputs, RelayerInputsHex, SyncedPrivateWallet, UnsyncedPrivateWallet, WormholeToken } from "./types.js";
 import { EMPTY_FEE_DATA } from "./constants.js";
 import { formatProofInputs, generateProof, getUnformattedProofInputs } from "./proving.js";
@@ -70,9 +70,11 @@ export async function createRelayerInputs(
             maxFee: feeData.maxFee,
         }
     })
-    const formattedProofInputs = formatProofInputs(unformattedProofInputs)
+    const {proofInputs:formattedProofInputs, circuitSize} = formatProofInputs(unformattedProofInputs)
+    console.log("formattedProofInputs", formattedProofInputs)
     //console.log("formattedProofInputs",formattedProofInputs)
-    const zkProof = await generateProof({ proofInputs: formattedProofInputs, backend })
+    console.log({circuitSize})
+    const zkProof = await generateProof({ proofInputs: formattedProofInputs, backend, circuitSize })
     const relayerInputs = {
         pubInputs: unformattedProofInputs.publicInputs,
         zkProof: zkProof

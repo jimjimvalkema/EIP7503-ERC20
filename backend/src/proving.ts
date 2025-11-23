@@ -3,44 +3,72 @@ import { SignatureData, SyncedPrivateWallet, WormholeToken } from "./types.js"
 import { MAX_TREE_DEPTH, EMPTY_FEE_DATA } from "./constants.js"
 import { hashAccountNote, hashNullifier, hashTotalReceivedLeaf, signPrivateTransfer } from "./hashing.js"
 import { LeanIMT } from "@zk-kit/lean-imt"
-import { WormholeTokenTest } from "../test/Token.test.js"
+import { WormholeTokenTest } from "../test/1inRemint.test.js"
 import { getTree } from "./syncing.js"
 import { ProofData, UltraHonkBackend } from '@aztec/bb.js';
 import { CompiledCircuit, InputMap, Noir } from "@noir-lang/noir_js"
 import privateTransfer1InCircuit from '../circuits/privateTransfer1In/target/privateTransfer1In.json';
+import privateTransfer41InCircuit from '../circuits/privateTransfer4In/target/privateTransfer4In.json';
+
 import { FeeData, FormattedBurnAddressProofDataPrivate, FormattedBurnAddressProofDataPublic, FormattedProofInputs, FormattedSignatureData, UnFormattedBurnAddressProofDataPrivate, UnFormattedBurnAddressProofDataPublic, UnFormattedMerkleData, UnformattedProofInputs, UnformattedProofInputsPrivate, UnformattedProofInputsPublic } from "./proofInputsTypes.js"
+import { Fr } from "@aztec/aztec.js"
 
 
 export function formatProofInputs({ publicInputs, privateInputs }: UnformattedProofInputs) {
-    const burnAddressPublicProofDataFormatted: FormattedBurnAddressProofDataPublic[] = publicInputs.burn_address_public_proof_data.map(
-        (inputs) => {
-            return {
-                account_note_hash: toHex(inputs.account_note_hash),
-                account_note_nullifier: toHex(inputs.account_note_nullifier),
-            }
+    const circuitSize = publicInputs.burn_address_public_proof_data.length > 1 ? 4 : 1 // we only have 2 circuits
+    const burnAddressPublicProofDataFormatted: FormattedBurnAddressProofDataPublic[] = []
+    const burnAddressPrivateProofDataFormatted: FormattedBurnAddressProofDataPrivate[] = []
+    for (let index = 0; index < circuitSize; index++) {
+        const publicBurnProof = publicInputs.burn_address_public_proof_data[index];
+        const privateBurnProof = privateInputs.burn_address_private_proof_data[index];
+
+        const publicProofData: FormattedBurnAddressProofDataPublic = publicBurnProof !== undefined ? {
+            account_note_hash: toHex(publicBurnProof.account_note_hash),
+            account_note_nullifier: toHex(publicBurnProof.account_note_nullifier),
+        } : {
+            account_note_hash: toHex(Fr.random().toBigInt()),
+            account_note_nullifier: toHex(Fr.random().toBigInt())
+
         }
-    )
-    const burnAddressPrivateProofDataFormatted: FormattedBurnAddressProofDataPrivate[] = privateInputs.burn_address_private_proof_data.map(
-        (inputs) => {
-            return {
-                total_received: toHex(inputs.total_received),
-                prev_total_spent: toHex(inputs.prev_total_spent),
-                prev_account_nonce: toHex(inputs.prev_account_nonce),
-                prev_account_note_merkle: {
-                    siblings: padArray({ arr: inputs.prev_account_note_merkle.siblings, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-                    indices: padArray({ arr: inputs.prev_account_note_merkle.indices, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-                    depth: toHex(inputs.prev_account_note_merkle.depth),
-                },
-                total_received_merkle: {
-                    siblings: padArray({ arr: inputs.total_received_merkle.siblings, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-                    indices: padArray({ arr: inputs.total_received_merkle.indices, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-                    depth: toHex(inputs.total_received_merkle.depth),
-                },
-                amount: toHex(inputs.amount),
-                shared_secret:toHex(inputs.shared_secret)
-            }
+
+        const privateProofData: FormattedBurnAddressProofDataPrivate = privateBurnProof !== undefined ? {
+            total_received: toHex(privateBurnProof.total_received),
+            prev_total_spent: toHex(privateBurnProof.prev_total_spent),
+            prev_account_nonce: toHex(privateBurnProof.prev_account_nonce),
+            prev_account_note_merkle: {
+                siblings: padArray({ arr: privateBurnProof.prev_account_note_merkle.siblings, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
+                indices: padArray({ arr: privateBurnProof.prev_account_note_merkle.indices, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
+                depth: toHex(privateBurnProof.prev_account_note_merkle.depth),
+            },
+            total_received_merkle: {
+                siblings: padArray({ arr: privateBurnProof.total_received_merkle.siblings, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
+                indices: padArray({ arr: privateBurnProof.total_received_merkle.indices, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
+                depth: toHex(privateBurnProof.total_received_merkle.depth),
+            },
+            amount: toHex(privateBurnProof.amount),
+            shared_secret: toHex(privateBurnProof.shared_secret)
+        } : { // @TODO move to constants
+            total_received: toHex(0n),
+            prev_total_spent: toHex(0n),
+            prev_account_nonce: toHex(0n),
+            prev_account_note_merkle: {
+                siblings: padArray({ arr: [0n], size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
+                indices: padArray({ arr: [0n], size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
+                depth: toHex(0n),
+            },
+            total_received_merkle: {
+                siblings: padArray({ arr: [0n], size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
+                indices: padArray({ arr: [0n], size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
+                depth: toHex(0n),
+            },
+            amount: toHex(0n),
+            shared_secret: toHex(0n)
         }
-    );
+
+        burnAddressPublicProofDataFormatted.push(publicProofData)
+        burnAddressPrivateProofDataFormatted.push(privateProofData)
+    }
+    console.log({burnAddressPublicProofDataFormatted})
     const SignatureDataFormatted: FormattedSignatureData = {
         public_key_x: padArray({ size: 32, dir: "left", arr: [...hexToBytes(privateInputs.signature_data.publicKeyX)].map((v) => toHex(v)) }),
         public_key_y: padArray({ size: 32, dir: "left", arr: [...hexToBytes(privateInputs.signature_data.publicKeyY, { size: 32 })].map((v) => toHex(v)) }),
@@ -56,7 +84,7 @@ export function formatProofInputs({ publicInputs, privateInputs }: UnformattedPr
         burn_address_private_proof_data: burnAddressPrivateProofDataFormatted,
         amount_burn_addresses: toHex(privateInputs.amount_burn_addresses)
     }
-    return proofInputs
+    return {proofInputs, circuitSize}
 }
 
 export function padArray<T>({ arr, size, value, dir }: { arr: T[], size: number, value?: T, dir?: "left" | "right" }): T[] {
@@ -138,17 +166,19 @@ export async function getMerkleProofs(
 }
 
 export function getPubInputs(
-    { amountToReMint, syncedPrivateWallets, root, signatureHash, recipient, feeData }:
-        { amountToReMint: bigint, syncedPrivateWallets: SyncedPrivateWallet[], root: bigint, signatureHash: bigint, recipient: Address, feeData?: FeeData }) {
+    { amountsToClaim,amountToReMint, syncedPrivateWallets, root, signatureHash, recipient, feeData }:
+        {amountsToClaim:bigint[], amountToReMint: bigint, syncedPrivateWallets: SyncedPrivateWallet[], root: bigint, signatureHash: bigint, recipient: Address, feeData?: FeeData }) {
     //console.log("inserting:",{ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
 
     ///-----------
     feeData = feeData ?? EMPTY_FEE_DATA
     const burn_address_public_proof_data: UnFormattedBurnAddressProofDataPublic[] = []
-    for (const privateWallet of syncedPrivateWallets) {
+    for (let index = 0; index < syncedPrivateWallets.length; index++) {
+        const privateWallet = syncedPrivateWallets[index];
+        const amountToClaim = amountsToClaim[index]
         const prevAccountNonce = privateWallet.accountNonce
         const prevTotalSpent = privateWallet.totalSpent
-        const totalSpent = prevTotalSpent + amountToReMint
+        const totalSpent = prevTotalSpent + amountToClaim
         const nextAccountNonce = prevAccountNonce + 1n
         const accountNoteHash = hashAccountNote({ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: privateWallet.viewingKey })
         const accountNoteNullifier = hashNullifier({ accountNonce: prevAccountNonce, viewingKey: privateWallet.viewingKey })
@@ -176,10 +206,10 @@ export function getPubInputs(
  * @returns 
  */
 export function getPrivInputs(
-    { amountToReMint, signatureData, syncedPrivateWallets,amountsToClaim, prevAccountNoteMerkleProofs, totalReceivedMerkleProofs }:
-        { signatureData: SignatureData, amountToReMint: bigint, amountsToClaim:bigint[], recipient: Address, syncedPrivateWallets: SyncedPrivateWallet[], prevAccountNoteMerkleProofs: UnFormattedMerkleData[], totalReceivedMerkleProofs: UnFormattedMerkleData[] }) {
+    { amountToReMint, signatureData, syncedPrivateWallets, amountsToClaim, prevAccountNoteMerkleProofs, totalReceivedMerkleProofs }:
+        { signatureData: SignatureData, amountToReMint: bigint, amountsToClaim: bigint[], recipient: Address, syncedPrivateWallets: SyncedPrivateWallet[], prevAccountNoteMerkleProofs: UnFormattedMerkleData[], totalReceivedMerkleProofs: UnFormattedMerkleData[] }) {
 
-    const burn_address_private_proof_data:UnFormattedBurnAddressProofDataPrivate[] = [];
+    const burn_address_private_proof_data: UnFormattedBurnAddressProofDataPrivate[] = [];
     for (let index = 0; index < syncedPrivateWallets.length; index++) {
         const privateWallet = syncedPrivateWallets[index];
         const prevAccountNoteMerkleProof = prevAccountNoteMerkleProofs[index];
@@ -198,7 +228,7 @@ export function getPrivInputs(
             prev_account_nonce: prevAccountNonce,
             prev_account_note_merkle: prevAccountNoteMerkleProof,
             total_received_merkle: totalReceivedMerkleProof,
-            amount: amountToClaim, 
+            amount: amountToClaim,
             shared_secret: privateWallet.sharedSecret,
         }
         burn_address_private_proof_data.push(privateBurnData)
@@ -208,21 +238,22 @@ export function getPrivInputs(
         // for now we assume they all use the same viewing key!
         viewing_key: syncedPrivateWallets[0].viewingKey,
         signature_data: signatureData,
-        amount_burn_addresses: toHex(syncedPrivateWallets.length)
+        amount_burn_addresses: BigInt(syncedPrivateWallets.length)
     }
+    console.log({len:syncedPrivateWallets.length, syncedPrivateWallets})
     return privInputs
 }
 
 export async function getUnformattedProofInputs(
-    { wormholeToken, privateWallets,amountsToClaim, publicClient, amountToReMint, recipient, feeData }:
-        { wormholeToken: WormholeToken | WormholeTokenTest, privateWallets: SyncedPrivateWallet[],amountsToClaim:bigint[], publicClient: PublicClient, recipient: Address, amountToReMint: bigint, feeData: FeeData }
+    { wormholeToken, privateWallets, amountsToClaim, publicClient, amountToReMint, recipient, feeData }:
+        { wormholeToken: WormholeToken | WormholeTokenTest, privateWallets: SyncedPrivateWallet[], amountsToClaim: bigint[], publicClient: PublicClient, recipient: Address, amountToReMint: bigint, feeData: FeeData }
 ) {
-    const { signatureData, signatureHash, poseidonHash, preImageOfKeccak } = await signPrivateTransfer({ 
-        recipientAddress: recipient, 
-        amount: amountToReMint, 
-        feeData: feeData, 
+    const { signatureData, signatureHash, poseidonHash, preImageOfKeccak } = await signPrivateTransfer({
+        recipientAddress: recipient,
+        amount: amountToReMint,
+        feeData: feeData,
         // all private wallets have the same viem wallet which is a eoa with the pubKey that is committed in `burnAddress=hash(pubKeyX,shared_secret,"ZKWORMHOLES")`
-        privateWallet:privateWallets[0] 
+        privateWallet: privateWallets[0]
     })
     const contractFormattedPreFix = await wormholeToken.read._getMessageWithEthPrefix([poseidonHash]);
     // console.log({
@@ -235,6 +266,7 @@ export async function getUnformattedProofInputs(
     })
 
     const publicInputs = getPubInputs({
+        amountsToClaim: amountsToClaim,
         amountToReMint: amountToReMint,
         signatureHash: signatureHash,
         recipient: recipient,
@@ -249,7 +281,7 @@ export async function getUnformattedProofInputs(
         syncedPrivateWallets: privateWallets,
         prevAccountNoteMerkleProofs: prevAccountNoteMerkleProofs,
         totalReceivedMerkleProofs: totalReceivedMerkleProofs,
-        amountsToClaim:amountsToClaim
+        amountsToClaim: amountsToClaim
     })
 
     const unformattedProofInputs: UnformattedProofInputs = { publicInputs, privateInputs }
@@ -265,24 +297,27 @@ export function getAvailableThreads() {
     }
 }
 
-export async function getBackend(threads?: number) {
+export async function getBackend(circuitSize:number, threads?: number) {
     console.log("initializing backend with circuit")
     threads = threads ?? getAvailableThreads()
     console.log({ threads })
-    return new UltraHonkBackend(privateTransfer1InCircuit.bytecode, { threads: threads }, { recursive: false });
+    const byteCode = circuitSize===1 ? privateTransfer1InCircuit.bytecode :  privateTransfer41InCircuit.bytecode
+    return new UltraHonkBackend(byteCode, { threads: threads }, { recursive: false });
 }
 
-export async function generateProof({ proofInputs, backend }: { proofInputs: FormattedProofInputs, backend?: UltraHonkBackend }) {
-    backend = backend ?? await getBackend()
+export async function generateProof({ proofInputs, backend, circuitSize }: { proofInputs: FormattedProofInputs, backend?: UltraHonkBackend , circuitSize:number}) {
+    backend = backend ?? await getBackend(circuitSize,undefined)
 
-    const noir = new Noir(privateTransfer1InCircuit as CompiledCircuit);
+    const circuitJson = circuitSize===1 ? privateTransfer1InCircuit : privateTransfer41InCircuit;
+    const noir = new Noir(circuitJson as CompiledCircuit);
     const { witness } = await noir.execute(proofInputs as InputMap);
     console.log("generating proof")
     const proof = await backend.generateProof(witness, { keccakZK: true });
+    console.log("finished proving")
     return proof
 }
 
-export async function verifyProof({ proof, backend }: { proof: ProofData, backend?: UltraHonkBackend }) {
-    backend = backend ?? await getBackend()
+export async function verifyProof({ proof, backend,circuitSize=1 }: { proof: ProofData, backend?: UltraHonkBackend, circuitSize?:number }) {
+    backend = backend ?? await getBackend(circuitSize,undefined)
     return await backend.verifyProof(proof, { keccakZK: true })
 }

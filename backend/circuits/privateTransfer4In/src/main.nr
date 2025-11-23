@@ -1,6 +1,6 @@
 use privateTransfer::{spendFromBurnAddresses, BurnAddressPublicProofData, BurnAddressPrivateProofData, SignatureData};
 
-global AMOUNT_BURN_ADDRESSES: u32 = 32; 
+global AMOUNT_BURN_ADDRESSES: u32 = 4; 
 fn main(
     //----- public inputs
     root: pub Field,

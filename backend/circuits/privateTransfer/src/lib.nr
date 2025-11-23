@@ -115,7 +115,7 @@ pub fn spendFromBurnAddresses(
 ) {
     let mut total_spend: Field = 0;
     for i in 0..burn_address_private_proof_data.len() {
-        if( i < amount_burn_addresses-1) {
+        if( i < amount_burn_addresses) {
             let public_data: BurnAddressPublicProofData = burn_address_public_proof_data[i];
             let private_data: BurnAddressPrivateProofData = burn_address_private_proof_data[i];
             spendFromBurnAddress(

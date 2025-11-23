@@ -1,7 +1,7 @@
 import { queryEventInChunks } from "@warptoad/gigabridge-js/viem-utils"
 import { LeanIMTHashFunction, LeanIMT } from "@zk-kit/lean-imt"
 import { PublicClient } from "viem"
-import { WormholeTokenTest } from "../test/Token.test.js"
+import { WormholeTokenTest } from "../test/1inRemint.test.js"
 import { WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.js"
 import { SyncedPrivateWallet, UnsyncedPrivateWallet, WormholeToken } from "./types.js"
 import { poseidon2Hash } from "@zkpassport/poseidon2"

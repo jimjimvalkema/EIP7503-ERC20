@@ -34,7 +34,7 @@ describe("Token", async function () {
     let wormholeToken: ContractReturnType<typeof WormholeTokenContractName>;
     let PrivateTransferVerifier: ContractReturnType<typeof PrivateTransfer1InVerifierContractName>;
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
-    const circuitBackend = await getBackend(provingThreads);
+        const circuitBackend = await getBackend(1,provingThreads);
     const [deployer, alice, bob, carol, relayer, feeEstimator] = await viem.getWalletClients()
     let feeEstimatorRelayerInputs: RelayerInputs;
     let feeEstimatorPrivate: UnsyncedPrivateWallet
@@ -126,8 +126,8 @@ describe("Token", async function () {
                 recipient: reMintRecipient,
                 feeData: EMPTY_FEE_DATA
             })
-            const formattedProofInputs = formatProofInputs(unFormattedProofInputs)
-            const proof = await generateProof({ proofInputs: formattedProofInputs, backend: circuitBackend })
+            const {proofInputs:formattedProofInputs, circuitSize} = formatProofInputs(unFormattedProofInputs)
+            const proof = await generateProof({ proofInputs: formattedProofInputs, backend: circuitBackend, circuitSize:circuitSize })
             const isValid = await verifyProof({ proof, backend: circuitBackend })
             assert(isValid, "proof invalid")
         })

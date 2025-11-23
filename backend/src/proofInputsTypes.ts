@@ -16,7 +16,7 @@ export interface UnformattedProofInputsPrivate {
     signature_data: UnFormattedSignatureData,
     viewing_key: bigint,
     burn_address_private_proof_data: UnFormattedBurnAddressProofDataPrivate[],
-    amount_burn_addresses: Hex,
+    amount_burn_addresses: bigint,
 }
 
 export interface UnFormattedBurnAddressProofDataPublic {
