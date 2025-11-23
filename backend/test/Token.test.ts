@@ -115,12 +115,14 @@ describe("Token", async function () {
 
             const amountToReMint = 69n
             const reMintRecipient = bob.account.address
+            const amountsToClaim = [amountToReMint]
 
             const unFormattedProofInputs = await getUnformattedProofInputs({
                 wormholeToken: wormholeToken,
-                privateWallet: carolPrivateSynced,
+                privateWallets: [carolPrivateSynced],
                 publicClient: publicClient,
                 amountToReMint: amountToReMint,
+                amountsToClaim: amountsToClaim,
                 recipient: reMintRecipient,
                 feeData: EMPTY_FEE_DATA
             })
@@ -143,13 +145,15 @@ describe("Token", async function () {
             const amountToReMint = 69n
             const reMintRecipient = bob.account.address
             //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
+            const amountsToClaim = [amountToReMint]
             const reMintTx1 = await proofAndSelfRelay({
                 wormholeToken: wormholeTokenAlice,
-                privateWallet: alicePrivate,
+                privateWallets: [alicePrivate],
                 publicClient,
                 amount: amountToReMint,
                 recipient: reMintRecipient,
-                backend: circuitBackend
+                backend: circuitBackend,
+                amountsToClaim:amountsToClaim
             })
 
             const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
@@ -175,13 +179,15 @@ describe("Token", async function () {
             const reMintRecipient = bob.account.address
             //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
             //console.log("1111111")
+            const amountsToClaim = [amountToReMint]
             const reMintTx1 = await proofAndSelfRelay({
                 wormholeToken: wormholeTokenAlice,
-                privateWallet: alicePrivate,
+                privateWallets: [alicePrivate],
                 publicClient,
                 amount: amountToReMint,
                 recipient: reMintRecipient,
-                backend: circuitBackend
+                backend: circuitBackend,
+                amountsToClaim:amountsToClaim
             })
 
             //console.log("222222222")
@@ -199,11 +205,12 @@ describe("Token", async function () {
             const realRoot = await wormholeToken.read.root()
             const reMintTx2 = await proofAndSelfRelay({
                 wormholeToken: wormholeTokenAlice,
-                privateWallet: alicePrivate,
+                privateWallets: [alicePrivate],
                 publicClient,
                 amount: amountToReMint,
                 recipient: reMintRecipient,
-                backend: circuitBackend
+                backend: circuitBackend,
+                amountsToClaim:amountsToClaim
             })
             balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
             assert.equal(balanceBobPublic, amountToReMint * 2n, "bob didn't receive the expected amount of re-minted tokens")
@@ -211,11 +218,12 @@ describe("Token", async function () {
             // one more time
             const reMintTx3 = await proofAndSelfRelay({
                 wormholeToken: wormholeTokenAlice,
-                privateWallet: alicePrivate,
+                privateWallets: [alicePrivate],
                 publicClient,
                 amount: amountToReMint,
                 recipient: reMintRecipient,
-                backend: circuitBackend
+                backend: circuitBackend,
+                amountsToClaim:amountsToClaim
             })
             balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
             assert.equal(balanceBobPublic, amountToReMint * 3n, "bob didn't receive the expected amount of re-minted tokens")

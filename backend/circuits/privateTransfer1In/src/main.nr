@@ -9,7 +9,6 @@ fn main(
     burn_address_public_proof_data: pub [BurnAddressPublicProofData; AMOUNT_BURN_ADDRESSES],
     // --- private inputs ---
     signature_data: SignatureData,      
-    shared_secret: Field,
     viewing_key: Field,
     burn_address_private_proof_data: [BurnAddressPrivateProofData; AMOUNT_BURN_ADDRESSES],
 ) {
@@ -32,7 +31,6 @@ fn main(
         burn_address_public_proof_data,
         //private
         pub_key_x_field,      
-        shared_secret,
         viewing_key,
         burn_address_private_proof_data,
     )

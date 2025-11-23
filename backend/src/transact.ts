@@ -35,9 +35,9 @@ export async function estimateGasUsed() {
 
 // TODO check if syncedPrivateWallet.accountNonce is not nullified, if it is resync the wallet!!!
 export async function createRelayerInputs(
-    { wormholeToken, privateWallet, publicClient, amount, recipient, feeData, backend }:
+    { wormholeToken, privateWallets,amountsToClaim, publicClient, amount, recipient, feeData, backend }:
         {
-            wormholeToken: WormholeToken | WormholeTokenTest, privateWallet: SyncedPrivateWallet | UnsyncedPrivateWallet, publicClient: PublicClient, recipient: Address, amount: bigint, feeData: {
+            wormholeToken: WormholeToken | WormholeTokenTest, privateWallets: SyncedPrivateWallet[] | UnsyncedPrivateWallet[],amountsToClaim:bigint[], publicClient: PublicClient, recipient: Address, amount: bigint, feeData: {
                 conversionRateInputs?: {
                     estimatedGasUsed: number,
                     relayerBonusFactor: number,
@@ -50,19 +50,24 @@ export async function createRelayerInputs(
         }
 ) {
     // checks if accountNonce is not already nullified, if it is it find the next nonce that isn't, and updates total amount spend
-    const syncedWallet = await syncPrivateWallet({ wormholeToken, privateWallet })
+    const syncedPrivateWallets:SyncedPrivateWallet[] = []
+    for (const privateWallet of privateWallets) {
+        const syncedWallet = await syncPrivateWallet({ wormholeToken, privateWallet })
+        syncedPrivateWallets.push(syncedWallet)
+        
+    }
     // if(feeData.conversionRateInputs && feeData.conversionRateInputs.estimatedGasUsed === undefined ) {
     //     feeData.conversionRateInputs.estimatedGasUsed = feeData.conversionRateInputs.estimatedGasUsed ?? Number(await estimateGasUsage({wormholeToken, wallet:privateWallet.viem.wallet}))
     // }
 
     const conversionRate = feeData.conversionRateInputs ? BigInt(Math.round(feeData.conversionRateInputs.estimatedGasUsed * feeData.conversionRateInputs.tokenPriceInEth * feeData.conversionRateInputs.relayerBonusFactor)) : 0n;
     const unformattedProofInputs = await getUnformattedProofInputs({
-        wormholeToken, privateWallet: syncedWallet, publicClient, amountToReMint: amount, recipient, feeData: {
+        wormholeToken, privateWallets: syncedPrivateWallets, amountsToClaim: amountsToClaim, publicClient, amountToReMint: amount, recipient, feeData: {
             relayerAddress: feeData.relayerAddress,
             priorityFee: feeData.priorityFee,
             conversionRate: conversionRate,
             feeToken: wormholeToken.address,
-            maxFee: feeData.maxFee 
+            maxFee: feeData.maxFee,
         }
     })
     const formattedProofInputs = formatProofInputs(unformattedProofInputs)
@@ -102,13 +107,15 @@ export async function relayTx({ relayerInputs, ethWallet, publicClient, wormhole
 }
 
 export async function proofAndSelfRelay(
-    { wormholeToken, privateWallet, publicClient, amount, recipient, backend }:
-        { wormholeToken: WormholeToken | WormholeTokenTest, privateWallet: SyncedPrivateWallet | UnsyncedPrivateWallet, publicClient: PublicClient, recipient: Address, amount: bigint, backend?: UltraHonkBackend }
+    { wormholeToken, privateWallets,amountsToClaim, publicClient, amount, recipient, backend }:
+        { wormholeToken: WormholeToken | WormholeTokenTest, privateWallets: SyncedPrivateWallet[] | UnsyncedPrivateWallet[],amountsToClaim:bigint[], publicClient: PublicClient, recipient: Address, amount: bigint, backend?: UltraHonkBackend }
 ) {
     const feeData = EMPTY_FEE_DATA;
     //feeData.feeToken = wormholeToken.address
-    const ethWallet = privateWallet.viem.wallet
-    const relayerInputs = await createRelayerInputs({ wormholeToken, privateWallet, publicClient, amount, recipient, feeData, backend })
+
+    // all ethWallets are the same anyway
+    const ethWallet = privateWallets[0].viem.wallet
+    const relayerInputs = await createRelayerInputs({ wormholeToken, privateWallets,amountsToClaim, publicClient, amount, recipient, feeData, backend })
     return await relayTx({ relayerInputs, ethWallet, publicClient, wormholeToken })
 }
 

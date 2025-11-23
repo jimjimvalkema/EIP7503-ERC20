@@ -8,7 +8,7 @@ import { getTree } from "./syncing.js"
 import { ProofData, UltraHonkBackend } from '@aztec/bb.js';
 import { CompiledCircuit, InputMap, Noir } from "@noir-lang/noir_js"
 import privateTransfer1InCircuit from '../circuits/privateTransfer1In/target/privateTransfer1In.json';
-import { FeeData, FormattedBurnAddressProofDataPrivate, FormattedBurnAddressProofDataPublic, FormattedProofInputs, FormattedSignatureData, UnFormattedMerkleData, UnformattedProofInputs, UnformattedProofInputsPrivate, UnformattedProofInputsPublic } from "./proofInputsTypes.js"
+import { FeeData, FormattedBurnAddressProofDataPrivate, FormattedBurnAddressProofDataPublic, FormattedProofInputs, FormattedSignatureData, UnFormattedBurnAddressProofDataPrivate, UnFormattedBurnAddressProofDataPublic, UnFormattedMerkleData, UnformattedProofInputs, UnformattedProofInputsPrivate, UnformattedProofInputsPublic } from "./proofInputsTypes.js"
 
 
 export function formatProofInputs({ publicInputs, privateInputs }: UnformattedProofInputs) {
@@ -37,6 +37,7 @@ export function formatProofInputs({ publicInputs, privateInputs }: UnformattedPr
                     depth: toHex(inputs.total_received_merkle.depth),
                 },
                 amount: toHex(inputs.amount),
+                shared_secret:toHex(inputs.shared_secret)
             }
         }
     );
@@ -51,7 +52,6 @@ export function formatProofInputs({ publicInputs, privateInputs }: UnformattedPr
         signature_hash: padArray({ size: 32, dir: "left", arr: [...hexToBytes(toHex(publicInputs.signature_hash))].map((v) => toHex(v)) }),
         burn_address_public_proof_data: burnAddressPublicProofDataFormatted,
         signature_data: SignatureDataFormatted,
-        shared_secret: toHex(privateInputs.shared_secret),
         viewing_key: toHex(privateInputs.viewing_key),
         burn_address_private_proof_data: burnAddressPrivateProofDataFormatted,
     }
@@ -113,94 +113,130 @@ export function getTotalReceivedMerkle({ totalReceived, privateWallet, tree }: {
 
 //TODO add a pres-synced tree object
 export async function getMerkleProofs(
-    { privateWallet, wormholeToken, publicClient, prevAccountNonce, prevTotalSpent, totalReceived }:
-        { privateWallet: { burnAddress: Address, viewingKey: bigint }, wormholeToken: WormholeToken | WormholeTokenTest, publicClient: PublicClient, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint }) {
+    { privateWallets, wormholeToken, publicClient }:
+        { privateWallets: SyncedPrivateWallet[], wormholeToken: WormholeToken | WormholeTokenTest, publicClient: PublicClient }) {
     const tree = await getTree({ wormholeToken, publicClient })
-    const prevAccountNoteMerkle = getAccountNoteMerkle({ privateWallet, tree, prevAccountNonce, prevTotalSpent })
-    const totalReceivedMerkle = getTotalReceivedMerkle({ privateWallet, tree, totalReceived })
+    const prevAccountNoteMerkleProofs: UnFormattedMerkleData[] = []
+    const totalReceivedMerkleProofs: UnFormattedMerkleData[] = []
+    for (const privateWallet of privateWallets) {
+        const prevAccountNonce = privateWallet.accountNonce
+        const prevTotalSpent = privateWallet.totalSpent
+        const totalReceived = privateWallet.totalReceived
+        const prevAccountNoteMerkle = getAccountNoteMerkle({ privateWallet, tree, prevAccountNonce, prevTotalSpent })
+        const totalReceivedMerkle = getTotalReceivedMerkle({ privateWallet, tree, totalReceived })
+        prevAccountNoteMerkleProofs.push(prevAccountNoteMerkle)
+        totalReceivedMerkleProofs.push(totalReceivedMerkle)
+
+    }
+
     return {
-        prevAccountNoteMerkle,
-        totalReceivedMerkle,
+        prevAccountNoteMerkleProofs: prevAccountNoteMerkleProofs,
+        totalReceivedMerkleProofs: totalReceivedMerkleProofs,
         root: tree.root
     }
 }
 
 export function getPubInputs(
-    { amountToReMint, syncedPrivateWallet, prevAccountNonce, totalSpent, nextAccountNonce, root, signatureHash, recipient, feeData }:
-        { amountToReMint: bigint, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, totalSpent: bigint, nextAccountNonce: bigint, root: bigint, signatureHash: bigint, recipient: Address, feeData?: FeeData }) {
+    { amountToReMint, syncedPrivateWallets, root, signatureHash, recipient, feeData }:
+        { amountToReMint: bigint, syncedPrivateWallets: SyncedPrivateWallet[], root: bigint, signatureHash: bigint, recipient: Address, feeData?: FeeData }) {
     //console.log("inserting:",{ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
-    const accountNoteHash = hashAccountNote({ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
-    const accountNoteNullifier = hashNullifier({ accountNonce: prevAccountNonce, viewingKey: syncedPrivateWallet.viewingKey })
+
     ///-----------
     feeData = feeData ?? EMPTY_FEE_DATA
+    const burn_address_public_proof_data: UnFormattedBurnAddressProofDataPublic[] = []
+    for (const privateWallet of syncedPrivateWallets) {
+        const prevAccountNonce = privateWallet.accountNonce
+        const prevTotalSpent = privateWallet.totalSpent
+        const totalSpent = prevTotalSpent + amountToReMint
+        const nextAccountNonce = prevAccountNonce + 1n
+        const accountNoteHash = hashAccountNote({ totalSpent: totalSpent, accountNonce: nextAccountNonce, viewingKey: privateWallet.viewingKey })
+        const accountNoteNullifier = hashNullifier({ accountNonce: prevAccountNonce, viewingKey: privateWallet.viewingKey })
+        const publicBurnPoofData: UnFormattedBurnAddressProofDataPublic = {
+            account_note_hash: accountNoteHash,
+            account_note_nullifier: accountNoteNullifier,
+        }
+        burn_address_public_proof_data.push(publicBurnPoofData)
+    }
     const pubInputs: UnformattedProofInputsPublic = {
         amount: amountToReMint,
         signature_hash: signatureHash,
         recipient_address: recipient,
         feeData: feeData,
-        // @TODO @jimjim dude this should make multiple if more then one address is use
-        burn_address_public_proof_data: [{
-            // @TODO @jimjim also programmatically select which amount to use,
-            account_note_hash: accountNoteHash,
-            account_note_nullifier: accountNoteNullifier,
-        }],
+        burn_address_public_proof_data: burn_address_public_proof_data,
         root: root,
     }
     return pubInputs
 }
 
+
+/**
+ * Notice: assumes the merkle proofs are in the same order as syncedPrivateWallets and amountsToClaim
+ * @param param0 
+ * @returns 
+ */
 export function getPrivInputs(
-    {amountToReMint, signatureData, syncedPrivateWallet, prevAccountNonce, prevTotalSpent, totalReceived, prevAccountNoteMerkle, totalReceivedMerkle }:
-        {signatureData: SignatureData, amountToReMint: bigint, recipient: Address, syncedPrivateWallet: SyncedPrivateWallet, prevAccountNonce: bigint, prevTotalSpent: bigint, totalReceived: bigint, prevAccountNoteMerkle: UnFormattedMerkleData, totalReceivedMerkle: UnFormattedMerkleData }) {
-    const privInputs: UnformattedProofInputsPrivate = {
-        // @TODO @jimjim dude this should make multiple if more then one address is use
-        burn_address_private_proof_data: [{
+    { amountToReMint, signatureData, syncedPrivateWallets,amountsToClaim, prevAccountNoteMerkleProofs, totalReceivedMerkleProofs }:
+        { signatureData: SignatureData, amountToReMint: bigint, amountsToClaim:bigint[], recipient: Address, syncedPrivateWallets: SyncedPrivateWallet[], prevAccountNoteMerkleProofs: UnFormattedMerkleData[], totalReceivedMerkleProofs: UnFormattedMerkleData[] }) {
+
+    const burn_address_private_proof_data:UnFormattedBurnAddressProofDataPrivate[] = [];
+    for (let index = 0; index < syncedPrivateWallets.length; index++) {
+        const privateWallet = syncedPrivateWallets[index];
+        const prevAccountNoteMerkleProof = prevAccountNoteMerkleProofs[index];
+        const totalReceivedMerkleProof = totalReceivedMerkleProofs[index];
+        const amountToClaim = amountsToClaim[index]
+
+
+        const prevAccountNonce = privateWallet.accountNonce
+        const prevTotalSpent = privateWallet.totalSpent
+        const totalReceived = privateWallet.totalReceived
+        const totalSpent = prevTotalSpent + amountToReMint
+        const nextAccountNonce = prevAccountNonce + 1n
+        const privateBurnData: UnFormattedBurnAddressProofDataPrivate = {
             total_received: totalReceived,
             prev_total_spent: prevTotalSpent,
             prev_account_nonce: prevAccountNonce,
-            prev_account_note_merkle: prevAccountNoteMerkle,
-            total_received_merkle: totalReceivedMerkle,
-            // @jimjim @TODO here amount is the same as the amount that the user will re-mint, this will not be the case when spending more than 1
-            amount: amountToReMint
-        }],
-        shared_secret: syncedPrivateWallet.sharedSecret,
-        viewing_key: syncedPrivateWallet.viewingKey,
+            prev_account_note_merkle: prevAccountNoteMerkleProof,
+            total_received_merkle: totalReceivedMerkleProof,
+            amount: amountToClaim, 
+            shared_secret: privateWallet.sharedSecret,
+        }
+        burn_address_private_proof_data.push(privateBurnData)
+    }
+    const privInputs: UnformattedProofInputsPrivate = {
+        burn_address_private_proof_data: burn_address_private_proof_data,
+        // for now we assume they all use the same viewing key!
+        viewing_key: syncedPrivateWallets[0].viewingKey,
         signature_data: signatureData
     }
     return privInputs
 }
 
 export async function getUnformattedProofInputs(
-    { wormholeToken, privateWallet, publicClient, amountToReMint, recipient, feeData }:
-        { wormholeToken: WormholeToken | WormholeTokenTest, privateWallet: SyncedPrivateWallet, publicClient: PublicClient, recipient: Address, amountToReMint: bigint, feeData: FeeData }
+    { wormholeToken, privateWallets,amountsToClaim, publicClient, amountToReMint, recipient, feeData }:
+        { wormholeToken: WormholeToken | WormholeTokenTest, privateWallets: SyncedPrivateWallet[],amountsToClaim:bigint[], publicClient: PublicClient, recipient: Address, amountToReMint: bigint, feeData: FeeData }
 ) {
-    const prevAccountNonce = privateWallet.accountNonce
-    const prevTotalSpent = privateWallet.totalSpent
-    const totalReceived = privateWallet.totalReceived
-    const totalSpent = prevTotalSpent + amountToReMint
-    const nextAccountNonce = prevAccountNonce + 1n
-    const { signatureData, signatureHash, poseidonHash, preImageOfKeccak } = await signPrivateTransfer({ recipientAddress: recipient, amount: amountToReMint, feeData: feeData, privateWallet: privateWallet })
+    const { signatureData, signatureHash, poseidonHash, preImageOfKeccak } = await signPrivateTransfer({ 
+        recipientAddress: recipient, 
+        amount: amountToReMint, 
+        feeData: feeData, 
+        // all private wallets have the same viem wallet which is a eoa with the pubKey that is committed in `burnAddress=hash(pubKeyX,shared_secret,"ZKWORMHOLES")`
+        privateWallet:privateWallets[0] 
+    })
     const contractFormattedPreFix = await wormholeToken.read._getMessageWithEthPrefix([poseidonHash]);
     // console.log({
     //     preImageOfKeccak_______:preImageOfKeccak,
     //     contractFormattedPreFix, isEqual: preImageOfKeccak===contractFormattedPreFix })
-    const { prevAccountNoteMerkle, totalReceivedMerkle, root } = await getMerkleProofs({
-        privateWallet: privateWallet,
+    const { prevAccountNoteMerkleProofs, totalReceivedMerkleProofs, root } = await getMerkleProofs({
+        privateWallets: privateWallets,
         wormholeToken: wormholeToken,
         publicClient: publicClient,
-        prevAccountNonce: prevAccountNonce,
-        prevTotalSpent: prevTotalSpent,
-        totalReceived: totalReceived
     })
 
     const publicInputs = getPubInputs({
         amountToReMint: amountToReMint,
         signatureHash: signatureHash,
         recipient: recipient,
-        syncedPrivateWallet: privateWallet,
-        prevAccountNonce: prevAccountNonce,
-        totalSpent: totalSpent,
-        nextAccountNonce: nextAccountNonce,
+        syncedPrivateWallets: privateWallets,
         root: root,
     })
 
@@ -208,12 +244,10 @@ export async function getUnformattedProofInputs(
         signatureData: signatureData,
         amountToReMint: amountToReMint,
         recipient: recipient,
-        syncedPrivateWallet: privateWallet,
-        prevAccountNonce: prevAccountNonce,
-        prevTotalSpent: prevTotalSpent,
-        totalReceived: totalReceived,
-        prevAccountNoteMerkle: prevAccountNoteMerkle,
-        totalReceivedMerkle: totalReceivedMerkle,
+        syncedPrivateWallets: privateWallets,
+        prevAccountNoteMerkleProofs: prevAccountNoteMerkleProofs,
+        totalReceivedMerkleProofs: totalReceivedMerkleProofs,
+        amountsToClaim:amountsToClaim
     })
 
     const unformattedProofInputs: UnformattedProofInputs = { publicInputs, privateInputs }

@@ -10,6 +10,7 @@
         "secp",
         "Tornadocash",
         "viem",
-        "zkwormhole"
+        "zkwormhole",
+        "zkwormholes"
     ]
 }

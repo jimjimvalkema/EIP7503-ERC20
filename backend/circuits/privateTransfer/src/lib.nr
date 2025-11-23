@@ -99,7 +99,8 @@ pub struct BurnAddressPrivateProofData {
     prev_account_nonce: Field,               
     prev_account_note_merkle: MerkleData,
     total_received_merkle: MerkleData,
-    amount: Field
+    amount: Field,
+    shared_secret: Field,
 }
 
 pub fn spendFromBurnAddresses(
@@ -108,7 +109,6 @@ pub fn spendFromBurnAddresses(
     burn_address_public_proof_data: [BurnAddressPublicProofData],
     //private
     pub_key_x_field: Field,      
-    shared_secret: Field,
     viewing_key: Field,
     burn_address_private_proof_data: [BurnAddressPrivateProofData],
 ) {
@@ -125,7 +125,7 @@ pub fn spendFromBurnAddresses(
 
             //private
             pub_key_x_field,    
-            shared_secret,
+            private_data.shared_secret,
             viewing_key,
 
             private_data.total_received,

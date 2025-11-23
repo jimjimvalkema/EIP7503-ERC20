@@ -14,7 +14,6 @@ export interface UnformattedProofInputsPublic {
 
 export interface UnformattedProofInputsPrivate {
     signature_data: UnFormattedSignatureData,
-    shared_secret: bigint,
     viewing_key: bigint,
     burn_address_private_proof_data: UnFormattedBurnAddressProofDataPrivate[],
 }
@@ -31,6 +30,7 @@ export interface UnFormattedBurnAddressProofDataPrivate {
     prev_account_note_merkle: UnFormattedMerkleData,
     total_received_merkle: UnFormattedMerkleData,
     amount: bigint,
+    shared_secret: bigint
 }
 
 export interface UnFormattedSignatureData {
@@ -68,7 +68,6 @@ export interface FormattedProofInputs extends InputMap {
     burn_address_public_proof_data: FormattedBurnAddressProofDataPublic[],
     //private
     signature_data: FormattedSignatureData,
-    shared_secret: Hex,
     viewing_key: Hex,
     burn_address_private_proof_data: FormattedBurnAddressProofDataPrivate[],
 }
@@ -96,6 +95,7 @@ export interface FormattedBurnAddressProofDataPrivate extends InputMap {
     prev_account_nonce: Hex,
     prev_account_note_merkle: FormattedMerkleData,
     total_received_merkle: FormattedMerkleData,
-    amount: Hex
+    amount: Hex,
+    shared_secret: Hex
 }
 //----------------------------
