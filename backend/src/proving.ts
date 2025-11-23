@@ -54,6 +54,7 @@ export function formatProofInputs({ publicInputs, privateInputs }: UnformattedPr
         signature_data: SignatureDataFormatted,
         viewing_key: toHex(privateInputs.viewing_key),
         burn_address_private_proof_data: burnAddressPrivateProofDataFormatted,
+        amount_burn_addresses: toHex(privateInputs.amount_burn_addresses)
     }
     return proofInputs
 }
@@ -206,7 +207,8 @@ export function getPrivInputs(
         burn_address_private_proof_data: burn_address_private_proof_data,
         // for now we assume they all use the same viewing key!
         viewing_key: syncedPrivateWallets[0].viewingKey,
-        signature_data: signatureData
+        signature_data: signatureData,
+        amount_burn_addresses: toHex(syncedPrivateWallets.length)
     }
     return privInputs
 }

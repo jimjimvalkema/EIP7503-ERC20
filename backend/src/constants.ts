@@ -7,7 +7,8 @@ import { FeeData } from "./proofInputsTypes.js";
 export const WormholeTokenContractName = "WormholeToken"
 export const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
 export const PrivateTransfer1InVerifierContractName = "privateTransfer1InVerifier"
-export const ZKTranscriptLibContractName = "ZKTranscriptLib"
+export const PrivateTransfer32InVerifierContractName = "privateTransfer32InVerifier"
+export const ZKTranscriptLibContractName = "contracts/privateTransfer1InVerifier.sol:ZKTranscriptLib"
 
 export const TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414Cn; // UTF8("total_received").toHex()
 export const TOTAL_SPENT_DOMAIN = 0x5350454E545F544F54414Cn; // UTF8("total_spent").toHex()

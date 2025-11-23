@@ -111,31 +111,35 @@ pub fn spendFromBurnAddresses(
     pub_key_x_field: Field,      
     viewing_key: Field,
     burn_address_private_proof_data: [BurnAddressPrivateProofData],
+    amount_burn_addresses: u32
 ) {
     let mut total_spend: Field = 0;
     for i in 0..burn_address_private_proof_data.len() {
-        let public_data: BurnAddressPublicProofData = burn_address_public_proof_data[i];
-        let private_data: BurnAddressPrivateProofData = burn_address_private_proof_data[i];
-        spendFromBurnAddress(
-            //public
-            root,
-            private_data.amount,
-            public_data.account_note_hash,
-            public_data.account_note_nullifier,
+        if( i < amount_burn_addresses-1) {
+            let public_data: BurnAddressPublicProofData = burn_address_public_proof_data[i];
+            let private_data: BurnAddressPrivateProofData = burn_address_private_proof_data[i];
+            spendFromBurnAddress(
+                //public
+                root,
+                private_data.amount,
+                public_data.account_note_hash,
+                public_data.account_note_nullifier,
 
-            //private
-            pub_key_x_field,    
-            private_data.shared_secret,
-            viewing_key,
+                //private
+                pub_key_x_field,    
+                private_data.shared_secret,
+                viewing_key,
 
-            private_data.total_received,
-            private_data.prev_total_spent,
-            private_data.prev_account_nonce,
-            private_data.prev_account_note_merkle,
-            private_data.total_received_merkle,
-        );
+                private_data.total_received,
+                private_data.prev_total_spent,
+                private_data.prev_account_nonce,
+                private_data.prev_account_note_merkle,
+                private_data.total_received_merkle,
+            );
 
-        total_spend = total_spend + private_data.amount;
+            total_spend = total_spend + private_data.amount;
+
+        }
     }
 
     assert(total_spend == amount, "aggregated burn address amounts do not match target amount");
@@ -155,7 +159,7 @@ pub fn spendFromBurnAddress(
     prev_total_spent: Field,
     prev_account_nonce: Field,
     prev_account_note_merkle: MerkleData,
-    total_received_merkle: MerkleData,
+    total_received_merkle: MerkleData
 ) {
     let private_address: Field = get_private_address(pub_key_x_field, shared_secret);
     let total_received_leaf: Field = hash_total_received_leaf(private_address, total_received);

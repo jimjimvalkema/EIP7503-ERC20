@@ -1,0 +1,7 @@
+[package]
+name = "privateTransfer32In"
+type = "bin"
+authors = [""]
+
+[dependencies]
+privateTransfer = { path = "../privateTransfer" }

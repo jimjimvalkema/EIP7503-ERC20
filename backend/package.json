@@ -31,7 +31,15 @@
     "noir:privateTransfer1In:cp-verifier": "cp circuits/privateTransfer1In/target/Verifier.sol contracts/privateTransfer1InVerifier.sol;",
     "noir:privateTransfer1In:rename-verifier": "yarn tsx scripts/renameVerifier.ts --newName privateTransfer1InVerifier --file contracts/privateTransfer1InVerifier.sol",
     "noir:privateTransfer1In": "yarn noir:privateTransfer1In:compile; yarn noir:privateTransfer1In:vk; yarn noir:privateTransfer1In:verifier; yarn noir:privateTransfer1In:cp-verifier; yarn noir:privateTransfer1In:rename-verifier",
-    "noir":"yarn noir:privateTransfer1In",
+
+    "noir:privateTransfer32In:compile": "cd circuits/privateTransfer32In; nargo compile;",
+    "noir:privateTransfer32In:vk": "cd circuits/privateTransfer32In; bb write_vk -b ./target/privateTransfer32In.json -o ./target --oracle_hash keccak;",
+    "noir:privateTransfer32In:verifier": "cd circuits/privateTransfer32In; bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol;",
+    "noir:privateTransfer32In:cp-verifier": "cp circuits/privateTransfer32In/target/Verifier.sol contracts/privateTransfer32InVerifier.sol;",
+    "noir:privateTransfer32In:rename-verifier": "yarn tsx scripts/renameVerifier.ts --newName privateTransfer32InVerifier --file contracts/privateTransfer32InVerifier.sol",
+    "noir:privateTransfer32In": "yarn noir:privateTransfer32In:compile; yarn noir:privateTransfer32In:vk; yarn noir:privateTransfer32In:verifier; yarn noir:privateTransfer32In:cp-verifier; yarn noir:privateTransfer32In:rename-verifier",
+    
+    "noir":"yarn noir:privateTransfer1In; yarn noir:privateTransfer32In",
     "website": "cd website; yarn vite"
   },
   "dependencies": {

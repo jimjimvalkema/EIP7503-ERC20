@@ -1,6 +1,6 @@
 use privateTransfer::{spendFromBurnAddresses, BurnAddressPublicProofData, BurnAddressPrivateProofData, SignatureData};
 
-global AMOUNT_BURN_ADDRESSES: u32 = 1; 
+global AMOUNT_BURN_ADDRESSES: u32 = 32; 
 fn main(
     //----- public inputs
     root: pub Field,
@@ -11,7 +11,7 @@ fn main(
     signature_data: SignatureData,      
     viewing_key: Field,
     burn_address_private_proof_data: [BurnAddressPrivateProofData; AMOUNT_BURN_ADDRESSES],
-    amount_burn_addresses:u32 // always one but still a input to be consistent with other circuits
+    amount_burn_addresses: u32
 ) {
     let valid_signature: bool = std::ecdsa_secp256k1::verify_signature(
         signature_data.public_key_x,
