@@ -166,7 +166,7 @@ describe("Token", async function () {
             assert.equal(balanceBobPublic, amountToReMint, "bob didn't receive the expected amount of re-minted tokens")
         })
 
-        /*
+        
         it("should make private tx and self relay it 3 times", async function () {
             const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
@@ -226,6 +226,6 @@ describe("Token", async function () {
             balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
             assert.equal(balanceBobPublic, amountToReMint * 3n, "bob didn't receive the expected amount of re-minted tokens")
         })
-            */
+            
     })
 })
