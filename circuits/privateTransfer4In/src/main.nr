@@ -1,5 +1,6 @@
 use privateTransfer::{spendFromBurnAddresses, BurnAddressPublicProofData, BurnAddressPrivateProofData, SignatureData};
 
+// why only 4?
 global AMOUNT_BURN_ADDRESSES: u32 = 4; 
 fn main(
     //----- public inputs
