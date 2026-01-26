@@ -87,6 +87,11 @@ ZKTranscriptLib - [0x8F961e056967DD2A1170dBeCd9e5E51CA815B0D9](https://sepolia.e
 leanIMTPoseidon2 - [0xcbf45ce9650A8F4E51933A13857016B1A44c3d94](https://sepolia.etherscan.io/address/0xcbf45ce9650A8F4E51933A13857016B1A44c3d94)  
 
 
+## install
+```shell
+bbup --version 3.0.0-nightly.20251030-2;
+noirup --version 1.0.0-beta.14;
+```
 ## run ui
 compile
 ```shell

@@ -4,4 +4,4 @@ type = "bin"
 authors = [""]
 
 [dependencies]
-privateTransfer = { path = "../privateTransfer" }
+privateTransferLib = { path = "../privateTransferLib" }

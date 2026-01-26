@@ -1,19 +1,21 @@
-use privateTransfer::{spendFromBurnAddresses, BurnAddressPublicProofData, BurnAddressPrivateProofData, SignatureData};
+use privateTransferLib::{spendFromBurnAddresses, BurnDataPublic, BurnDataPrivate, SignatureData};
 
 // why only 4?
-global AMOUNT_BURN_ADDRESSES: u32 = 4; 
+global BURN_ADDRESSES_LEN: u32 = 4; 
 fn main(
     //----- public inputs
     root: pub Field,
     amount: pub Field,
     signature_hash: pub [u8;32],
-    burn_address_public_proof_data: pub [BurnAddressPublicProofData; AMOUNT_BURN_ADDRESSES],
+    burn_data_public: pub [BurnDataPublic; BURN_ADDRESSES_LEN],
     // --- private inputs ---
     signature_data: SignatureData,      
     viewing_key: Field,
-    burn_address_private_proof_data: [BurnAddressPrivateProofData; AMOUNT_BURN_ADDRESSES],
-    amount_burn_addresses: u32
+    burn_data_private: [BurnDataPrivate; BURN_ADDRESSES_LEN],
+    amount_burn_addresses:u32 // always one but still a input to be consistent with other circuits
 ) {
+
+    // one signature for all burns. Cheaper, better UX, but you cant spent with different private keys
     let valid_signature: bool = std::ecdsa_secp256k1::verify_signature(
         signature_data.public_key_x,
         signature_data.public_key_y,
@@ -30,11 +32,11 @@ fn main(
     spendFromBurnAddresses(
         root,
         amount,
-        burn_address_public_proof_data,
+        burn_data_public,
         //private
+        burn_data_private,
         pub_key_x_field,      
         viewing_key,
-        burn_address_private_proof_data,
         amount_burn_addresses
     )
 }
