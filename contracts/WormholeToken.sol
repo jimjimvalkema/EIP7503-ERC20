@@ -27,9 +27,9 @@ struct FeeData {
 }
 
 error VerificationFailed();
-// accountNoteNullifier is indexed so users can search for it and find out the total amount spend, which is needed to make the next spend the next
-// alternatively they can use `nullifiers` mapping
-event PrivateTransfer(uint256 indexed accountNoteNullifier, uint256 amount);
+// accountNoteNullifier is indexed so users can search for it and find out the total amount spend, which is needed to make the next spend the next spent
+// the nullifiers mapping contains the blockNumber it was nullified at. This can be used for a faster syncing strategy
+event Nullified(uint256 indexed nullifier, bytes totalSpentEncrypted);
 event StorageRootAdded(uint256 blockNumber);
 event NewLeaf(uint256 leaf);
 
@@ -40,9 +40,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
 
     // @notice accountNoteNullifier = poseidon(nonce, viewingKey)
     // @notice accountNoteHash = poseidon(totalAmountSpent, nonce, viewingKey)
-    mapping (uint256 => uint256) public nullifiers; // accountNoteNullifier -> amountSpendInTx + 1 (+1 to protect nullifier logic on txs where amount is 0) 
-
-    mapping (address => uint40) private accountIndexes;
+    mapping (uint256 => uint256) public nullifiers; // accountNoteNullifier -> blockNumber
     mapping (uint256 => bool) public roots;
 
     // @TODO @CLEARSING will be remove when clearsign
@@ -69,17 +67,14 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         return abi.encodePacked(ETH_SIGN_PREFIX, message);
     }
 
-    function _hashSignatureInputs(address recipientAddress, uint256 amount, FeeData memory feeData) public pure returns(bytes32) {
-        uint256[6] memory input = [
-            (_addressToUint256(recipientAddress)),
-            (amount),
-            (_addressToUint256(feeData.relayerAddress)),
-            (feeData.priorityFee),
-            (feeData.conversionRate),
-            (feeData.maxFee)
-        ];
+    function _hashSignatureInputs(address _recipientAddress, uint256 _amount, bytes memory _callData) public pure returns(bytes32) {
+        bytes memory input = abi.encodePacked(
+            _recipientAddress,
+            _amount,
+            _callData
+        );
 
-        bytes32 preKeccak = keccak256(abi.encodePacked(input));
+        bytes32 preKeccak = keccak256(input);
         // TODO check that bytes32 wont create unexpected zeros
         bytes32 keccakHash = keccak256(_getMessageWithEthPrefix(preKeccak));
         return keccakHash;
@@ -126,7 +121,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         //if (tx.origin == _to || _to.code.length > 0) {return;}
         
         // @WARNING you might be tempted to create smarter ways to check if its for sure not a private address. 
-        // Example: check i _to is an smartcontract (_to.code.length > 0) or store the tx.origin address somewhere in a mapping like "allKnownEOAs" to check to save gas on future transfers. 
+        // Example: check that `_to` is an smartcontract (_to.code.length > 0) or store the tx.origin address somewhere in a mapping like "allKnownEOAs" to check to save gas on future transfers. 
         // Registering your EOA in "allKnownEOAs" / using smartcontract accounts saves you on gas in the future. But that creates perverse incentives that break plausible deniability.
         // doing so will cause every EOA owner to register in "allKnownEOAs" / use smartcontract accounts and then there is no plausible deniability left since it's now "looks weird" to not do that.
         // Even doing account != contract is bad in that sense. Since account based wallets would also save on gas.
@@ -183,11 +178,11 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     }
 
     function _formatPublicInputs(
+        uint256 _root,
         uint256 _amount,
         bytes32 _signatureHash,
         uint256[] memory _accountNoteHashes,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-        uint256[] memory _accountNoteNullifiers,   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
-        uint256 _root
+        uint256[] memory _accountNoteNullifiers   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
     ) public pure returns (bytes32[] memory) {
         if (_accountNoteHashes.length == 1) {
             bytes32[] memory publicInputs = new bytes32[](36);
@@ -234,49 +229,47 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         return (_relayerReward, _recipientAmount);
     }
 
-    function privateTransfer(
+    function privateReMint(
         uint256 _amount,
         address _to,
-        FeeData calldata _feeData,
         uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
-        uint256[] memory _claimedAmounts,            //TODO this should not be public and should be encrypted instead. Can be unconstrained since it's only for syncing, also circuit should commit to these values otherwise relayer can mess with it or maybe we can commit to it in the signatureHash
         uint256 _root,
-        bytes calldata _snarkProof
+        bytes calldata _snarkProof,
+        bytes calldata _callData,
+        bytes[] calldata _totalSpentEncrypted
     ) public {
+        uint256 blockNumber = block.number;
         for (uint256 i = 0; i < _accountNoteNullifiers.length; i++) {
             uint256 _accountNoteNullifier = _accountNoteNullifiers[i];
-            uint256 _amountClaimed = _claimedAmounts[i];
-            //require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
-            // +1 to protect nullifier logic on txs where amount is 0
-            nullifiers[_accountNoteNullifier] = _amountClaimed + 1;
-            emit PrivateTransfer(_accountNoteNullifier, _amountClaimed); 
+            require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
+            nullifiers[_accountNoteNullifier] = blockNumber;
+            emit Nullified(_accountNoteNullifier, _totalSpentEncrypted[i]); 
         }
         
         require(roots[_root], "invalid root");
-        require(_feeData.maxFee <= _amount, "maxFee is larger than the amount send");
+        bytes32 signatureHash = _hashSignatureInputs(_to, _amount, _callData);
+        //@jimjim technically _feeData doesn't need to be here. It can be in a contract that handles that
+        // @TODO make relayer contract!!!
+        // if (_feeData.relayerAddress == address(0)) {
+        //     //-- self relay --
+        //     // inserts _accountNoteHash into the merkle tree as well
+        //     _privateReMint(_to, _amount, _accountNoteHashes);
+        // } else {
+        //     //-- use relayer --
+        //     address rewardRecipient = _feeData.relayerAddress;
+        //     if (_feeData.relayerAddress == address(1)) {
+        //         // this enables ex block builder to permissionlessly relay the tx
+        //         rewardRecipient = msg.sender;
+        //     }
+        //     (uint256 _relayerReward,uint256 _recipientAmount) = _calculateFees(_feeData, _amount);
+        //      // inserts _accountNoteHash into the merkle tree as well
+        //     _privateReMint(_to, _recipientAmount, _accountNoteHashes);
+        //     // @note this can cause a separate insert here that could be more efficient with insert many. But in most cases tx.origin == relayerAddress so not worth to optimize this.
+        //     _update(address(0), _feeData.relayerAddress, _relayerReward);
+        // }
 
-        bytes32 signatureHash = _hashSignatureInputs(_to, _amount, _feeData);
-    
-        if (_feeData.relayerAddress == address(0)) {
-            //-- self relay --
-            // inserts _accountNoteHash into the merkle tree as well
-            _privateReMint(_to, _amount, _accountNoteHashes);
-        } else {
-            //-- use relayer --
-            address rewardRecipient = _feeData.relayerAddress;
-            if (_feeData.relayerAddress == address(1)) {
-                // this enables ex block builder to permissionlessly relay the tx
-                rewardRecipient = msg.sender;
-            }
-            (uint256 _relayerReward,uint256 _recipientAmount) = _calculateFees(_feeData, _amount);
-             // inserts _accountNoteHash into the merkle tree as well
-            _privateReMint(_to, _recipientAmount, _accountNoteHashes);
-            // @note this can cause a separate insert here that could be more efficient with insert many. But in most cases tx.origin == relayerAddress so not worth to optimize this.
-            _update(address(0), _feeData.relayerAddress, _relayerReward);
-        }
-
-        bytes32[] memory publicInputs = _formatPublicInputs(_amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers, _root);
+        bytes32[] memory publicInputs = _formatPublicInputs(_root,_amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
         if (_accountNoteNullifiers.length == 1) {
             if (!IVerifier(privateTransferVerifier1In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
