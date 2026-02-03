@@ -10,7 +10,6 @@ fn main(
     burn_data_public: pub [BurnDataPublic; BURN_ADDRESSES_LEN],
     // --- private inputs ---
     signature_data: SignatureData,      
-    viewing_key: Field,
     burn_data_private: [BurnDataPrivate; BURN_ADDRESSES_LEN],
     amount_burn_addresses:u32 // always one but still a input to be consistent with other circuits
 ) {
@@ -36,7 +35,6 @@ fn main(
         //private
         burn_data_private,
         pub_key_x_field,      
-        viewing_key,
         amount_burn_addresses
     )
 }

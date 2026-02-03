@@ -10,7 +10,7 @@ import { poseidon2Hash } from "@zkpassport/poseidon2"
 
 import { getPrivateAccount, hashPow } from "../src/hashing.js";
 import { POW_DIFFICULTY, EMPTY_FEE_DATA, WormholeTokenContractName, PrivateTransfer1InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName } from "../src/constants.js";
-import { getTree, syncPrivateWallet } from "../src/syncing.js";
+import { getSyncedMerkleTree, syncPrivateWallet } from "../src/syncing.js";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { formatProofInputs, generateProof, getBackend, getUnformattedProofInputs, verifyProof } from "../src/proving.js";
 import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
@@ -87,7 +87,7 @@ describe("Token", async function () {
                 const transferWithoutMerkleReceipt = await publicClient.getTransactionReceipt({ hash: transferWithoutMerkleTx })
                 const firstTransferWithMerkleReceipt = await publicClient.getTransactionReceipt({ hash: firstTransferTx })
 
-                const tree = await getTree({ wormholeToken, publicClient })
+                const tree = await getSyncedMerkleTree({ wormholeToken, publicClient })
                 const jsRoot = tree.root
                 const onchainRoot = await wormholeToken.read.root()
                 assert.equal(jsRoot, onchainRoot, "jsRoot doesn't match onchainRoot")

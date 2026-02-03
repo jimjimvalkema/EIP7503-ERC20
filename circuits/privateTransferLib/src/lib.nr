@@ -104,7 +104,10 @@ pub struct BurnDataPrivate {
     prev_account_note_merkle: MerkleData,
     total_received_merkle: MerkleData,
     amount: Field,
+    /*blinds the pubkey from the burn address, also serves as a PoW to defend against the address collision attack (similar problem to eip-3607) */
     blinding_pow: Field,
+    /*blinds note hashes and nullifiers, separate from blinding_pow to support senders making fresh burn account on the recipients behave*/
+    viewing_key: Field, 
 }
 
 pub fn spendFromBurnAddresses(
@@ -115,7 +118,6 @@ pub fn spendFromBurnAddresses(
     //private
     burn_data_private: [BurnDataPrivate],
     pub_key_x_field: Field,      
-    viewing_key: Field,
     amount_burn_addresses: u32
 ) {
     let mut total_verified: Field = 0;
@@ -129,7 +131,7 @@ pub fn spendFromBurnAddresses(
 
                 //private
                 pub_key_x_field,
-                viewing_key,
+                burn_data_private[i].viewing_key,
                 burn_data_private[i].amount,
                 burn_data_private[i].total_received,
                 burn_data_private[i].prev_total_spent,

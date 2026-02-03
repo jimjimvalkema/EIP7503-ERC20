@@ -6,7 +6,7 @@ import { ProofData } from "@aztec/bb.js";
 import { LeanIMT } from "@zk-kit/lean-imt";
 import { VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { extractPubKeyFromSig, getPrivateAddress as getBurnAddress, getViewingKey, verifyPowNonce } from "./hashing.js";
+import { extractPubKeyFromSig,  getBurnAddress, getViewingKey, verifyPowNonce } from "./hashing.js";
 
 export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Required<{ public?: PublicClient; wallet?: WalletClient; }>>
 
@@ -33,6 +33,11 @@ export interface MerkleData extends InputMap {
     siblings: Hex[],
 }
 
+export interface SpendableBalanceProof { 
+    totalSpendMerkleProofs:MerkleData, 
+    totalBurnedMerkleProofs:MerkleData, 
+    root:Hex 
+}
 
 export interface BurnDataPublic extends InputMap {
     account_note_hash: Hex,
@@ -48,6 +53,7 @@ export interface BurnDataPrivate extends InputMap {
     total_received_merkle: MerkleData,
     amount: Hex,
     blinding_pow: Hex,
+    viewing_key: Hex,
 }
 
 export interface PublicProofInputs extends InputMap {
@@ -59,7 +65,6 @@ export interface PublicProofInputs extends InputMap {
 
 export interface PrivateProofInputs extends InputMap {
     signature_data: SignatureData,
-    viewing_key: Hex,
     burn_data_private: BurnDataPrivate[],
     amount_burn_addresses: u32AsHex
 }
@@ -76,19 +81,22 @@ export interface ProofInputs4n extends ProofInputs {
 
 
 export interface UnsyncedBurnAccount {
-    viewingKey: Hex,
-    isDeterministicViewKey: Boolean,
-    blindingPow: Hex;
-    burnAddress: Address,
+    /**used to encrypt total spend, unconstrained, not a circuit input */
+    readonly viewingKey: Hex;
+    readonly isDeterministicViewKey: Boolean;
+    /**used t */
+    readonly blindingPow: Hex;
+    readonly burnAddress: Address;
 }
 
 export interface SyncedBurnAccount extends UnsyncedBurnAccount {
     accountNonce: Hex;
     totalSpent: Hex;
-    totalReceived: Hex;
+    totalBurned: Hex;
     spendableBalance: Hex;
 }
 
+export type BurnAccount = UnsyncedBurnAccount & Partial<SyncedBurnAccount>
 // one wallet has one priv pub key pair, but can have multiple burn address, and spent from all of them at once
 // export interface PrivateWallet {
 //     viem: { wallet: WalletClient, ethAddress:Address };
@@ -97,82 +105,14 @@ export interface SyncedBurnAccount extends UnsyncedBurnAccount {
 // }
 
 
-interface PrivateWalletData {
+export interface PrivateWalletData {
     readonly ethAccount:Address
+    readonly viewKeySigMessage:string,
     readonly detViewKeyRoot?:Hex, 
+    burnAccounts:BurnAccount[], 
     pubKey?:{ x: Hex, y: Hex }, 
     detViewKeyCounter?:number 
-    burnAccounts:(UnsyncedBurnAccount | SyncedBurnAccount)[], 
 }
-
-// PrivateWallet is a wrapper that exposes some ov viems WalletClient functions and requires them to only ever use one ethAccount
-// 
-export class PrivateWallet {
-    private readonly viemWallet: WalletClient
-    readonly privateWalletData:PrivateWalletData;
-
-    //deterministic viewingKey Root. The same ethAccount can always recover to this key. User only needs to know their seed phrase to recover funds
-    private detViewKeyRoot: Hex | undefined;
-    private detViewKeyCounter = 0;
-    constructor(viemWallet:WalletClient,privateWalletData?:PrivateWalletData) {
-        this.viemWallet = viemWallet
-        this.privateWalletData = privateWalletData ? privateWalletData : {ethAccount:viemWallet.account?.address as Address, burnAccounts:[]}
-    }
-
-    async storePubKeyFromSig({ hash, signature }: { hash: Hex, signature: Hex }) {
-        if (this.privateWalletData.pubKey === undefined) {
-            const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature })
-            this.privateWalletData.pubKey = { x: pubKeyX, y: pubKeyY }
-        }
-    }
-
-    async getDeterministicViewKeyRoot() {
-        if (this.detViewKeyRoot) {
-            return this.detViewKeyRoot
-        } else {
-            const signature = await this.viemWallet.signMessage({ message: VIEWING_KEY_SIG_MESSAGE, account: this.privateWalletData.ethAccount })
-            const hash = hashMessage(VIEWING_KEY_SIG_MESSAGE);
-            await this.storePubKeyFromSig({ hash: hash, signature: signature })
-            this.detViewKeyRoot = toHex(getViewingKey({ signature: signature }))
-            return this.detViewKeyRoot
-        }
-    }
-
-    async getPubKey(message = VIEWING_KEY_SIG_MESSAGE) {
-        if (this.privateWalletData.pubKey === undefined) {
-            const signature = await this.viemWallet.signMessage({ message: message, account: this.privateWalletData.ethAccount })
-            const hash = hashMessage(VIEWING_KEY_SIG_MESSAGE);
-            await this.storePubKeyFromSig({ hash: hash, signature: signature })
-        }
-        return this.privateWalletData.pubKey as { x: Hex, y: Hex }
-    }
-
-    async createNewBurnAccount({ blindingPow, viewingKey }: { blindingPow: bigint, message?: string, viewingKey?: bigint }) {
-        // assumes viewingKey is not deterministically derived, at least not the usual way. If viewingKey param is set
-        const isDeterministicViewKey = viewingKey === undefined
-        if (isDeterministicViewKey) {
-            viewingKey = poseidon2Hash([
-                BigInt(await this.getDeterministicViewKeyRoot()),
-                BigInt(this.detViewKeyCounter)
-            ])
-        }
-
-        const { x: pubKeyX } = await this.getPubKey()
-        if (verifyPowNonce({ pubKeyX, blindingPow: BigInt(blindingPow) }) === false) { throw new Error("Provided blindingPow is not valid") }
-
-        const burnAddress = getBurnAddress({ pubKeyX: pubKeyX, blindingPow: BigInt(blindingPow) })
-        const burnAccount: UnsyncedBurnAccount = {
-            viewingKey: toHex(viewingKey as bigint),
-            isDeterministicViewKey: isDeterministicViewKey,
-            blindingPow: toHex(blindingPow),
-            burnAddress: burnAddress,
-        }
-
-        this.privateWalletData.burnAccounts.push(burnAccount)
-        return burnAccount
-    }
-}
-
 
 
 export interface RelayerInputs {
