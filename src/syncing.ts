@@ -157,6 +157,8 @@ export async function syncBurnAccount(
 
 /**
  * defaults to syncing all burn accounts
+ * @notice sync concurrently all accounts, this might overwhelm rpcs
+ * TODO use p-limit
  * @param param0 
  * @returns 
  */
@@ -172,6 +174,7 @@ export async function syncMultipleBurnAccounts({ wormholeToken, archiveNode, pri
     privateWallet.privateData.burnAccounts = syncedBurnAccounts
     return privateWallet
 }
+
 // export async function isSyncedPrivateWallet({ privateWallet, wormholeToken }: { privateWallet: SyncedPrivateWallet | UnsyncedPrivateWallet, wormholeToken: WormholeToken | WormholeTokenTest }) {
 //     if ("accountNonce" in privateWallet) {
 //         const nextNullifier = hashNullifier({ accountNonce: (privateWallet as SyncedPrivateWallet).accountNonce, viewingKey: privateWallet.viewingKey });

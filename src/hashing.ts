@@ -1,10 +1,10 @@
 import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_RECEIVED_DOMAIN as TOTAL_RECEIVED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
+import { POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { FeeData, SignatureData, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.js";
-import {PrivateWallet} from "./PrivateWallet.js"
-export function verifyPowNonce({ pubKeyX, blindingPow, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, blindingPow: bigint, difficulty?: bigint }) {
-    const powHash = hashPow({ pubKeyX, blindingPow });
+import { PrivateWallet } from "./PrivateWallet.js"
+export function verifyPowNonce({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty?: bigint }) {
+    const powHash = hashPow({ blindedAddressDataHash, powNonce });
     return powHash > difficulty
 }
 
@@ -28,28 +28,39 @@ export function getViewingKey({ signature }: { signature: Hex }) {
     return viewingKey
 }
 
-export function hashAddress({ pubKeyX, blindingPow }: { pubKeyX: Hex, blindingPow: bigint }) {
-    const pubKeyField = hexToBigInt("0x" + pubKeyX.slice(2 + 2) as Hex) //slice first byte so it fits in a field
-    const addressHash = poseidon2Hash([pubKeyField, blindingPow, PRIVATE_ADDRESS_TYPE]);
+export function hashBlindedAddressData(
+    { spendingPubKeyX, viewingKey, chainId }:
+        { spendingPubKeyX: Hex, viewingKey: bigint, chainId: bigint, }
+): bigint {
+    //slice first byte so it fits in a field
+    const spendingPubKeyXField = hexToBigInt("0x" + spendingPubKeyX.slice(2 + 2) as Hex)
+    //const viewingKeyField = hexToBigInt("0x" + viewingKey.slice(2 + 2) as Hex)
+    const blindedAddressDataHash = poseidon2Hash([spendingPubKeyXField, viewingKey, chainId]);
+    return blindedAddressDataHash
+}
+
+export function hashAddress({ blindedAddressDataHash, powNonce }: { blindedAddressDataHash: bigint, powNonce: bigint }) {
+    //const pubKeyField = hexToBigInt("0x" + pubKeyX.slice(2 + 2) as Hex) //slice first byte so it fits in a field
+    const addressHash = poseidon2Hash([blindedAddressDataHash, powNonce, PRIVATE_ADDRESS_TYPE]);
     return addressHash
 }
 
-export function getBurnAddress({ pubKeyX, blindingPow }: { pubKeyX: Hex, blindingPow: bigint }) {
-    const addressHash = hashAddress({ pubKeyX, blindingPow })
+export function getBurnAddress({ blindedAddressDataHash, powNonce }: { blindedAddressDataHash: bigint, powNonce: bigint }) {
+    const addressHash = hashAddress({ blindedAddressDataHash, powNonce })
     return getAddress("0x" + toHex(addressHash, { size: 32 }).slice(2 + 24)) //slice off bytes and make it the address type in viem
 
 }
 
-export function hashPow({ pubKeyX, blindingPow }: { pubKeyX: Hex, blindingPow: bigint }) {
-    const addressHash = hashAddress({ pubKeyX, blindingPow })
-    const powHash = poseidon2Hash([blindingPow, addressHash]);
+export function hashPow({ blindedAddressDataHash, powNonce }: { blindedAddressDataHash: bigint, powNonce: bigint }) {
+    const addressHash = hashAddress({ blindedAddressDataHash, powNonce })
+    const powHash = poseidon2Hash([powNonce, addressHash]);
     return powHash
 }
 
 // prev_account_nonce makes sure the hash is never the same even when the total_spent is not different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
-export function hashTotalSpentLeaf({ totalSpent, accountNonce, viewingKey }: { totalSpent: bigint, accountNonce: bigint, viewingKey: bigint }) {
-    return poseidon2Hash([totalSpent, accountNonce, viewingKey, TOTAL_SPENT_DOMAIN])
+export function hashTotalSpentLeaf({ totalSpent, accountNonce, blindedAddressDataHash, viewingKey }: { totalSpent: bigint, accountNonce: bigint, blindedAddressDataHash: bigint, viewingKey: bigint }) {
+    return poseidon2Hash([totalSpent, accountNonce, blindedAddressDataHash, viewingKey, TOTAL_SPENT_DOMAIN])
 }
 
 // prev_account_nonce makes sure the hash is never the same even when the total_spent is not different
@@ -58,8 +69,8 @@ export function hashNullifier({ accountNonce, viewingKey }: { accountNonce: bigi
     return poseidon2Hash([accountNonce, viewingKey])
 }
 
-export function hashTotalBurnedLeaf({  burnAddress, totalBurned }: { burnAddress: Address, totalBurned: bigint }) {
-    return poseidon2Hash([hexToBigInt(burnAddress as Hex), totalBurned, TOTAL_RECEIVED_DOMAIN])
+export function hashTotalBurnedLeaf({ burnAddress, totalBurned }: { burnAddress: Address, totalBurned: bigint }) {
+    return poseidon2Hash([hexToBigInt(burnAddress as Hex), totalBurned, TOTAL_BURNED_DOMAIN])
 }
 
 
@@ -74,24 +85,24 @@ export function hashSignatureInputs({ recipientAddress, amount, callData }: { re
     return keccakHash
 }
 
-export function findPoWNonce({ pubKeyX, startingValue, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, startingValue: bigint, difficulty?: bigint }) {
-    let blindingPow: bigint = startingValue;
-    let powHash: bigint = hashPow({ pubKeyX, blindingPow });
+export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, startingValue: bigint, difficulty?: bigint }) {
+    let powNonce: bigint = startingValue;
+    let powHash: bigint = hashPow({ blindedAddressDataHash, powNonce });
     let hashingRounds = 0
     console.log("doing PoW")
     do {
         if (powHash < difficulty) {
             break;
         }
-        blindingPow = powHash;
-        powHash = hashPow({ pubKeyX, blindingPow })
+        powNonce = powHash;
+        powHash = hashPow({ blindedAddressDataHash, powNonce })
         hashingRounds += 1
     } while (powHash >= difficulty)
-    return blindingPow
+    return powNonce
 }
 
-export async function signPrivateTransfer({ recipientAddress, amount,callData, privateWallet }: { privateWallet: PrivateWallet, recipientAddress: Address, amount: bigint, callData: Hex}):
-Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData:SignatureData, signatureHash:Hex ,poseidonHash:Hex,  preImageOfKeccak:Hex}> {
+export async function signPrivateTransfer({ recipientAddress, amount, callData, privateWallet }: { privateWallet: PrivateWallet, recipientAddress: Address, amount: bigint, callData: Hex }):
+    Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex, poseidonHash: Hex, preImageOfKeccak: Hex }> {
     const sigHash = hashSignatureInputs({ recipientAddress, amount, callData })
     //console.log({sigHash})
     // blind signing yay!
@@ -109,7 +120,7 @@ Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, 
     // const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
     // const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
     return {
-        viemFormatSignature: {signature, pubKeyX, pubKeyY},
+        viemFormatSignature: { signature, pubKeyX, pubKeyY },
         signatureData: {
             public_key_x: hexToByteArray(pubKeyX) as u8sAsHexArrLen32,
             public_key_y: hexToByteArray(pubKeyY) as u8sAsHexArrLen32,
@@ -123,13 +134,13 @@ Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, 
 }
 
 function hexToByteArray(hex: Hex): Hex[] {
-  // Remove '0x' prefix and split into pairs of characters
-  const hexWithoutPrefix = hex.slice(2)
-  const bytes: Hex[] = []
+    // Remove '0x' prefix and split into pairs of characters
+    const hexWithoutPrefix = hex.slice(2)
+    const bytes: Hex[] = []
 
-  for (let i = 0; i < hexWithoutPrefix.length; i += 2) {
-    bytes.push(`0x${hexWithoutPrefix.slice(i, i + 2)}` as Hex)
-  }
+    for (let i = 0; i < hexWithoutPrefix.length; i += 2) {
+        bytes.push(`0x${hexWithoutPrefix.slice(i, i + 2)}` as Hex)
+    }
 
-  return bytes
+    return bytes
 }

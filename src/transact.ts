@@ -1,110 +1,84 @@
 import { Address, getAddress, getContract, Hex, PublicClient, toBytes, toHex, WalletClient, zeroAddress } from "viem";
 import { WormholeTokenTest } from "../test/1inRemint.test.js";
-import { BurnAccount, FeeData, PreSyncedTree, PrivateWallet, RelayerInputs, SyncedBurnAccount, SyncedPrivateWallet, UnsyncedPrivateWallet, WormholeToken } from "./types.js";
-import { EMPTY_FEE_DATA } from "./constants.js";
-import { formatProofInputs, generateProof, getSpendableBalanceProof, getProofInputs, getPubInputs, getPrivInputs, BurnAccountProof } from "./proving.js";
+import { BurnAccount, FeeData, PreSyncedTree, ProofInputs, ProofInputs1n, ProofInputs4n, RelayerInputs, SyncedBurnAccount, WormholeToken } from "./types.js";
+import { generateProof, getSpendableBalanceProof, getPubInputs, getPrivInputs, BurnAccountProof } from "./proving.js";
 import { ProofData, UltraHonkBackend } from "@aztec/bb.js";
 import { getSyncedMerkleTree, getDeploymentBlock, syncMultipleBurnAccounts } from "./syncing.js";
 import { toBigInt } from "@aztec/aztec.js";
 import { hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, signPrivateTransfer } from "./hashing.js";
 import { getSyncTree } from "@warptoad/gigabridge-js";
+import { PrivateWallet } from "./PrivateWallet.js";
 //import { noir_test_main_self_relay } from "./noirtests.js";
 
-export function getTransactionInputs({ pubProofInputs, zkProof, claimedAmounts, unformattedFeeData, unformattedPubInputs }: { unformattedPubInputs: UnformattedProofInputsPublic, unformattedFeeData: FeeData, zkProof: ProofData, pubProofInputs: FormattedBurnAddressProofDataPublic[], claimedAmounts: bigint[] }) {
-    const feeData = {
-        relayerAddress: getAddress(unformattedFeeData.relayerAddress),
-        priorityFee: BigInt(unformattedFeeData.priorityFee),
-        conversionRate: BigInt(unformattedFeeData.conversionRate),
-        maxFee: BigInt(unformattedFeeData.maxFee),
-        feeToken: getAddress(unformattedFeeData.feeToken)
-    };
+// export function getTransactionInputs({ pubProofInputs, zkProof, claimedAmounts, unformattedFeeData, unformattedPubInputs }: { unformattedPubInputs: UnformattedProofInputsPublic, unformattedFeeData: FeeData, zkProof: ProofData, pubProofInputs: FormattedBurnAddressProofDataPublic[], claimedAmounts: bigint[] }) {
+//     const feeData = {
+//         relayerAddress: getAddress(unformattedFeeData.relayerAddress),
+//         priorityFee: BigInt(unformattedFeeData.priorityFee),
+//         conversionRate: BigInt(unformattedFeeData.conversionRate),
+//         maxFee: BigInt(unformattedFeeData.maxFee),
+//         feeToken: getAddress(unformattedFeeData.feeToken)
+//     };
 
-    const inputs: [bigint, Hex, typeof feeData, bigint[], bigint[], bigint[], bigint, Hex] = [
-        BigInt(unformattedPubInputs.amount),
-        getAddress(unformattedPubInputs.recipient_address),
-        feeData,
-        (pubProofInputs.burn_address_public_proof_data.map((v) => BigInt(v.account_note_hash))),
-        (pubProofInputs.burn_address_public_proof_data.map((v) => BigInt(v.account_note_nullifier))),
-        claimedAmounts,
-        BigInt(unformattedPubInputs.root),
-        toHex(zkProof.proof) as Hex
-    ]
-    return inputs
-}
+//     const inputs: [bigint, Hex, typeof feeData, bigint[], bigint[], bigint[], bigint, Hex] = [
+//         BigInt(unformattedPubInputs.amount),
+//         getAddress(unformattedPubInputs.recipient_address),
+//         feeData,
+//         (pubProofInputs.burn_address_public_proof_data.map((v) => BigInt(v.account_note_hash))),
+//         (pubProofInputs.burn_address_public_proof_data.map((v) => BigInt(v.account_note_nullifier))),
+//         claimedAmounts,
+//         BigInt(unformattedPubInputs.root),
+//         toHex(zkProof.proof) as Hex
+//     ]
+//     return inputs
+// }
 
 export async function estimateGasUsed() {
 
 }
 
 // TODO check if syncedPrivateWallet.accountNonce is not nullified, if it is resync the wallet!!!
-export async function createRelayerInputs(
-    { wormholeToken, privateWallets, amountsToClaim, publicClient, amount, recipient, proofInputs, feeData, backend }:
-        {
-            wormholeToken: WormholeToken | WormholeTokenTest, privateWallets: SyncedPrivateWallet[] | UnsyncedPrivateWallet[], amountsToClaim: bigint[], publicClient: PublicClient, recipient: Address, amount: bigint, feeData?: FeeData, backend?: UltraHonkBackend
-        }
-) {
-    // checks if accountNonce is not already nullified, if it is it find the next nonce that isn't, and updates total amount spend
-    const syncedPrivateWallets: SyncedPrivateWallet[] = []
-    for (const privateWallet of privateWallets) {
-        const syncedWallet = await syncPrivateWallet({ wormholeToken, privateWallet })
-        syncedPrivateWallets.push(syncedWallet)
+// export async function createRelayerInputs(
+//     { wormholeToken, privateWallets, amountsToClaim, publicClient, amount, recipient, proofInputs, feeData, backend }:
+//         {
+//             wormholeToken: WormholeToken | WormholeTokenTest, privateWallets: SyncedPrivateWallet[] | UnsyncedPrivateWallet[], amountsToClaim: bigint[], publicClient: PublicClient, recipient: Address, amount: bigint, feeData?: FeeData, backend?: UltraHonkBackend
+//         }
+// ) {
+//     const relayerInputs: RelayerInputs = {
+//         pubInputs: formattedProofInputs.burn_address_public_proof_data,
+//         feeData: unformattedProofInputs.publicInputs.feeData,
+//         zkProof: zkProof,
+//         claimedAmounts: amountsToClaim
 
-    }
-    // TODO handle case if users want to pay relayer
-    if (feeData) {
-        //set default values if not set
-        //feeData.conversionRateInputs.estimatedGasUsed = feeData.conversionRateInputs.estimatedGasUsed ?? Number(await estimateGasUsage({wormholeToken, wallet:privateWallet.viem.wallet}))
-    }
+//     }
+//     return relayerInputs
+// }
 
-    //const conversionRate = feeData.conversionRateInputs ? BigInt(Math.round(feeData.conversionRateInputs.estimatedGasUsed * feeData.conversionRateInputs.tokenPriceInEth * feeData.conversionRateInputs.relayerBonusFactor)) : 0n;
-    const unformattedProofInputs = await getProofInputs({
-        wormholeToken, privateWallets: syncedPrivateWallets, amountsToClaim: amountsToClaim, publicClient, amountToReMint: amount, recipient, feeData: {
-            relayerAddress: feeData.relayerAddress,
-            priorityFee: feeData.priorityFee,
-            conversionRate: conversionRate,
-            feeToken: wormholeToken.address,
-            maxFee: feeData.maxFee,
-        }
-    })
-    //console.log("formattedProofInputs",formattedProofInputs)
-    console.log({ circuitSize })
-    const zkProof = await generateProof({ proofInputs: proofInputs, backend })
-    const relayerInputs: RelayerInputs = {
-        pubInputs: formattedProofInputs.burn_address_public_proof_data,
-        feeData: unformattedProofInputs.publicInputs.feeData,
-        zkProof: zkProof,
-        claimedAmounts: amountsToClaim
+// export async function relayTx({ relayerInputs, ethWallet, publicClient, wormholeToken }: { relayerInputs: RelayerInputs, ethWallet: WalletClient, publicClient: PublicClient, wormholeToken: WormholeToken | WormholeTokenTest }) {
+//     // set relayer address and check it
+//     let relayerAddress = relayerInputs.feeData.relayerAddress;
+//     const walletAddress = ethWallet.account?.address as Address//(await ethWallet.getAddresses())[0]
+//     relayerAddress = relayerAddress === zeroAddress ? walletAddress : relayerAddress
+//     if (relayerAddress !== walletAddress) {
+//         throw new Error(`you are not the relayer. You are: ${walletAddress} but the relayer is: ${relayerInputs.feeData.relayerAddress}`)
+//     }
 
-    }
-    return relayerInputs
-}
-
-export async function relayTx({ relayerInputs, ethWallet, publicClient, wormholeToken }: { relayerInputs: RelayerInputs, ethWallet: WalletClient, publicClient: PublicClient, wormholeToken: WormholeToken | WormholeTokenTest }) {
-    // set relayer address and check it
-    let relayerAddress = relayerInputs.feeData.relayerAddress;
-    const walletAddress = ethWallet.account?.address as Address//(await ethWallet.getAddresses())[0]
-    relayerAddress = relayerAddress === zeroAddress ? walletAddress : relayerAddress
-    if (relayerAddress !== walletAddress) {
-        throw new Error(`you are not the relayer. You are: ${walletAddress} but the relayer is: ${relayerInputs.feeData.relayerAddress}`)
-    }
-
-    const wormholeTokenRelayer = getContract({ client: { public: publicClient, wallet: ethWallet }, abi: wormholeToken.abi, address: wormholeToken.address });
-    const transactionInputs = getTransactionInputs({ feeData: relayerInputs.feeData, pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof, claimedAmounts: relayerInputs.claimedAmounts })
-    //console.log({transactionInputs})
-    // const formattedProofInputsOnChain = await wormholeToken.read._formatPublicInputs([
-    //     relayerInputs.pubInputs.amount,
-    //     toHex(relayerInputs.pubInputs.signature_hash),
-    //     relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_hash,  
-    //     relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_nullifier,
-    //     relayerInputs.pubInputs.root
-    // ])
-    // console.log({
-    //     formattedProofInputsOnChain,
-    //     bbjsPubInputs______________: relayerInputs.zkProof.publicInputs
-    // })
-    console.log({ transactionInputs })
-    return await wormholeTokenRelayer.write.privateReMint(transactionInputs, { account: ethWallet.account?.address as Address, chain: publicClient.chain })
-}
+//     const wormholeTokenRelayer = getContract({ client: { public: publicClient, wallet: ethWallet }, abi: wormholeToken.abi, address: wormholeToken.address });
+//     const transactionInputs = getTransactionInputs({ feeData: relayerInputs.feeData, pubProofInputs: relayerInputs.pubInputs, zkProof: relayerInputs.zkProof, claimedAmounts: relayerInputs.claimedAmounts })
+//     //console.log({transactionInputs})
+//     // const formattedProofInputsOnChain = await wormholeToken.read._formatPublicInputs([
+//     //     relayerInputs.pubInputs.amount,
+//     //     toHex(relayerInputs.pubInputs.signature_hash),
+//     //     relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_hash,  
+//     //     relayerInputs.pubInputs.burn_address_public_proof_data[0].account_note_nullifier,
+//     //     relayerInputs.pubInputs.root
+//     // ])
+//     // console.log({
+//     //     formattedProofInputsOnChain,
+//     //     bbjsPubInputs______________: relayerInputs.zkProof.publicInputs
+//     // })
+//     console.log({ transactionInputs })
+//     return await wormholeTokenRelayer.write.privateReMint(transactionInputs, { account: ethWallet.account?.address as Address, chain: publicClient.chain })
+// }
 
 
 export function getHashedInputs(
@@ -120,6 +94,7 @@ export function getHashedInputs(
     const prevTotalSpendNoteHashLeaf = hashTotalSpentLeaf({
         totalSpent: BigInt(burnAccount.totalSpent),
         accountNonce: BigInt(burnAccount.accountNonce),
+        blindedAddressDataHash: BigInt(burnAccount.blindedAddressDataHash),
         viewingKey: BigInt(burnAccount.viewingKey)
     })
     // make merkle proofs
@@ -136,6 +111,7 @@ export function getHashedInputs(
     const nextTotalSpendNoteHashLeaf = hashTotalSpentLeaf({
         totalSpent: nextTotalSpend,
         accountNonce: nextAccountNonce,
+        blindedAddressDataHash: BigInt(burnAccount.blindedAddressDataHash),
         viewingKey: BigInt(burnAccount.viewingKey)
     })
     const nullifier = hashNullifier({
@@ -147,12 +123,15 @@ export function getHashedInputs(
 }
 
 export async function proofAndSelfRelay(
-    { amount, recipient, callData, privateWallet, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq }:
-        { amount: bigint, recipient: Address, callData?: Hex, privateWallet: PrivateWallet, wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint }
+    { amount, recipient, callData, privateWallet,burnAddresses, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq }:
+        { amount: bigint, recipient: Address, callData?: Hex, privateWallet: PrivateWallet,burnAddresses:Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint }
 ) {
     callData ??= "0x";
     fullNodeClient ??= archiveClient;
-    deploymentBlock ??= getDeploymentBlock(await fullNodeClient.getChainId())
+    const chainId = await fullNodeClient.getChainId()
+    deploymentBlock ??= getDeploymentBlock(chainId)
+
+    // ---- do async stuff concurrently, signing, syncing ----
     const allSignatureDataPromise = signPrivateTransfer({
         recipientAddress: recipient,
         amount: amount,
@@ -170,7 +149,8 @@ export async function proofAndSelfRelay(
     const syncWalletPromise = syncMultipleBurnAccounts({
         wormholeToken: wormholeToken,
         archiveNode: archiveClient,
-        privateWallet: privateWallet
+        privateWallet: privateWallet,
+        burnAddressesToSync: burnAddresses //@notice, only syncs these addresses!
     })
 
     const [
@@ -180,48 +160,49 @@ export async function proofAndSelfRelay(
     ] = await Promise.all([syncedTreePromise, allSignatureDataPromise, syncWalletPromise])
     privateWallet = syncedPrivateWallet
 
-    //TODO make this for loop-able
-    const burnAccount = syncedPrivateWallet.privateData.burnAccounts[0] as SyncedBurnAccount
-    const claimAmount = amount
+    // ----- collect proof inputs from the burn accounts -----
+    // nullifiers, noteHashes, merkle proofs
+    const nullifiers: bigint[] = []
+    const noteHashes: bigint[] = []
+    const burnAccountProofs: BurnAccountProof[] = []
+    // TODO @Warptoad: check chainId matches burn account. remove burnaccount with different chainId
+    {
+        const burnAccount = syncedPrivateWallet.privateData.burnAccounts[0] as SyncedBurnAccount
+        const claimAmount = amount
 
-    const { merkleProofs, nullifier, nextTotalSpendNoteHashLeaf } = getHashedInputs({
-        burnAccount: burnAccount,
-        claimAmount: claimAmount,
-        syncedTree: syncedTree
-    })
+        const { merkleProofs, nullifier, nextTotalSpendNoteHashLeaf } = getHashedInputs({
+            burnAccount: burnAccount,
+            claimAmount: claimAmount,
+            syncedTree: syncedTree
+        })
 
-    // group all this private inclusion proof data
-    const burnAccountProof: BurnAccountProof = {
-        burnAccount: burnAccount,
-        merkleProofs: merkleProofs,
-        claimAmount: claimAmount
+        // group all this private inclusion proof data
+        const burnAccountProof: BurnAccountProof = {
+            burnAccount: burnAccount,
+            merkleProofs: merkleProofs,
+            claimAmount: claimAmount
+        }
+        burnAccountProofs.push(burnAccountProof)
+        nullifiers.push(nullifier)
+        noteHashes.push(nextTotalSpendNoteHashLeaf)
     }
-
-
-    // add hashes to be revealed to public
-    const nullifiers = [nullifier]
-    const noteHashes = [nextTotalSpendNoteHashLeaf]
 
     const publicInputs = getPubInputs({
         amountToReMint: amount,
         root: syncedTree.tree.root,
+        chainId: chainId,
         signatureHash: signatureHash,
         nullifiers: nullifiers,
         noteHashes: noteHashes,
     })
 
     const privateInputs = getPrivInputs({
-        burnAccountsProofs: [burnAccountProof],
+        burnAccountsProofs: burnAccountProofs,
         signatureData: signatureData
     })
 
-    // const contractFormattedPreFix = await wormholeToken.read._getMessageWithEthPrefix([poseidonHash]);
-    // console.log({
-    //     preImageOfKeccak_______:preImageOfKeccak,
-    //     contractFormattedPreFix, isEqual: preImageOfKeccak===contractFormattedPreFix })
-
-    // @TODO!!
-    // const relayerInputs = await createRelayerInputs({ wormholeToken, privateWallets, signatureData, amountsToClaim, publicClient: archiveClient, amount, recipient, callData, backend })
+    const proofInputs = {...publicInputs, ...privateInputs} as ProofInputs1n | ProofInputs4n
+    const zkProof = await generateProof({ proofInputs:proofInputs, backend:backend })
     // return await relayTx({ relayerInputs, ethWallet, publicClient: archiveClient, wormholeToken })
 }
 

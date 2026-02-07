@@ -5,6 +5,7 @@ global BURN_ADDRESSES_LEN: u32 = 4;
 fn main(
     //----- public inputs
     root: pub Field,
+    chain_id: pub Field,
     amount: pub Field,
     signature_hash: pub [u8;32],
     burn_data_public: pub [BurnDataPublic; BURN_ADDRESSES_LEN],
@@ -30,6 +31,7 @@ fn main(
 
     spendFromBurnAddresses(
         root,
+        chain_id,
         amount,
         burn_data_public,
         //private

@@ -2,7 +2,7 @@
 
 import { Address, hashMessage, Hex, hexToBytes, toBytes, toHex, WalletClient } from "viem";
 import { BurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.js"
-import { extractPubKeyFromSig, findPoWNonce, getBurnAddress, getViewingKey, verifyPowNonce } from "./hashing.js";
+import { extractPubKeyFromSig, findPoWNonce, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.js";
 import { POW_DIFFICULTY, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { syncBurnAccount } from "./syncing.js";
@@ -109,7 +109,7 @@ export class PrivateWallet {
      * @Warning Setting the viewing key your self is dangerous, inability to recover the viewing key will result in loss of funds
      * @returns 
      */
-    async createNewBurnAccount({ blindingPow, viewingKey, difficulty = this.powDifficulty }: { blindingPow?: bigint, viewingKey?: bigint, difficulty: bigint }) {
+    async createNewBurnAccount({ powNonce, viewingKey, chainId, difficulty = this.powDifficulty }: { chainId: bigint, powNonce?: bigint, viewingKey?: bigint, difficulty?: bigint }) {
         // assumes viewingKey is not deterministically derived, at least not the usual way. If viewingKey param is set
         const isDeterministicViewKey = viewingKey === undefined
         if (isDeterministicViewKey) {
@@ -119,20 +119,23 @@ export class PrivateWallet {
             ])
             this.detViewKeyCounter += 1
         }
-        const { x: pubKeyX } = await this.getPubKey()
+        const { x: spendingPubKeyX } = await this.getPubKey()
+        const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX, viewingKey:viewingKey as bigint, chainId })
 
         // TODO derive blindingPow
-        if (blindingPow === undefined) {
-            blindingPow = findPoWNonce({ pubKeyX, startingValue: viewingKey as bigint, difficulty: difficulty })
+        if (powNonce === undefined) {
+            powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
         }
-        if (verifyPowNonce({ pubKeyX, blindingPow: BigInt(blindingPow) }) === false) { throw new Error("Provided blindingPow is not valid") }
+        if (verifyPowNonce({ blindedAddressDataHash, powNonce: BigInt(powNonce) }) === false) { throw new Error("Provided blindingPow is not valid") }
 
-        const burnAddress = getBurnAddress({ pubKeyX: pubKeyX, blindingPow: BigInt(blindingPow) })
+        const burnAddress = getBurnAddress({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(powNonce) })
         const burnAccount: UnsyncedBurnAccount = {
             viewingKey: toHex(viewingKey as bigint),
             isDeterministicViewKey: isDeterministicViewKey,
-            blindingPow: toHex(blindingPow),
+            powNonce: toHex(powNonce),
             burnAddress: burnAddress,
+            chainId: toHex(chainId),
+            blindedAddressDataHash: toHex(blindedAddressDataHash),
         }
 
         this.privateData.burnAccounts.push(burnAccount)

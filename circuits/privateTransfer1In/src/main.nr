@@ -4,6 +4,7 @@ global BURN_ADDRESSES_LEN: u32 = 1;
 fn main(
     //----- public inputs
     root: pub Field,
+    chain_id: pub Field,
     amount: pub Field,
     signature_hash: pub [u8;32],
     burn_data_public: pub [BurnDataPublic; BURN_ADDRESSES_LEN],
@@ -13,6 +14,7 @@ fn main(
     amount_burn_addresses:u32 // always one but still a input to be consistent with other circuits
 ) {
 
+    // one signature for all burns. Cheaper, better UX, but you cant spent with different private keys
     let valid_signature: bool = std::ecdsa_secp256k1::verify_signature(
         signature_data.public_key_x,
         signature_data.public_key_y,
@@ -28,6 +30,7 @@ fn main(
 
     spendFromBurnAddresses(
         root,
+        chain_id,
         amount,
         burn_data_public,
         //private

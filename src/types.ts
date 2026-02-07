@@ -45,19 +45,19 @@ export interface BurnDataPublic extends InputMap {
 }
 
 export interface BurnDataPrivate extends InputMap {
-    //-----very privacy sensitive data -----
-    total_received: Hex,
-    prev_total_spent: Hex,
-    prev_account_nonce: Hex,
-    prev_account_note_merkle: MerkleData,
-    total_received_merkle: MerkleData,
-    amount: Hex,
-    blinding_pow: Hex,
     viewing_key: Hex,
+    pow_nonce: Hex,
+    total_burned: Hex,
+    prev_total_spent: Hex,
+    amount_to_spend: Hex,
+    prev_account_nonce: Hex,
+    prev_account_note_merkle_data: MerkleData,
+    total_burned_merkle_data: MerkleData,
 }
 
 export interface PublicProofInputs extends InputMap {
     root: Hex,
+    chain_id: Hex,
     amount: Hex,
     signature_hash: u8sAsHexArrLen32,
     burn_data_public: BurnDataPublic[],
@@ -69,7 +69,7 @@ export interface PrivateProofInputs extends InputMap {
     amount_burn_addresses: u32AsHex
 }
 
-interface ProofInputs extends PublicProofInputs, PrivateProofInputs, InputMap { }
+export interface ProofInputs extends PublicProofInputs, PrivateProofInputs, InputMap { }
 
 export interface ProofInputs1n extends ProofInputs {
     amount_burn_addresses: '0x0' & u32AsHex | '0x1' & u32AsHex;
@@ -85,8 +85,10 @@ export interface UnsyncedBurnAccount {
     readonly viewingKey: Hex;
     readonly isDeterministicViewKey: Boolean;
     /**used t */
-    readonly blindingPow: Hex;
+    readonly powNonce: Hex;
     readonly burnAddress: Address;
+    readonly chainId: Hex;
+    readonly blindedAddressDataHash: Hex;
 }
 
 export interface SyncedBurnAccount extends UnsyncedBurnAccount {

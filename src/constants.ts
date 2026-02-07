@@ -1,8 +1,7 @@
 import { getAddress, padHex } from "viem";
-import { RelayerInputs, RelayerInputsHex } from "./types.js";
+import { RelayerInputs } from "./types.js";
 import feeEstimatorRelayerData from "./feeEstimatorRelayerData.json"
 //import { convertRelayerInputsToHex } from "./transact.js";
-import { FeeData } from "./proofInputsTypes.js";
 
 export const WormholeTokenContractName = "WormholeToken"
 export const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
@@ -10,9 +9,9 @@ export const PrivateTransfer1InVerifierContractName = "privateTransfer1InVerifie
 export const PrivateTransfer4InVerifierContractName = "privateTransfer4InVerifier"
 export const ZKTranscriptLibContractName = "contracts/privateTransfer1InVerifier.sol:ZKTranscriptLib"
 
-export const TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414Cn; // UTF8("total_received").toHex()
-export const TOTAL_SPENT_DOMAIN = 0x5350454E545F544F54414Cn; // UTF8("total_spent").toHex()
-export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("zkwormhole")].map(b=>b.toString(16)).join('') as Hex
+export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('') as Hex
+export const TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544n; // UTF8("TOTAL_BURNED").toHex()
+export const TOTAL_SPENT_DOMAIN = 0x544f54414c5f5350454e44n; // UTF8("TOTAL_SPEND").toHex()
 export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034343698204186575808495616n;
 export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
 export const POW_LEADING_ZEROS = 3n;
@@ -30,12 +29,12 @@ Here is some salt: TODO
 `
 
 export const zeroAddress = getAddress(padHex("0x00", { size: 20 }))
-export const EMPTY_FEE_DATA: FeeData = {
-    relayerAddress: zeroAddress,
-    priorityFee: 0n,
-    conversionRate: 0n,
-    maxFee: 0n,
-    feeToken: zeroAddress,
-}
+// export const EMPTY_FEE_DATA: FeeData = {
+//     relayerAddress: zeroAddress,
+//     priorityFee: 0n,
+//     conversionRate: 0n,
+//     maxFee: 0n,
+//     feeToken: zeroAddress,
+// }
 
 //export const FEE_ESTIMATOR_DATA:RelayerInputsHex = convertRelayerInputsToHex(feeEstimatorRelayerData as RelayerInputs)

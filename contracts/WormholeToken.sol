@@ -35,7 +35,7 @@ event NewLeaf(uint256 leaf);
 
 contract WormholeToken is ERC20WithWormHoleMerkleTree {
     // this is so leafs from received balance and spent balance wont get mixed up
-    uint256 constant public TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414C; // UTF8("total_received").toHex()
+    uint256 constant public TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544; //  UTF8("TOTAL_BURNED").toHex()
     address internal constant POSEIDON2_ADDRESS = 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C; // yul-recompile-200: 0xb41072641808e6186eF5246fE1990e46EB45B65A gas: 62572, huff: 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C gas:39 627, yul-lib: 0x925e05cfb89f619BE3187Bf13D355A6D1864D24D,
 
     // @notice accountNoteNullifier = poseidon(nonce, viewingKey)
@@ -95,7 +95,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256[3] memory input;
         input[0] = _addressToUint256(_to);
         input[1] = _newBalance;
-        input[2] = TOTAL_RECEIVED_DOMAIN;
+        input[2] = TOTAL_BURNED_DOMAIN;
         return hashPoseidon2T3(input);
     }
 
@@ -179,6 +179,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
 
     function _formatPublicInputs(
         uint256 _root,
+        uint256 _chainId,
         uint256 _amount,
         bytes32 _signatureHash,
         uint256[] memory _accountNoteHashes,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
@@ -188,8 +189,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
             bytes32[] memory publicInputs = new bytes32[](36);
 
             publicInputs[0] = bytes32(_root);
-            publicInputs[1] = bytes32(uint256(_amount));
-            uint256 signatureHashOffset = 2;
+            publicInputs[1] = bytes32(_chainId);
+            publicInputs[2] = bytes32(uint256(_amount));
+            uint256 signatureHashOffset = 3;
             for (uint256 i = 0; i < 32; i++) {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }
@@ -202,8 +204,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
             bytes32[] memory publicInputs = new bytes32[](42);
 
             publicInputs[0] = bytes32(_root);
-            publicInputs[1] = bytes32(uint256(_amount));
-            uint256 signatureHashOffset = 2;
+            publicInputs[1] = bytes32(_chainId);
+            publicInputs[2] = bytes32(uint256(_amount));
+            uint256 signatureHashOffset = 3;
             for (uint256 i = 0; i < 32; i++) {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }
@@ -239,6 +242,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         bytes calldata _callData,
         bytes[] calldata _totalSpentEncrypted
     ) public {
+        // @notice this has the side effect of burned balances not being spendable of a for of ethereum on a different chainId.
+        // long term we might need to research a different identifier
+        uint256 _chainId = block.chainid;
         uint256 blockNumber = block.number;
         for (uint256 i = 0; i < _accountNoteNullifiers.length; i++) {
             uint256 _accountNoteNullifier = _accountNoteNullifiers[i];
@@ -269,7 +275,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         //     _update(address(0), _feeData.relayerAddress, _relayerReward);
         // }
 
-        bytes32[] memory publicInputs = _formatPublicInputs(_root,_amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
+        bytes32[] memory publicInputs = _formatPublicInputs(_root,_chainId,_amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
         if (_accountNoteNullifiers.length == 1) {
             if (!IVerifier(privateTransferVerifier1In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
