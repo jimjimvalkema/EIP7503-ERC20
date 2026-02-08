@@ -21,6 +21,8 @@ export class PrivateWallet {
     readonly viemWallet: WalletClient
     readonly privateData: PrivateWalletData;
     readonly powDifficulty: bigint;
+    readonly acceptedChainIds: bigint[];
+    readonly defaultChainId:bigint;
 
     //deterministic viewingKey Root. The same ethAccount can always recover to this key. User only needs to know their seed phrase to recover funds
     private detViewKeyRoot: Hex | undefined;
@@ -30,11 +32,31 @@ export class PrivateWallet {
      * 
      * @param viemWallet 
      * @param privateWalletData 
-     * @param viewKeySigMessage 
      */
-    constructor(viemWallet: WalletClient, privateWalletData?: PrivateWalletData, viewKeySigMessage = VIEWING_KEY_SIG_MESSAGE, powDifficulty = POW_DIFFICULTY) {
+    constructor(
+        viemWallet: WalletClient,
+        { privateWalletData, viewKeySigMessage = VIEWING_KEY_SIG_MESSAGE, powDifficulty = POW_DIFFICULTY,acceptedChainIds=[1n], defaultChainId}:
+            { privateWalletData?: PrivateWalletData, viewKeySigMessage?: string, powDifficulty?: bigint,acceptedChainIds?:bigint[], defaultChainId?:bigint }={}
+    ) {
         this.viemWallet = viemWallet
         this.powDifficulty = powDifficulty
+        this.acceptedChainIds = acceptedChainIds
+
+        // only one accepted chainId? thats default!
+        // more? 1n is default, if it is accepted!
+        if(defaultChainId === undefined) {
+            if (this.acceptedChainIds.length === 1) {
+                this.defaultChainId = this.acceptedChainIds[0]
+            } else {
+                if ( this.acceptedChainIds.includes(1n)){
+                    this.defaultChainId = 1n
+                } else {
+                    throw new Error(`defaultChainId needs to be set. example: new PrivateWallet(viemWallet,{defaultChainId:${Number(acceptedChainIds[0])},acceptedChainIds:[${acceptedChainIds.map((v=>Number(v)+"n")).toString()}]})`)
+                }
+            }
+        } else {
+            this.defaultChainId = defaultChainId
+        }
 
         // init this.privateWalletData
         if (privateWalletData === undefined) {
@@ -109,8 +131,11 @@ export class PrivateWallet {
      * @Warning Setting the viewing key your self is dangerous, inability to recover the viewing key will result in loss of funds
      * @returns 
      */
-    async createNewBurnAccount({ powNonce, viewingKey, chainId, difficulty = this.powDifficulty }: { chainId: bigint, powNonce?: bigint, viewingKey?: bigint, difficulty?: bigint }) {
+    async createNewBurnAccount({ powNonce, viewingKey, chainId, difficulty = this.powDifficulty }: { chainId?: bigint, powNonce?: bigint, viewingKey?: bigint, difficulty?: bigint }={}) {
         // assumes viewingKey is not deterministically derived, at least not the usual way. If viewingKey param is set
+        // @TODO @warptoad chainId is automatically set to mainnet, for warptoad 
+        chainId ??= this.defaultChainId
+        if (this.acceptedChainIds.includes(chainId) === false) { throw Error(`chainId:${chainId} is not accepted, only these chainId are valid: ${this.acceptedChainIds}`) }
         const isDeterministicViewKey = viewingKey === undefined
         if (isDeterministicViewKey) {
             viewingKey = poseidon2Hash([
@@ -120,15 +145,16 @@ export class PrivateWallet {
             this.detViewKeyCounter += 1
         }
         const { x: spendingPubKeyX } = await this.getPubKey()
-        const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX, viewingKey:viewingKey as bigint, chainId })
+        const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX, viewingKey: viewingKey as bigint, chainId })
 
         // TODO derive blindingPow
         if (powNonce === undefined) {
             powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
         }
-        if (verifyPowNonce({ blindedAddressDataHash, powNonce: BigInt(powNonce) }) === false) { throw new Error("Provided blindingPow is not valid") }
+        if (verifyPowNonce({ blindedAddressDataHash, powNonce: BigInt(powNonce) }) === false) { throw new Error("Provided powNonce is not valid") }
 
         const burnAddress = getBurnAddress({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(powNonce) })
+        console.log({chainId, chainIdHex:toHex(chainId)})
         const burnAccount: UnsyncedBurnAccount = {
             viewingKey: toHex(viewingKey as bigint),
             isDeterministicViewKey: isDeterministicViewKey,

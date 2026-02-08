@@ -1,11 +1,12 @@
 import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
-import { FeeData, SignatureData, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.js";
+import { FeeData, SignatureData, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.js";
 import { PrivateWallet } from "./PrivateWallet.js"
+import { padArray } from "./proving.js";
 export function verifyPowNonce({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty?: bigint }) {
     const powHash = hashPow({ blindedAddressDataHash, powNonce });
-    return powHash > difficulty
+    return powHash < difficulty
 }
 
 export async function extractPubKeyFromSig({ hash, signature }: { hash: Hash, signature: Signature | Hex }) {
@@ -122,15 +123,20 @@ export async function signPrivateTransfer({ recipientAddress, amount, callData, 
     return {
         viemFormatSignature: { signature, pubKeyX, pubKeyY },
         signatureData: {
-            public_key_x: hexToByteArray(pubKeyX) as u8sAsHexArrLen32,
-            public_key_y: hexToByteArray(pubKeyY) as u8sAsHexArrLen32,
-            signature: hexToByteArray(signature) as u8sAsHexArrLen64,
+            public_key_x: hexToU8sAsHexArr(pubKeyX, 32) as u8sAsHexArrLen32,
+            public_key_y: hexToU8sAsHexArr(pubKeyY, 32) as u8sAsHexArrLen32,
+            signature: hexToU8sAsHexArr(signature.slice(0, 2 + 128) as Hex, 64) as u8sAsHexArrLen64, // slice(0, 2 + 128) because we need to skip last byte, i don't remember why that byte is there
         },
         signatureHash: KeccakWrappedPoseidonHash,
         poseidonHash: sigHash,
         preImageOfKeccak: preImageOfKeccak
     }
 
+}
+function hexToU8sAsHexArr(hex:Hex, len:number):u8AsHex[] {
+    const unPadded = hexToByteArray(hex)
+    const padded = padArray({arr:unPadded, size:len, value:"0x00", dir:"left"})
+    return padded as u8AsHex[] 
 }
 
 function hexToByteArray(hex: Hex): Hex[] {

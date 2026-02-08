@@ -8,6 +8,7 @@ import { toBigInt } from "@aztec/aztec.js";
 import { hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, signPrivateTransfer } from "./hashing.js";
 import { getSyncTree } from "@warptoad/gigabridge-js";
 import { PrivateWallet } from "./PrivateWallet.js";
+import { MAX_TREE_DEPTH } from "./constants.js";
 //import { noir_test_main_self_relay } from "./noirtests.js";
 
 // export function getTransactionInputs({ pubProofInputs, zkProof, claimedAmounts, unformattedFeeData, unformattedPubInputs }: { unformattedPubInputs: UnformattedProofInputsPublic, unformattedFeeData: FeeData, zkProof: ProofData, pubProofInputs: FormattedBurnAddressProofDataPublic[], claimedAmounts: bigint[] }) {
@@ -82,8 +83,8 @@ export async function estimateGasUsed() {
 
 
 export function getHashedInputs(
-    { burnAccount, claimAmount, syncedTree }:
-        { burnAccount: SyncedBurnAccount, claimAmount: bigint, syncedTree: PreSyncedTree }) {
+    { burnAccount, claimAmount, syncedTree, maxTreeDepth=MAX_TREE_DEPTH }:
+        { burnAccount: SyncedBurnAccount, claimAmount: bigint, syncedTree: PreSyncedTree, maxTreeDepth?:number }) {
 
     // --- inclusion proof ---
     // hash leafs
@@ -91,7 +92,7 @@ export function getHashedInputs(
         burnAddress: burnAccount.burnAddress,
         totalBurned: BigInt(burnAccount.totalBurned)
     })
-    const prevTotalSpendNoteHashLeaf = hashTotalSpentLeaf({
+    const prevTotalSpendNoteHashLeaf = BigInt(burnAccount.accountNonce) === 0n ? 0n : hashTotalSpentLeaf({
         totalSpent: BigInt(burnAccount.totalSpent),
         accountNonce: BigInt(burnAccount.accountNonce),
         blindedAddressDataHash: BigInt(burnAccount.blindedAddressDataHash),
@@ -101,7 +102,8 @@ export function getHashedInputs(
     const merkleProofs = getSpendableBalanceProof({
         tree: syncedTree.tree,
         totalSpendNoteHashLeaf: prevTotalSpendNoteHashLeaf,
-        totalBurnedLeaf
+        totalBurnedLeaf,
+        maxTreeDepth
     })
 
     // --- public circuit inputs ---
@@ -123,13 +125,13 @@ export function getHashedInputs(
 }
 
 export async function proofAndSelfRelay(
-    { amount, recipient, callData, privateWallet,burnAddresses, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq }:
-        { amount: bigint, recipient: Address, callData?: Hex, privateWallet: PrivateWallet,burnAddresses:Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint }
+    { amount, recipient, callData, privateWallet,burnAddresses, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, maxTreeDepth=MAX_TREE_DEPTH }:
+        { amount: bigint, recipient: Address, callData?: Hex, privateWallet: PrivateWallet,burnAddresses:Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, maxTreeDepth?:number }
 ) {
     callData ??= "0x";
     fullNodeClient ??= archiveClient;
-    const chainId = await fullNodeClient.getChainId()
-    deploymentBlock ??= getDeploymentBlock(chainId)
+    const chainId = BigInt(await fullNodeClient.getChainId())
+    deploymentBlock ??= getDeploymentBlock(Number(chainId))
 
     // ---- do async stuff concurrently, signing, syncing ----
     const allSignatureDataPromise = signPrivateTransfer({
@@ -165,7 +167,7 @@ export async function proofAndSelfRelay(
     const nullifiers: bigint[] = []
     const noteHashes: bigint[] = []
     const burnAccountProofs: BurnAccountProof[] = []
-    // TODO @Warptoad: check chainId matches burn account. remove burnaccount with different chainId
+    // TODO @Warptoad: check chainId matches burn account. remove burn account with different chainId
     {
         const burnAccount = syncedPrivateWallet.privateData.burnAccounts[0] as SyncedBurnAccount
         const claimAmount = amount
@@ -173,7 +175,8 @@ export async function proofAndSelfRelay(
         const { merkleProofs, nullifier, nextTotalSpendNoteHashLeaf } = getHashedInputs({
             burnAccount: burnAccount,
             claimAmount: claimAmount,
-            syncedTree: syncedTree
+            syncedTree: syncedTree,
+            maxTreeDepth: maxTreeDepth
         })
 
         // group all this private inclusion proof data
@@ -202,7 +205,10 @@ export async function proofAndSelfRelay(
     })
 
     const proofInputs = {...publicInputs, ...privateInputs} as ProofInputs1n | ProofInputs4n
+    console.log(JSON.stringify(proofInputs,undefined,2))
+    console.log("proving")
     const zkProof = await generateProof({ proofInputs:proofInputs, backend:backend })
+    console.log("done proving")
     // return await relayTx({ relayerInputs, ethWallet, publicClient: archiveClient, wormholeToken })
 }
 

@@ -5,7 +5,7 @@ global BURN_ADDRESSES_LEN: u32 = 4;
 fn main(
     //----- public inputs
     root: pub Field,
-    chain_id: pub Field,
+    chain_id: Field, // pub key word is removed since we don't use cross-chain functionality
     amount: pub Field,
     signature_hash: pub [u8;32],
     burn_data_public: pub [BurnDataPublic; BURN_ADDRESSES_LEN],

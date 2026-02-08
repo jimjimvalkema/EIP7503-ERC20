@@ -1,6 +1,8 @@
-import { getAddress, padHex } from "viem";
-import { RelayerInputs } from "./types.js";
+import { getAddress, Hex, padHex, toHex } from "viem";
+import { MerkleData, RelayerInputs, u1AsHexArr, u32AsHex } from "./types.js";
 import feeEstimatorRelayerData from "./feeEstimatorRelayerData.json"
+import { formatMerkleProof } from "./proving.js";
+import { LeanIMTMerkleProof } from "@zk-kit/lean-imt";
 //import { convertRelayerInputsToHex } from "./transact.js";
 
 export const WormholeTokenContractName = "WormholeToken"
@@ -19,7 +21,7 @@ export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
 export const MAX_TREE_DEPTH = 40 as const;
 
 export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
-    11155111:9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a
+    11155111: 9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a
 }
 
 export const VIEWING_KEY_SIG_MESSAGE = `
@@ -27,6 +29,16 @@ You are about to create your viewing key for your zkwormhole account! \n
 Yay! :D Becarefull signing this on untrusted websites.
 Here is some salt: TODO
 `
+
+export const EMPTY_UNFORMATTED_MERKLE_PROOF: LeanIMTMerkleProof<bigint> = {
+    root: 0n,
+    leaf: 0n,
+    index: 0,
+    siblings: [], 
+}
+
+
+export const EMPTY_MERKLE_PROOF: MerkleData = formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF,MAX_TREE_DEPTH)
 
 export const zeroAddress = getAddress(padHex("0x00", { size: 20 }))
 // export const EMPTY_FEE_DATA: FeeData = {

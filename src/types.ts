@@ -12,8 +12,9 @@ export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Req
 
 // we could use import type { FixedLengthArray } from 'type-fest';
 // but for now i just do branded types so it yells at you if you do something stupid, but it doesn't check the length
-export type u8sAsHexArrLen32 = Hex[] & { __brand: 'u8sAsHexArrLen32' }
-export type u8sAsHexArrLen64 = Hex[] & { __brand: 'u8sAsHexArrLen64' }
+export type u8AsHex = Hex & { __brand: 'u8AsHex' }
+export type u8sAsHexArrLen32 = u8AsHex[] & { __brand: 'u8sAsHexArrLen32' }
+export type u8sAsHexArrLen64 = u8AsHex[] & { __brand: 'u8sAsHexArrLen64' }
 export type u32AsHex = Hex & { __brand: 'u32AsHex' }
 export type u1AsHexArr = Hex[] & { __brand: 'u1AsHexArr' }
 
@@ -57,7 +58,7 @@ export interface BurnDataPrivate extends InputMap {
 
 export interface PublicProofInputs extends InputMap {
     root: Hex,
-    chain_id: Hex,
+    chain_id: Hex, // technically not public since we don't use the cross-chain functionality here, can be revealed does not leak user data
     amount: Hex,
     signature_hash: u8sAsHexArrLen32,
     burn_data_public: BurnDataPublic[],
