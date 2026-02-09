@@ -1,5 +1,5 @@
 import { Address, getAddress, getContract, Hex, PublicClient, toBytes, toHex, WalletClient, zeroAddress } from "viem";
-import { WormholeTokenTest } from "../test/1inRemint.test.js";
+import { WormholeTokenTest } from "../test/2inRemint.test.js";
 import { BurnAccount, FeeData, PreSyncedTree, ProofInputs, ProofInputs1n, ProofInputs4n, RelayerInputs, SyncedBurnAccount, WormholeToken } from "./types.js";
 import { generateProof, getSpendableBalanceProof, getPubInputs, getPrivInputs, BurnAccountProof } from "./proving.js";
 import { ProofData, UltraHonkBackend } from "@aztec/bb.js";
@@ -109,6 +109,7 @@ export function getHashedInputs(
     // --- public circuit inputs ---
     // hash public hashes (nullifier, commitment)
     const nextTotalSpend = BigInt(burnAccount.totalSpent) + claimAmount
+    const prevAccountNonce = BigInt(burnAccount.accountNonce)
     const nextAccountNonce = BigInt(burnAccount.accountNonce) + 1n
     const nextTotalSpendNoteHashLeaf = hashTotalSpentLeaf({
         totalSpent: nextTotalSpend,
@@ -117,7 +118,7 @@ export function getHashedInputs(
         viewingKey: BigInt(burnAccount.viewingKey)
     })
     const nullifier = hashNullifier({
-        accountNonce: nextAccountNonce,
+        accountNonce: prevAccountNonce,
         viewingKey: BigInt(burnAccount.viewingKey)
     })
 
@@ -201,7 +202,8 @@ export async function proofAndSelfRelay(
 
     const privateInputs = getPrivInputs({
         burnAccountsProofs: burnAccountProofs,
-        signatureData: signatureData
+        signatureData: signatureData,
+        maxTreeDepth: maxTreeDepth
     })
 
     const proofInputs = {...publicInputs, ...privateInputs} as ProofInputs1n | ProofInputs4n

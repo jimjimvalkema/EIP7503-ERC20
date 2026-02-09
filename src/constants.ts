@@ -7,9 +7,9 @@ import { LeanIMTMerkleProof } from "@zk-kit/lean-imt";
 
 export const WormholeTokenContractName = "WormholeToken"
 export const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
-export const PrivateTransfer1InVerifierContractName = "privateTransfer1InVerifier"
+export const PrivateTransfer1InVerifierContractName = "privateTransfer2InVerifier"
 export const PrivateTransfer4InVerifierContractName = "privateTransfer4InVerifier"
-export const ZKTranscriptLibContractName = "contracts/privateTransfer1InVerifier.sol:ZKTranscriptLib"
+export const ZKTranscriptLibContractName = "contracts/privateTransfer2InVerifier.sol:ZKTranscriptLib"
 
 export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('') as Hex
 export const TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544n; // UTF8("TOTAL_BURNED").toHex()
@@ -24,6 +24,7 @@ export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
     11155111: 9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a
 }
 
+export const CIRCUIT_SIZES = [2,4];
 export const VIEWING_KEY_SIG_MESSAGE = `
 You are about to create your viewing key for your zkwormhole account! \n
 Yay! :D Becarefull signing this on untrusted websites.

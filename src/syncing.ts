@@ -1,7 +1,7 @@
 import { queryEventInChunks } from "@warptoad/gigabridge-js/viem-utils"
 import { LeanIMTHashFunction, LeanIMT } from "@zk-kit/lean-imt"
 import { Abi, AbiEvent, Address, bytesToHex, concatHex, Hex, hexToBytes, presignMessagePrefix, PublicClient, sliceHex, toBytes, toHex } from "viem"
-import { WormholeTokenTest } from "../test/1inRemint.test.js"
+import { WormholeTokenTest } from "../test/2inRemint.test.js"
 import { WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.js"
 import { BurnAccount, PreSyncedTree, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.js"
 import { poseidon2Hash } from "@zkpassport/poseidon2"

@@ -1,6 +1,6 @@
 use privateTransferLib::{spendFromBurnAddresses, BurnDataPublic, BurnDataPrivate, SignatureData};
 
-global BURN_ADDRESSES_LEN: u32 = 1; 
+global BURN_ADDRESSES_LEN: u32 = 2; 
 fn main(
     //----- public inputs
     root: pub Field,

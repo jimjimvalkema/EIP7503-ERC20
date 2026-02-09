@@ -25,12 +25,12 @@
   },
   "scripts": {
     "solidity": "hardhat compile;",
-    "noir:privateTransfer1In:compile": "cd circuits/privateTransfer1In; nargo compile;",
-    "noir:privateTransfer1In:vk": "cd circuits/privateTransfer1In; bb write_vk -b ./target/privateTransfer1In.json -o ./target --oracle_hash keccak;",
-    "noir:privateTransfer1In:verifier": "cd circuits/privateTransfer1In; bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol;",
-    "noir:privateTransfer1In:cp-verifier": "cp circuits/privateTransfer1In/target/Verifier.sol contracts/privateTransfer1InVerifier.sol;",
-    "noir:privateTransfer1In:rename-verifier": "yarn tsx scripts/renameVerifier.ts --newName privateTransfer1InVerifier --file contracts/privateTransfer1InVerifier.sol",
-    "noir:privateTransfer1In": "yarn noir:privateTransfer1In:compile; yarn noir:privateTransfer1In:vk; yarn noir:privateTransfer1In:verifier; yarn noir:privateTransfer1In:cp-verifier; yarn noir:privateTransfer1In:rename-verifier",
+    "noir:privateTransfer2In:compile": "cd circuits/privateTransfer2In; nargo compile;",
+    "noir:privateTransfer2In:vk": "cd circuits/privateTransfer2In; bb write_vk -b ./target/privateTransfer2In.json -o ./target --oracle_hash keccak;",
+    "noir:privateTransfer2In:verifier": "cd circuits/privateTransfer2In; bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol;",
+    "noir:privateTransfer2In:cp-verifier": "cp circuits/privateTransfer2In/target/Verifier.sol contracts/privateTransfer2InVerifier.sol;",
+    "noir:privateTransfer2In:rename-verifier": "yarn tsx scripts/renameVerifier.ts --newName privateTransfer2InVerifier --file contracts/privateTransfer2InVerifier.sol",
+    "noir:privateTransfer2In": "yarn noir:privateTransfer2In:compile; yarn noir:privateTransfer2In:vk; yarn noir:privateTransfer2In:verifier; yarn noir:privateTransfer2In:cp-verifier; yarn noir:privateTransfer2In:rename-verifier",
 
     "noir:privateTransfer4In:compile": "cd circuits/privateTransfer4In; nargo compile;",
     "noir:privateTransfer4In:vk": "cd circuits/privateTransfer4In; bb write_vk -b ./target/privateTransfer4In.json -o ./target --oracle_hash keccak;",
@@ -39,7 +39,7 @@
     "noir:privateTransfer4In:rename-verifier": "yarn tsx scripts/renameVerifier.ts --newName privateTransfer4InVerifier --file contracts/privateTransfer4InVerifier.sol",
     "noir:privateTransfer4In": "yarn noir:privateTransfer4In:compile; yarn noir:privateTransfer4In:vk; yarn noir:privateTransfer4In:verifier; yarn noir:privateTransfer4In:cp-verifier; yarn noir:privateTransfer4In:rename-verifier",
     
-    "noir":"yarn noir:privateTransfer1In; yarn noir:privateTransfer4In",
+    "noir":"yarn noir:privateTransfer2In; yarn noir:privateTransfer4In",
     "website": "cd website; yarn vite"
   },
   "dependencies": {

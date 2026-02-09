@@ -1,13 +1,13 @@
 import { hexToBytes, Hex, Address, PublicClient, toHex, hexToNumber } from "viem"
 import { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs } from "./types.js"
-import { EMPTY_UNFORMATTED_MERKLE_PROOF, MAX_TREE_DEPTH } from "./constants.js"
+import { CIRCUIT_SIZES, EMPTY_UNFORMATTED_MERKLE_PROOF, MAX_TREE_DEPTH } from "./constants.js"
 import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer } from "./hashing.js"
 import { LeanIMT, LeanIMTMerkleProof } from "@zk-kit/lean-imt"
-import { WormholeTokenTest } from "../test/1inRemint.test.js"
+import { WormholeTokenTest } from "../test/2inRemint.test.js"
 import { getSyncedMerkleTree } from "./syncing.js"
 import { ProofData, UltraHonkBackend } from '@aztec/bb.js';
 import { CompiledCircuit, InputMap, Noir } from "@noir-lang/noir_js"
-import privateTransfer1InCircuit from '../circuits/privateTransfer1In/target/privateTransfer1In.json';
+import privateTransfer2InCircuit from '../circuits/privateTransfer2In/target/privateTransfer2In.json';
 import privateTransfer41InCircuit from '../circuits/privateTransfer4In/target/privateTransfer4In.json';
 
 import { Fr } from "@aztec/aztec.js"
@@ -30,7 +30,7 @@ export function padArray<T>({ arr, size, value, dir }: { arr: T[], size: number,
     return dir === "left" ? [...padding, ...arr] : [...arr, ...padding]
 }
 
-export function formatMerkleProof(merkleProof: LeanIMTMerkleProof<bigint>, maxTreeDepth:number = MAX_TREE_DEPTH): MerkleData {
+export function formatMerkleProof(merkleProof: LeanIMTMerkleProof<bigint>, maxTreeDepth: number = MAX_TREE_DEPTH): MerkleData {
     const depth = toHex(merkleProof.siblings.length)
     const indices = BigInt(merkleProof.index).toString(2).split('').reverse().map((v) => toHex(Number(v)))
     const siblings = merkleProof.siblings.map((v) => toHex(v))
@@ -48,8 +48,8 @@ export function formatMerkleProof(merkleProof: LeanIMTMerkleProof<bigint>, maxTr
  * @returns 
  */
 export function getAccountNoteMerkle(
-    { totalSpendNoteHashLeaf, tree,maxTreeDepth=MAX_TREE_DEPTH }:
-        { totalSpendNoteHashLeaf: bigint, tree: LeanIMT<bigint>, maxTreeDepth?:number }
+    { totalSpendNoteHashLeaf, tree, maxTreeDepth = MAX_TREE_DEPTH }:
+        { totalSpendNoteHashLeaf: bigint, tree: LeanIMT<bigint>, maxTreeDepth?: number }
 ): MerkleData {
     if (totalSpendNoteHashLeaf === 0n) {
         const merkleProof = formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF, maxTreeDepth)
@@ -64,12 +64,12 @@ export function getAccountNoteMerkle(
 
 
 export function getBurnedMerkle(
-    { totalBurnedLeaf, tree, maxTreeDepth=MAX_TREE_DEPTH  }:
-        { tree: LeanIMT<bigint>, totalBurnedLeaf: bigint, maxTreeDepth?:number }
+    { totalBurnedLeaf, tree, maxTreeDepth = MAX_TREE_DEPTH }:
+        { tree: LeanIMT<bigint>, totalBurnedLeaf: bigint, maxTreeDepth?: number }
 ): MerkleData {
     const totalReceivedIndex = tree.indexOf(totalBurnedLeaf)
     const unformattedMerkleProof = tree.generateProof(totalReceivedIndex)
-    const merkleProof = formatMerkleProof(unformattedMerkleProof,maxTreeDepth)
+    const merkleProof = formatMerkleProof(unformattedMerkleProof, maxTreeDepth)
     return merkleProof
 }
 
@@ -79,8 +79,8 @@ export function getBurnedMerkle(
  * @returns 
  */
 export function getSpendableBalanceProof(
-    { totalSpendNoteHashLeaf, totalBurnedLeaf, tree, maxTreeDepth=MAX_TREE_DEPTH }:
-        { totalSpendNoteHashLeaf: bigint, totalBurnedLeaf: bigint, tree: LeanIMT<bigint>, maxTreeDepth?:number }
+    { totalSpendNoteHashLeaf, totalBurnedLeaf, tree, maxTreeDepth = MAX_TREE_DEPTH }:
+        { totalSpendNoteHashLeaf: bigint, totalBurnedLeaf: bigint, tree: LeanIMT<bigint>, maxTreeDepth?: number }
 ): SpendableBalanceProof {
     const totalSpendMerkleProofs = getAccountNoteMerkle({ totalSpendNoteHashLeaf, tree, maxTreeDepth })
     const totalBurnedMerkleProofs = getBurnedMerkle({ totalBurnedLeaf, tree, maxTreeDepth })
@@ -93,14 +93,19 @@ export function getSpendableBalanceProof(
 }
 
 export function getPubInputs(
-    { amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes }:
-        { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[] }) {
+    { amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize }:
+        { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number }) {
 
     const burn_data_public: BurnDataPublic[] = []
-    for (let index = 0; index < nullifiers.length; index++) {
+    circuitSize ??= CIRCUIT_SIZES.find((v) => v >= nullifiers.length) as number
+    console.log({circuitSize, nullifiersLength:nullifiers.length, CIRCUIT_SIZES})
+    for (let index = 0; index < circuitSize; index++) {
+        // empty values are ignored in the circuit, but it's still better for privacy to set them to something random since these are public
+        const noteHash = noteHashes[index] === undefined ? Fr.random().toBigInt() : noteHashes[index]
+        const nullifier = nullifiers[index] === undefined ? Fr.random().toBigInt() : nullifiers[index]
         const publicBurnPoofData: BurnDataPublic = {
-            account_note_hash: toHex(noteHashes[index]),
-            account_note_nullifier: toHex(nullifiers[index]),
+            account_note_hash: toHex(noteHash),
+            account_note_nullifier: toHex(nullifier),
         }
         burn_data_public.push(publicBurnPoofData)
     }
@@ -127,34 +132,54 @@ export interface BurnAccountProof {
  * @returns 
  */
 export function getPrivInputs(
-    { signatureData, burnAccountsProofs }:
-        { signatureData: SignatureData, burnAccountsProofs: BurnAccountProof[] }) {
+    { signatureData, burnAccountsProofs, circuitSize, maxTreeDepth }:
+        { signatureData: SignatureData, burnAccountsProofs: BurnAccountProof[], circuitSize?: number, maxTreeDepth?:number }) {
 
     const burn_address_private_proof_data: BurnDataPrivate[] = [];
-    for (const burnAccountProof of burnAccountsProofs) {
-        const prevTotalSpendMerkleProof = burnAccountProof.merkleProofs.totalSpendMerkleProofs
-        const totalBurnedMerkleProof = burnAccountProof.merkleProofs.totalBurnedMerkleProofs;
-        const claimAmount = burnAccountProof.claimAmount
+    circuitSize ??= CIRCUIT_SIZES.find((v) => v >= burnAccountsProofs.length) as number
+    for (let index = 0; index < circuitSize; index++) {
+        const burnAccountProof = burnAccountsProofs[index];
+        if (burnAccountProof === undefined) {
+                // circuit is not constraining this but it still needs something
+                const privateBurnData: BurnDataPrivate = {
+                    viewing_key: toHex(0n),
+                    pow_nonce: toHex(0n),
+                    total_burned: toHex(0n),
+                    prev_total_spent: toHex(0n),
+                    amount_to_spend: toHex(0n),
+                    prev_account_nonce: toHex(0n),
+                    prev_account_note_merkle_data: formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF, maxTreeDepth),
+                    total_burned_merkle_data: formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF, maxTreeDepth),
+                }
+                burn_address_private_proof_data.push(privateBurnData)
+        } else {
+            const prevTotalSpendMerkleProof = burnAccountProof.merkleProofs.totalSpendMerkleProofs
+            const totalBurnedMerkleProof = burnAccountProof.merkleProofs.totalBurnedMerkleProofs;
+            const claimAmount = burnAccountProof.claimAmount
 
 
-        const prevAccountNonce = burnAccountProof.burnAccount.accountNonce
-        const prevTotalSpent = burnAccountProof.burnAccount.totalSpent
-        const totalBurned = burnAccountProof.burnAccount.totalBurned
-        // const nextTotalSpent = prevTotalSpent + claimAmount
-        // const nextAccountNonce = prevAccountNonce + 1n
+            const prevAccountNonce = burnAccountProof.burnAccount.accountNonce
+            const prevTotalSpent = burnAccountProof.burnAccount.totalSpent
+            const totalBurned = burnAccountProof.burnAccount.totalBurned
+            // const nextTotalSpent = prevTotalSpent + claimAmount
+            // const nextAccountNonce = prevAccountNonce + 1n
 
-        const privateBurnData: BurnDataPrivate = {
-            viewing_key: burnAccountProof.burnAccount.viewingKey,
-            pow_nonce: burnAccountProof.burnAccount.powNonce,
-            total_burned: totalBurned,
-            prev_total_spent: prevTotalSpent,
-            amount_to_spend: toHex(claimAmount),
-            prev_account_nonce: prevAccountNonce,
-            prev_account_note_merkle_data: prevTotalSpendMerkleProof,
-            total_burned_merkle_data: totalBurnedMerkleProof,
+            const privateBurnData: BurnDataPrivate = {
+                viewing_key: burnAccountProof.burnAccount.viewingKey,
+                pow_nonce: burnAccountProof.burnAccount.powNonce,
+                total_burned: totalBurned,
+                prev_total_spent: prevTotalSpent,
+                amount_to_spend: toHex(claimAmount),
+                prev_account_nonce: prevAccountNonce,
+                prev_account_note_merkle_data: prevTotalSpendMerkleProof,
+                total_burned_merkle_data: totalBurnedMerkleProof,
+            }
+            burn_address_private_proof_data.push(privateBurnData)
+
         }
-        burn_address_private_proof_data.push(privateBurnData)
+
     }
+
     const privInputs: PrivateProofInputs = {
         burn_data_private: burn_address_private_proof_data,
         signature_data: signatureData,
@@ -203,7 +228,7 @@ export async function getBackend(circuitSize: number, threads?: number) {
     console.log("initializing backend with circuit")
     threads = threads ?? getAvailableThreads()
     console.log({ threads })
-    const byteCode = circuitSize === 1 ? privateTransfer1InCircuit.bytecode : privateTransfer41InCircuit.bytecode
+    const byteCode = circuitSize === 1 ? privateTransfer2InCircuit.bytecode : privateTransfer41InCircuit.bytecode
     return new UltraHonkBackend(byteCode, { threads: threads }, { recursive: false });
 }
 
@@ -211,7 +236,7 @@ export async function generateProof({ proofInputs, backend }: { proofInputs: Pro
     const circuitSize = hexToNumber(proofInputs.amount_burn_addresses) >= 1 ? 1 : 4
     backend = backend ?? await getBackend(circuitSize, undefined)
 
-    const circuitJson = circuitSize === 1 ? privateTransfer1InCircuit : privateTransfer41InCircuit;
+    const circuitJson = circuitSize === 1 ? privateTransfer2InCircuit : privateTransfer41InCircuit;
     const noir = new Noir(circuitJson as CompiledCircuit);
     const { witness } = await noir.execute(proofInputs as InputMap);
     console.log("generating proof")
