@@ -2,7 +2,7 @@ import { queryEventInChunks } from "@warptoad/gigabridge-js/viem-utils"
 import { LeanIMTHashFunction, LeanIMT } from "@zk-kit/lean-imt"
 import { Abi, AbiEvent, Address, bytesToHex, concatHex, Hex, hexToBytes, presignMessagePrefix, PublicClient, sliceHex, toBytes, toHex } from "viem"
 import { WormholeTokenTest } from "../test/2inRemint.test.js"
-import { WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.js"
+import { ENCRYPTED_TOTAL_SPENT_PADDING, WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.js"
 import { BurnAccount, PreSyncedTree, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.js"
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { hashNullifier } from "./hashing.js"
@@ -63,8 +63,12 @@ export async function getSyncedMerkleTree(
     return { tree, lastSyncedBlock, firstSyncedBlock: deploymentBlock } as PreSyncedTree
 }
 
+async function encrypt({ plaintext, viewingKey, padding=ENCRYPTED_TOTAL_SPENT_PADDING }: { plaintext: string, viewingKey: Hex, padding?:number }): Promise<Hex> {
+    if (plaintext.length > padding) {
+        throw new Error(`Plaintext too long: ${plaintext.length} > ${padding}`)
+    }
+    const padded = plaintext.padEnd(padding, '\0')
 
-async function encrypt({ plaintext, viewingKey }: { plaintext: string, viewingKey: Hex }): Promise<Hex> {
     const iv = crypto.getRandomValues(new Uint8Array(12))
 
     const key = await crypto.subtle.importKey(
@@ -78,8 +82,10 @@ async function encrypt({ plaintext, viewingKey }: { plaintext: string, viewingKe
     const encrypted = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
         key,
-        new TextEncoder().encode(plaintext)
+        new TextEncoder().encode(padded)
     )
+
+    console.log({encrypted})
 
     return concatHex([
         bytesToHex(iv),
@@ -93,10 +99,10 @@ async function decrypt({ viewingKey, cipherText }: { viewingKey: Hex, cipherText
 
     const key = await crypto.subtle.importKey(
         'raw',
-        hexToBytes(viewingKey, { size: 32 }).slice(), //.slice() to convert Uint8Array<ArrayBufferLike> to Uint8Array<ArrayBuffer>
+        hexToBytes(viewingKey, { size: 32 }).slice(),
         'AES-GCM',
         false,
-        ['encrypt']
+        ['decrypt']
     )
 
     const decrypted = await crypto.subtle.decrypt(
@@ -105,9 +111,20 @@ async function decrypt({ viewingKey, cipherText }: { viewingKey: Hex, cipherText
         encrypted
     )
 
-    return new TextDecoder().decode(decrypted)
-
+    return new TextDecoder().decode(decrypted).replace(/\0+$/, '')
 }
+
+export async function encryptTotalSpend({ viewingKey, amount }: { viewingKey: Hex, amount: bigint }):Promise<Hex> {
+    const json = {totalSpend:toHex(amount, {size:32})}
+    return await encrypt({plaintext:JSON.stringify(json), viewingKey})
+}
+
+export async function decryptTotalSpend({ viewingKey, totalSpentEncrypted }: { viewingKey: Hex, totalSpentEncrypted: Hex }):Promise<bigint> {
+    const decryptedJson = JSON.parse(await decrypt({ viewingKey: viewingKey, cipherText: totalSpentEncrypted }))
+    return BigInt(decryptedJson.totalSpend)
+}
+
+
 
 //you can event scan or just iter over the nullifier mapping!
 // TODO add actual balance
@@ -128,7 +145,6 @@ export async function syncBurnAccount(
             break
         }
         accountNonce += 1n
-        console.warn("TODO sync totalSpent")
         lastSpendBlockNum = nullifiedAtBlock
     }
 
@@ -141,9 +157,8 @@ export async function syncBurnAccount(
     })
     // accountNonce not 0? we have spent before!
     if (accountNonce !== 0n) {
-        const totalSpentEncrypted = logs[0].args.totalSpentEncrypted as Hex
-        const decryptedJson = JSON.parse(await decrypt({ viewingKey: toHex(viewingKey), cipherText: totalSpentEncrypted }))
-        totalSpent = BigInt(decryptedJson.totalSpent)
+        const totalSpentEncrypted = logs[0].args.totalSpentEncrypted as Hex;
+        totalSpent = await decryptTotalSpend({totalSpentEncrypted:totalSpentEncrypted, viewingKey:toHex(viewingKey)});
     }
 
     const totalReceived = await wormholeToken.read.balanceOf([burnAccount.burnAddress]);

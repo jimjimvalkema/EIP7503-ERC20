@@ -1,9 +1,11 @@
-import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex } from "viem";
+import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
-import { FeeData, SignatureData, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.js";
+import { ENCRYPTED_TOTAL_SPENT_PADDING, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
+import { FeeData, SignatureData, SignatureInputs, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.js";
 import { PrivateWallet } from "./PrivateWallet.js"
 import { padArray } from "./proving.js";
+import { encryptTotalSpend } from "./syncing.js";
+import { Fr } from "@aztec/aztec.js";
 export function verifyPowNonce({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty?: bigint }) {
     const powHash = hashPow({ blindedAddressDataHash, powNonce });
     return powHash < difficulty
@@ -75,21 +77,40 @@ export function hashTotalBurnedLeaf({ burnAddress, totalBurned }: { burnAddress:
 }
 
 
-export function hashSignatureInputs({ recipientAddress, amount, callData }: { recipientAddress: Address, amount: bigint, callData: Hex }) {
-    const keccakHash = keccak256(
-        encodePacked(
-            ['address', 'uint256', 'bytes'],
-            [recipientAddress, amount, callData]
-        )
+export function padWithRandomHex({ arr, len, hexSize, dir }: { arr: Hex[], len: number, hexSize: number, dir: 'left' | 'right' }): Hex[] {
+    const padding = Array.from({ length: len - arr.length }, () =>
+        bytesToHex(crypto.getRandomValues(new Uint8Array(hexSize)))
     )
-    //console.log({keccakHash, len:( keccakHash.length - 2)/2})
-    return keccakHash
+    return dir === 'left' ? [...padding, ...arr] : [...arr, ...padding]
+}
+
+export function hashSignatureInputs(signatureInputs: SignatureInputs, encryptedTotalSpendsSize=ENCRYPTED_TOTAL_SPENT_PADDING) {
+    if (signatureInputs.encryptedTotalSpends.length <= 2) {
+        signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:2, hexSize:encryptedTotalSpendsSize, dir:"right"})
+        return keccak256(
+            encodePacked(
+                ['address', 'uint256', 'bytes','bytes','bytes'],
+                [signatureInputs.recipientAddress, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1]]
+            ))
+
+    } else if (signatureInputs.encryptedTotalSpends.length <= 4) {
+        signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:4, hexSize:encryptedTotalSpendsSize, dir:"right"})
+        return keccak256(
+            encodePacked(
+                ['address', 'uint256', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes'],
+                [signatureInputs.recipientAddress, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1], signatureInputs.encryptedTotalSpends[2], signatureInputs.encryptedTotalSpends[3]]
+            ))
+    }
+    else {
+        throw new Error("amount of encryptedTotalSpends not supported")
+    }
 }
 
 export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, startingValue: bigint, difficulty?: bigint }) {
     let powNonce: bigint = startingValue;
     let powHash: bigint = hashPow({ blindedAddressDataHash, powNonce });
     let hashingRounds = 0
+    const start = Date.now()
     console.log("doing PoW")
     do {
         if (powHash < difficulty) {
@@ -99,12 +120,13 @@ export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty
         powHash = hashPow({ blindedAddressDataHash, powNonce })
         hashingRounds += 1
     } while (powHash >= difficulty)
+    console.log(`did ${hashingRounds} hashing rounds. It took ${Date.now() - start}ms`)
     return powNonce
 }
 
-export async function signPrivateTransfer({ recipientAddress, amount, callData, privateWallet }: { privateWallet: PrivateWallet, recipientAddress: Address, amount: bigint, callData: Hex }):
+export async function signPrivateTransfer({ privateWallet, signatureInputs }: { privateWallet: PrivateWallet, signatureInputs:SignatureInputs }):
     Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex, poseidonHash: Hex, preImageOfKeccak: Hex }> {
-    const sigHash = hashSignatureInputs({ recipientAddress, amount, callData })
+    const sigHash = hashSignatureInputs(signatureInputs)
     //console.log({sigHash})
     // blind signing yay!
     // const signature = await privateWallet.viem.wallet.request({
@@ -133,10 +155,10 @@ export async function signPrivateTransfer({ recipientAddress, amount, callData, 
     }
 
 }
-function hexToU8sAsHexArr(hex:Hex, len:number):u8AsHex[] {
+function hexToU8sAsHexArr(hex: Hex, len: number): u8AsHex[] {
     const unPadded = hexToByteArray(hex)
-    const padded = padArray({arr:unPadded, size:len, value:"0x00", dir:"left"})
-    return padded as u8AsHex[] 
+    const padded = padArray({ arr: unPadded, size: len, value: "0x00", dir: "left" })
+    return padded as u8AsHex[]
 }
 
 function hexToByteArray(hex: Hex): Hex[] {

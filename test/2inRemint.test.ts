@@ -177,16 +177,17 @@ describe("Token", async function () {
             const sharedSecret = 0n
             const alicePrivate = new PrivateWallet(alice,{acceptedChainIds:[BigInt(await publicClient.getChainId())]})
             const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
-            const amountToBurn = 420n;
+            const amountToBurn = 1000n*10n**18n;
             await wormholeTokenAlice.write.transfer([aliceBurnAccount.burnAddress, amountToBurn]) //sends 1_000_000n token
 
-            const amountToReMint = 69n
+            const amountToReMint1 = 69n
+            const amountToReMint2 = 69000n
+            const amountToReMint3 = 420n*10n**18n
             const reMintRecipient = bob.account.address
             //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
             //console.log("1111111")
-            const amountsToClaim = [amountToReMint]
             const reMintTx1 = await proofAndSelfRelay({
-                amount:amountToReMint, 
+                amount:amountToReMint1, 
                 recipient:bob.account.address, 
                 //callData, 
                 privateWallet:alicePrivate,
@@ -208,13 +209,13 @@ describe("Token", async function () {
 
             assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
             assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
-            assert.equal(balanceBobPublic, amountToReMint, "bob didn't receive the expected amount of re-minted tokens")
+            assert.equal(balanceBobPublic, amountToReMint1, "bob didn't receive the expected amount of re-minted tokens")
 
             // we should be able to do it again!!!
             // TODO add input for a pre-synced tree so we don't resync every time
             const realRoot = await wormholeToken.read.root()
             const reMintTx2 = await proofAndSelfRelay({
-                amount:amountToReMint, 
+                amount:amountToReMint2, 
                 recipient:bob.account.address, 
                 //callData, 
                 privateWallet:alicePrivate,
@@ -227,11 +228,11 @@ describe("Token", async function () {
                 //deploymentBlock,
             })
             balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-            assert.equal(balanceBobPublic, amountToReMint * 2n, "bob didn't receive the expected amount of re-minted tokens")
+            assert.equal(balanceBobPublic, amountToReMint1 + amountToReMint2, "bob didn't receive the expected amount of re-minted tokens")
 
             // one more time
             const reMintTx3 = await proofAndSelfRelay({
-                amount:amountToReMint, 
+                amount:amountToReMint3, 
                 recipient:bob.account.address, 
                 //callData, 
                 privateWallet:alicePrivate,
@@ -244,7 +245,22 @@ describe("Token", async function () {
                 //deploymentBlock,
             })
             balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-            assert.equal(balanceBobPublic, amountToReMint * 3n, "bob didn't receive the expected amount of re-minted tokens")
+            assert.equal(balanceBobPublic, amountToReMint1 + amountToReMint2 + amountToReMint3, "bob didn't receive the expected amount of re-minted tokens")
+
+
+            const reMintTx4 = await proofAndSelfRelay({
+                amount:amountToReMint1, 
+                recipient:bob.account.address, 
+                //callData, 
+                privateWallet:alicePrivate,
+                burnAddresses:[aliceBurnAccount.burnAddress], 
+                wormholeToken:wormholeToken, 
+                archiveClient:publicClient, 
+                //fullNodeClient, 
+                //preSyncedTree, 
+                backend: circuitBackend, 
+                //deploymentBlock,
+            })
         })
     })
 })

@@ -67,12 +67,28 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         return abi.encodePacked(ETH_SIGN_PREFIX, message);
     }
 
-    function _hashSignatureInputs(address _recipientAddress, uint256 _amount, bytes memory _callData) public pure returns(bytes32) {
-        bytes memory input = abi.encodePacked(
-            _recipientAddress,
-            _amount,
-            _callData
-        );
+    function _hashSignatureInputs(address _recipientAddress, uint256 _amount, bytes memory _callData, bytes[] memory _totalSpentEncrypted) public pure returns(bytes32) {
+        bytes memory input;
+        if (_totalSpentEncrypted.length == 2) {
+            input = abi.encodePacked(
+                _recipientAddress,
+                _amount,
+                _callData,
+                _totalSpentEncrypted[0],
+                _totalSpentEncrypted[1]
+            ); 
+
+        } if (_totalSpentEncrypted.length == 4) {
+            input = abi.encodePacked(
+                _recipientAddress,
+                _amount,
+                _callData,
+                _totalSpentEncrypted[0],
+                _totalSpentEncrypted[1],
+                _totalSpentEncrypted[2],
+                _totalSpentEncrypted[3]
+            ); 
+        } 
 
         bytes32 preKeccak = keccak256(input);
         // TODO check that bytes32 wont create unexpected zeros
@@ -184,8 +200,8 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256[] memory _accountNoteHashes,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
     ) public pure returns (bytes32[] memory) {
-        if (_accountNoteHashes.length == 1) {
-            bytes32[] memory publicInputs = new bytes32[](36);
+        if (_accountNoteHashes.length == 2) {
+            bytes32[] memory publicInputs = new bytes32[](38);
 
             publicInputs[0] = bytes32(_root);
             publicInputs[1] = bytes32(uint256(_amount));
@@ -195,10 +211,12 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
             }
             publicInputs[34] = bytes32(_accountNoteHashes[0]);
             publicInputs[35] = bytes32(_accountNoteNullifiers[0]);
+            publicInputs[36] = bytes32(_accountNoteHashes[1]);
+            publicInputs[37] = bytes32(_accountNoteNullifiers[1]);
 
             return publicInputs;
 
-        } else {
+        } else if (_accountNoteHashes.length == 4) {
             bytes32[] memory publicInputs = new bytes32[](42);
 
             publicInputs[0] = bytes32(_root);
@@ -208,15 +226,17 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }
             publicInputs[34] = bytes32(_accountNoteHashes[0]);
-            publicInputs[35] = bytes32(_accountNoteHashes[1]);
-            publicInputs[36] = bytes32(_accountNoteHashes[2]);
-            publicInputs[37] = bytes32(_accountNoteHashes[3]);
-            publicInputs[38] = bytes32(_accountNoteNullifiers[0]);
-            publicInputs[39] = bytes32(_accountNoteNullifiers[1]);
-            publicInputs[40] = bytes32(_accountNoteNullifiers[2]);
+            publicInputs[35] = bytes32(_accountNoteNullifiers[0]);
+            publicInputs[36] = bytes32(_accountNoteHashes[1]);
+            publicInputs[37] = bytes32(_accountNoteNullifiers[1]);
+            publicInputs[38] = bytes32(_accountNoteHashes[2]);
+            publicInputs[39] = bytes32(_accountNoteNullifiers[2]);
+            publicInputs[40] = bytes32(_accountNoteHashes[3]);
             publicInputs[41] = bytes32(_accountNoteNullifiers[3]);
 
             return publicInputs;
+        } else {
+            revert("amount of note hashes not supported");
         }
 
     }
@@ -237,7 +257,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         uint256 _root,
         bytes calldata _snarkProof,
         bytes calldata _callData,
-        bytes[] calldata _totalSpentEncrypted
+        bytes[] calldata _totalSpentEncrypted      
     ) public {
         // @notice this has the side effect of burned balances not being spendable of a for of ethereum on a different chainId.
         // long term we might need to research a different identifier
@@ -250,7 +270,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         }
         
         require(roots[_root], "invalid root");
-        bytes32 signatureHash = _hashSignatureInputs(_to, _amount, _callData);
+        bytes32 signatureHash = _hashSignatureInputs(_to, _amount, _callData, _totalSpentEncrypted);
         //@jimjim technically _feeData doesn't need to be here. It can be in a contract that handles that
         // @TODO make relayer contract!!!
         // if (_feeData.relayerAddress == address(0)) {
@@ -271,16 +291,20 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         //     _update(address(0), _feeData.relayerAddress, _relayerReward);
         // }
 
-        bytes32[] memory publicInputs = _formatPublicInputs(_root,_amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
-        if (_accountNoteNullifiers.length == 1) {
+        bytes32[] memory publicInputs = _formatPublicInputs(_root, _amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
+        if (_accountNoteNullifiers.length == 2) {
             if (!IVerifier(privateTransferVerifier1In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
             }
-        } else {
+        } else if (_accountNoteNullifiers.length == 4) {
             if (!IVerifier(privateTransferVerifier4In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
             }
+        } else {
+            revert("amount of note hashes not supported");
         }
+
+        _privateReMint(_to, _amount, _accountNoteHashes);
 
     }
 }

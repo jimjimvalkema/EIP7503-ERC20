@@ -6,7 +6,7 @@ import { ProofData } from "@aztec/bb.js";
 import { LeanIMT } from "@zk-kit/lean-imt";
 import { VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { extractPubKeyFromSig,  getBurnAddress, getViewingKey, verifyPowNonce } from "./hashing.js";
+import { extractPubKeyFromSig, getBurnAddress, getViewingKey, verifyPowNonce } from "./hashing.js";
 
 export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Required<{ public?: PublicClient; wallet?: WalletClient; }>>
 
@@ -27,6 +27,13 @@ export interface SignatureData extends InputMap {
     signature: u8sAsHexArrLen64;
 }
 
+export interface SignatureInputs {
+    recipientAddress: Address,
+    amount: bigint,
+    callData: Hex,
+    encryptedTotalSpends: Hex[]
+}
+
 export interface MerkleData extends InputMap {
     depth: u32AsHex,
     // TODO maybe we can save on memory computing indices on the spot instead?
@@ -34,10 +41,10 @@ export interface MerkleData extends InputMap {
     siblings: Hex[],
 }
 
-export interface SpendableBalanceProof { 
-    totalSpendMerkleProofs:MerkleData, 
-    totalBurnedMerkleProofs:MerkleData, 
-    root:Hex 
+export interface SpendableBalanceProof {
+    totalSpendMerkleProofs: MerkleData,
+    totalBurnedMerkleProofs: MerkleData,
+    root: Hex
 }
 
 export interface BurnDataPublic extends InputMap {
@@ -109,12 +116,12 @@ export type BurnAccount = UnsyncedBurnAccount & Partial<SyncedBurnAccount>
 
 
 export interface PrivateWalletData {
-    readonly ethAccount:Address
-    readonly viewKeySigMessage:string,
-    readonly detViewKeyRoot?:Hex, 
-    burnAccounts:BurnAccount[], 
-    pubKey?:{ x: Hex, y: Hex }, 
-    detViewKeyCounter?:number 
+    readonly ethAccount: Address
+    readonly viewKeySigMessage: string,
+    readonly detViewKeyRoot?: Hex,
+    burnAccounts: BurnAccount[],
+    pubKey?: { x: Hex, y: Hex },
+    detViewKeyCounter?: number
 }
 
 

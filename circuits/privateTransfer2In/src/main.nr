@@ -1,5 +1,6 @@
 use privateTransferLib::{spendFromBurnAddresses, BurnDataPublic, BurnDataPrivate, SignatureData};
 
+// should not go smaller then 2 because then the fact that someone is consolidating balances leaks
 global BURN_ADDRESSES_LEN: u32 = 2; 
 fn main(
     //----- public inputs
