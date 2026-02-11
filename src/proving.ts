@@ -12,6 +12,7 @@ import privateTransfer41InCircuit from '../circuits/privateTransfer4In/target/pr
 
 import { Fr } from "@aztec/aztec.js"
 import { PrivateWallet } from "./PrivateWallet.js"
+import { getCircuitSize } from "./transact.js"
 
 export function padArray<T>({ arr, size, value, dir }: { arr: T[], size: number, value?: T, dir?: "left" | "right" }): T[] {
     if (arr.length > size) { throw new Array(`array is larger then target size. Array len: ${arr.length}, target len: ${size}`) }
@@ -97,8 +98,7 @@ export function getPubInputs(
         { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number }) {
 
     const burn_data_public: BurnDataPublic[] = []
-    circuitSize ??= CIRCUIT_SIZES.find((v) => v >= nullifiers.length) as number
-    console.log({circuitSize, nullifiersLength:nullifiers.length, CIRCUIT_SIZES})
+    circuitSize ??= getCircuitSize(nullifiers.length)
     for (let index = 0; index < circuitSize; index++) {
         // empty values are ignored in the circuit, but it's still better for privacy to set them to something random since these are public
         const noteHash = noteHashes[index] === undefined ? Fr.random().toBigInt() : noteHashes[index]
@@ -136,7 +136,7 @@ export function getPrivInputs(
         { signatureData: SignatureData, burnAccountsProofs: BurnAccountProof[], circuitSize?: number, maxTreeDepth?:number }) {
 
     const burn_address_private_proof_data: BurnDataPrivate[] = [];
-    circuitSize ??= CIRCUIT_SIZES.find((v) => v >= burnAccountsProofs.length) as number
+    circuitSize ??= getCircuitSize(burnAccountsProofs.length)
     for (let index = 0; index < circuitSize; index++) {
         const burnAccountProof = burnAccountsProofs[index];
         if (burnAccountProof === undefined) {
@@ -228,100 +228,28 @@ export async function getBackend(circuitSize: number, threads?: number) {
     console.log("initializing backend with circuit")
     threads = threads ?? getAvailableThreads()
     console.log({ threads })
-    const byteCode = circuitSize === 1 ? privateTransfer2InCircuit.bytecode : privateTransfer41InCircuit.bytecode
+    const byteCode = circuitSize === 2 ? privateTransfer2InCircuit.bytecode : privateTransfer41InCircuit.bytecode
     return new UltraHonkBackend(byteCode, { threads: threads }, { recursive: false });
 }
 
 export async function generateProof({ proofInputs, backend }: { proofInputs: ProofInputs1n | ProofInputs4n, backend?: UltraHonkBackend }) {
-    const circuitSize = hexToNumber(proofInputs.amount_burn_addresses) >= 1 ? 1 : 4
+    const circuitSize = hexToNumber(proofInputs.amount_burn_addresses) >= 2 ? 4 : 2
     backend = backend ?? await getBackend(circuitSize, undefined)
 
-    const circuitJson = circuitSize === 1 ? privateTransfer2InCircuit : privateTransfer41InCircuit;
+    const circuitJson = circuitSize === 2 ? privateTransfer2InCircuit : privateTransfer41InCircuit;
     const noir = new Noir(circuitJson as CompiledCircuit);
     const { witness } = await noir.execute(proofInputs as InputMap);
     console.log("generating proof")
+    const start = Date.now()
     const proof = await backend.generateProof(witness, { keccakZK: true });
-    console.log("finished proving")
+    console.log(`finished proving. It took ${Date.now() - start}ms`)
     return proof
 }
 
-export async function verifyProof({ proof, backend, circuitSize = 1 }: { proof: ProofData, backend?: UltraHonkBackend, circuitSize?: number }) {
+export async function verifyProof({ proof, backend, circuitSize = 2 }: { proof: ProofData, backend?: UltraHonkBackend, circuitSize?: number }) {
     backend = backend ?? await getBackend(circuitSize, undefined)
     return await backend.verifyProof(proof, { keccakZK: true })
 }
-
-// export function formatProofInputs({ publicInputs, privateInputs }: UnformattedProofInputs) {
-//     const circuitSize = publicInputs.burn_address_public_proof_data.length > 1 ? 4 : 1 // we only have 2 circuits
-//     const burnAddressPublicProofDataFormatted: FormattedBurnAddressProofDataPublic[] = []
-//     const burnAddressPrivateProofDataFormatted: FormattedBurnAddressProofDataPrivate[] = []
-//     for (let index = 0; index < circuitSize; index++) {
-//         const publicBurnProof = publicInputs.burn_address_public_proof_data[index];
-//         const privateBurnProof = privateInputs.burn_address_private_proof_data[index];
-
-//         const publicProofData: FormattedBurnAddressProofDataPublic = publicBurnProof !== undefined ? {
-//             account_note_hash: toHex(publicBurnProof.account_note_hash),
-//             account_note_nullifier: toHex(publicBurnProof.account_note_nullifier),
-//         } : {
-//             account_note_hash: toHex(Fr.random().toBigInt()),
-//             account_note_nullifier: toHex(Fr.random().toBigInt())
-
-//         }
-
-//         const privateProofData: FormattedBurnAddressProofDataPrivate = privateBurnProof !== undefined ? {
-//             total_received: toHex(privateBurnProof.total_received),
-//             prev_total_spent: toHex(privateBurnProof.prev_total_spent),
-//             prev_account_nonce: toHex(privateBurnProof.prev_account_nonce),
-//             prev_account_note_merkle: {
-//                 siblings: padArray({ arr: privateBurnProof.prev_account_note_merkle.siblings, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-//                 indices: padArray({ arr: privateBurnProof.prev_account_note_merkle.indices, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-//                 depth: toHex(privateBurnProof.prev_account_note_merkle.depth),
-//             },
-//             total_received_merkle: {
-//                 siblings: padArray({ arr: privateBurnProof.total_received_merkle.siblings, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-//                 indices: padArray({ arr: privateBurnProof.total_received_merkle.indices, size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-//                 depth: toHex(privateBurnProof.total_received_merkle.depth),
-//             },
-//             amount: toHex(privateBurnProof.amount),
-//             shared_secret: toHex(privateBurnProof.shared_secret)
-//         } : { // @TODO move to constants
-//             total_received: toHex(0n),
-//             prev_total_spent: toHex(0n),
-//             prev_account_nonce: toHex(0n),
-//             prev_account_note_merkle: {
-//                 siblings: padArray({ arr: [0n], size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-//                 indices: padArray({ arr: [0n], size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-//                 depth: toHex(0n),
-//             },
-//             total_received_merkle: {
-//                 siblings: padArray({ arr: [0n], size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-//                 indices: padArray({ arr: [0n], size: MAX_TREE_DEPTH }).map((v) => toHex(v)),
-//                 depth: toHex(0n),
-//             },
-//             amount: toHex(0n),
-//             shared_secret: toHex(0n)
-//         }
-
-//         burnAddressPublicProofDataFormatted.push(publicProofData)
-//         burnAddressPrivateProofDataFormatted.push(privateProofData)
-//     }
-//     console.log({burnAddressPublicProofDataFormatted})
-//     const SignatureDataFormatted: FormattedSignatureData = {
-//         public_key_x: padArray({ size: 32, dir: "left", arr: [...hexToBytes(privateInputs.signature_data.publicKeyX)].map((v) => toHex(v)) }),
-//         public_key_y: padArray({ size: 32, dir: "left", arr: [...hexToBytes(privateInputs.signature_data.publicKeyY, { size: 32 })].map((v) => toHex(v)) }),
-//         signature: padArray({ size: 64, dir: "left", arr: [...hexToBytes(privateInputs.signature_data.signature.slice(0, 2 + 128) as Hex)].map((v) => toHex(v)) }), // we need to skip the last byte
-//     };
-//     const proofInputs: FormattedProofInputs = {
-//         root: toHex(publicInputs.root),
-//         amount: toHex(publicInputs.amount),
-//         signature_hash: padArray({ size: 32, dir: "left", arr: [...hexToBytes(toHex(publicInputs.signature_hash))].map((v) => toHex(v)) }),
-//         burn_address_public_proof_data: burnAddressPublicProofDataFormatted,
-//         signature_data: SignatureDataFormatted,
-//         viewing_key: toHex(privateInputs.viewing_key),
-//         burn_address_private_proof_data: burnAddressPrivateProofDataFormatted,
-//         amount_burn_addresses: toHex(privateInputs.amount_burn_addresses)
-//     }
-//     return {proofInputs, circuitSize}
-// }
 
 export function hexToU8AsHexLen32(hex: Hex): u8sAsHexArrLen32 {
     const unPadded = [...hexToBytes(hex)].map((v) => toHex(v))

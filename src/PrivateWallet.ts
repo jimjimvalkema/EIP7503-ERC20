@@ -154,7 +154,6 @@ export class PrivateWallet {
         if (verifyPowNonce({ blindedAddressDataHash, powNonce: BigInt(powNonce) }) === false) { throw new Error("Provided powNonce is not valid") }
 
         const burnAddress = getBurnAddress({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(powNonce) })
-        console.log({chainId, chainIdHex:toHex(chainId)})
         const burnAccount: UnsyncedBurnAccount = {
             viewingKey: toHex(viewingKey as bigint),
             isDeterministicViewKey: isDeterministicViewKey,

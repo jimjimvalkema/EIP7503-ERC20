@@ -1,6 +1,6 @@
 import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { ENCRYPTED_TOTAL_SPENT_PADDING, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
+import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { FeeData, SignatureData, SignatureInputs, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.js";
 import { PrivateWallet } from "./PrivateWallet.js"
 import { padArray } from "./proving.js";
@@ -84,9 +84,10 @@ export function padWithRandomHex({ arr, len, hexSize, dir }: { arr: Hex[], len: 
     return dir === 'left' ? [...padding, ...arr] : [...arr, ...padding]
 }
 
-export function hashSignatureInputs(signatureInputs: SignatureInputs, encryptedTotalSpendsSize=ENCRYPTED_TOTAL_SPENT_PADDING) {
+export function hashSignatureInputs(signatureInputs: SignatureInputs, encryptedBlobPlainTextSize=ENCRYPTED_TOTAL_SPENT_PADDING) {
+    const encryptedBlobLen = encryptedBlobPlainTextSize + EAS_BYTE_LEN_OVERHEAD
     if (signatureInputs.encryptedTotalSpends.length <= 2) {
-        signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:2, hexSize:encryptedTotalSpendsSize, dir:"right"})
+        signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:2, hexSize:encryptedBlobLen, dir:"right"})
         return keccak256(
             encodePacked(
                 ['address', 'uint256', 'bytes','bytes','bytes'],
@@ -94,7 +95,7 @@ export function hashSignatureInputs(signatureInputs: SignatureInputs, encryptedT
             ))
 
     } else if (signatureInputs.encryptedTotalSpends.length <= 4) {
-        signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:4, hexSize:encryptedTotalSpendsSize, dir:"right"})
+        signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:4, hexSize:encryptedBlobLen, dir:"right"})
         return keccak256(
             encodePacked(
                 ['address', 'uint256', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes'],

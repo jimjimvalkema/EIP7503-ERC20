@@ -20,12 +20,15 @@ export const POW_LEADING_ZEROS = 3n;
 export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
 export const MAX_TREE_DEPTH = 40 as const;
 export const ENCRYPTED_TOTAL_SPENT_PADDING = 256 // leaving some space for other things. Fits about 3 other key value pairs
+export const EAS_BYTE_LEN_OVERHEAD = 28
 
 export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
     11155111: 9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a
 }
 
+// should always be sorted
 export const CIRCUIT_SIZES = [2,4];
+export const LARGEST_CIRCUIT_SIZE = CIRCUIT_SIZES[CIRCUIT_SIZES.length-1]
 export const VIEWING_KEY_SIG_MESSAGE = `
 You are about to create your viewing key for your zkwormhole account! \n
 Yay! :D Becarefull signing this on untrusted websites.

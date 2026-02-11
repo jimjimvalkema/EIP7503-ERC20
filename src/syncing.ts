@@ -85,8 +85,6 @@ async function encrypt({ plaintext, viewingKey, padding=ENCRYPTED_TOTAL_SPENT_PA
         new TextEncoder().encode(padded)
     )
 
-    console.log({encrypted})
-
     return concatHex([
         bytesToHex(iv),
         bytesToHex(new Uint8Array(encrypted))

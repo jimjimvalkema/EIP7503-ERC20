@@ -5,23 +5,18 @@ import { network } from "hardhat";
 
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
-import { padHex, Hash, recoverPublicKey, toHex, Hex, hashMessage, toPrefixedMessage, keccak256, getContract, getAddress, Address } from "viem";
-import { poseidon2Hash } from "@zkpassport/poseidon2"
+import { padHex, Hash, getContract, parseEventLogs, Hex } from "viem";
 
-import { hashPow } from "../src/hashing.js";
-import { POW_DIFFICULTY, WormholeTokenContractName, PrivateTransfer1InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName, PrivateTransfer4InVerifierContractName } from "../src/constants.js";
+import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer1InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName, PrivateTransfer4InVerifierContractName } from "../src/constants.js";
 import { getSyncedMerkleTree } from "../src/syncing.js";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
-import { generateProof, getBackend, verifyProof } from "../src/proving.js";
+import { getBackend } from "../src/proving.js";
 import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { proofAndSelfRelay } from "../src/transact.js";
 import { RelayerInputs } from "../src/types.js";
 import { PrivateWallet } from "../src/PrivateWallet.js";
 
-//console.log({ POW_DIFFICULTY: padHex(toHex(POW_DIFFICULTY), { size: 32, dir: "left" }) })
-
-const logNoirTests = false
-const provingThreads = 1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
+const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
 
 export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
 
@@ -36,7 +31,7 @@ describe("Token", async function () {
     let PrivateTransferVerifier1In: ContractReturnType<typeof PrivateTransfer1InVerifierContractName>;
     let PrivateTransferVerifier4In: ContractReturnType<typeof PrivateTransfer4InVerifierContractName>;
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
-    const circuitBackend = await getBackend(1,provingThreads);
+    const circuitBackend = await getBackend(2, provingThreads);
     const [deployer, alice, bob, carol, relayer, feeEstimator] = await viem.getWalletClients()
     let feeEstimatorRelayerInputs: RelayerInputs;
     //let feeEstimatorPrivate: UnsyncedPrivateWallet
@@ -68,7 +63,7 @@ describe("Token", async function () {
     describe("Token", async function () {
         it("Should transfer", async function () {
             const sharedSecret = 0n
-            const alicePrivate = new PrivateWallet(alice,{acceptedChainIds:[BigInt(await publicClient.getChainId())]})
+            const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
 
             let totalAmountInserts = 0
@@ -110,157 +105,73 @@ describe("Token", async function () {
             const gasString = JSON.stringify(gas, (key, value) => typeof value === 'bigint' ? Number(value) : value, 2)
         })
 
-        // it("should make a proof for a self relayed tx and verify it in js", async function () {
-        //     const sharedSecret = 0n
-        //     const carolPrivate = await getPrivateAccount({ wallet: carol, sharedSecret })
-        //     await wormholeToken.write.getFreeTokens([carolPrivate.burnAddress]) //sends 1_000_000n token
-
-        //     const carolPrivateSynced = await syncPrivateWallet({ privateWallet: carolPrivate, wormholeToken })
-
-        //     const amountToReMint = 69n
-        //     const reMintRecipient = bob.account.address
-        //     const amountsToClaim = [amountToReMint]
-
-        //     const unFormattedProofInputs = await getUnformattedProofInputs({
-        //         wormholeToken: wormholeToken,
-        //         privateWallets: [carolPrivateSynced],
-        //         publicClient: publicClient,
-        //         amountToReMint: amountToReMint,
-        //         amountsToClaim: amountsToClaim,
-        //         recipient: reMintRecipient,
-        //         feeData: EMPTY_FEE_DATA
-        //     })
-        //     const {proofInputs:formattedProofInputs, circuitSize} = formatProofInputs(unFormattedProofInputs)
-        //     const proof = await generateProof({ proofInputs: formattedProofInputs, backend: circuitBackend, circuitSize:circuitSize })
-        //     const isValid = await verifyProof({ proof, backend: circuitBackend })
-        //     assert(isValid, "proof invalid")
-        // })
-
-        // it("should make private tx and self relay it", async function () {
-        //     const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
-        //     const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
-        //     await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
-
-        //     const sharedSecret = 0n
-        //     const alicePrivate = await getPrivateAccount({ wallet: alice, sharedSecret })
-        //     const amountToBurn = 420n;
-        //     await wormholeTokenAlice.write.transfer([alicePrivate.burnAddress, amountToBurn]) //sends 1_000_000n token
-
-        //     const amountToReMint = 69n
-        //     const reMintRecipient = bob.account.address
-        //     //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
-        //     const amountsToClaim = [amountToReMint]
-        //     const reMintTx1 = await proofAndSelfRelay({
-        //         wormholeToken: wormholeTokenAlice,
-        //         privateWallets: [alicePrivate],
-        //         publicClient,
-        //         amount: amountToReMint,
-        //         recipient: reMintRecipient,
-        //         backend: circuitBackend,
-        //         amountsToClaim:amountsToClaim
-        //     })
-
-        //     const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
-        //     const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([alicePrivate.burnAddress])
-        //     let balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-
-        //     assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
-        //     assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
-        //     assert.equal(balanceBobPublic, amountToReMint, "bob didn't receive the expected amount of re-minted tokens")
-        // })
 
         it("should make private tx and self relay it 3 times", async function () {
             const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
-            const sharedSecret = 0n
-            const alicePrivate = new PrivateWallet(alice,{acceptedChainIds:[BigInt(await publicClient.getChainId())]})
+            const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
-            const amountToBurn = 1000n*10n**18n;
+            const amountToBurn = 1000n * 10n ** 18n;
             await wormholeTokenAlice.write.transfer([aliceBurnAccount.burnAddress, amountToBurn]) //sends 1_000_000n token
 
-            const amountToReMint1 = 69n
-            const amountToReMint2 = 69000n
-            const amountToReMint3 = 420n*10n**18n
+            const claimableBurnAddress = [aliceBurnAccount.burnAddress];
             const reMintRecipient = bob.account.address
-            //let alicePrivateSynced = await syncPrivateAccountData({ wormholeToken: wormholeTokenAlice, privateWallet: alicePrivate })
-            //console.log("1111111")
-            const reMintTx1 = await proofAndSelfRelay({
-                amount:amountToReMint1, 
-                recipient:bob.account.address, 
-                //callData, 
-                privateWallet:alicePrivate,
-                burnAddresses:[aliceBurnAccount.burnAddress], 
-                wormholeToken:wormholeToken, 
-                archiveClient:publicClient, 
-                //fullNodeClient, 
-                //preSyncedTree, 
-                backend: circuitBackend, 
-                //deploymentBlock,
-                //blocksPerGetLogsReq 
+
+            // reMint 3 times since the 1st tx needs no commitment inclusion proof, the 2nd one the total spend balance read only contains information of one spend
+            const reMintAmounts = [69n, 69000n, 420n * 10n ** 18n]
+            let expectedRecipientBalance = 0n
+            let reMintTxs: Hex[] = []
+            for (const reMintAmount of reMintAmounts) {
+                const reMintTx = await proofAndSelfRelay({
+                    amount: reMintAmount,
+                    recipient: reMintRecipient,
+                    //callData, 
+                    privateWallet: alicePrivate,
+                    burnAddresses: claimableBurnAddress,
+                    wormholeToken: wormholeToken,
+                    archiveClient: publicClient,
+                    //fullNodeClient, 
+                    //preSyncedTree, 
+                    backend: circuitBackend,
+                    //deploymentBlock,
+                    //blocksPerGetLogsReq 
+                })
+                expectedRecipientBalance += reMintAmount
+                reMintTxs.push(reMintTx)
+
+                const balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
+
+                assert.equal(balanceBobPublic, expectedRecipientBalance, "bob didn't receive the expected amount of re-minted tokens")
+            }
+
+            const receipts = await Promise.all(
+                reMintTxs.map((tx) =>
+                    publicClient.getTransactionReceipt({ hash: tx })
+                )
+            )
+            const logs = receipts.flatMap((r) => r.logs)
+            const nullifiedEvents = parseEventLogs({
+                abi: wormholeToken.abi,
+                logs: logs,
+                eventName: "Nullified"
             })
 
-            //console.log("222222222")
+            // first one is always real. The rest should be the same size as the real one
+            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.totalSpentEncrypted.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
+            for (const nullifiedEvent of nullifiedEvents) {
+                const encryptedBlobByteLen = (nullifiedEvent.args.totalSpentEncrypted.length - 2) / 2
+                assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
+                assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
+                assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")
+            }
 
+            // finally check if enough was burned
             const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
-            const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([aliceBurnAccount.burnAddress])
-            let balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-
+            const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([claimableBurnAddress[0]])
             assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
             assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
-            assert.equal(balanceBobPublic, amountToReMint1, "bob didn't receive the expected amount of re-minted tokens")
-
-            // we should be able to do it again!!!
-            // TODO add input for a pre-synced tree so we don't resync every time
-            const realRoot = await wormholeToken.read.root()
-            const reMintTx2 = await proofAndSelfRelay({
-                amount:amountToReMint2, 
-                recipient:bob.account.address, 
-                //callData, 
-                privateWallet:alicePrivate,
-                burnAddresses:[aliceBurnAccount.burnAddress], 
-                wormholeToken:wormholeToken, 
-                archiveClient:publicClient, 
-                //fullNodeClient, 
-                //preSyncedTree, 
-                backend: circuitBackend, 
-                //deploymentBlock,
-            })
-            balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-            assert.equal(balanceBobPublic, amountToReMint1 + amountToReMint2, "bob didn't receive the expected amount of re-minted tokens")
-
-            // one more time
-            const reMintTx3 = await proofAndSelfRelay({
-                amount:amountToReMint3, 
-                recipient:bob.account.address, 
-                //callData, 
-                privateWallet:alicePrivate,
-                burnAddresses:[aliceBurnAccount.burnAddress], 
-                wormholeToken:wormholeToken, 
-                archiveClient:publicClient, 
-                //fullNodeClient, 
-                //preSyncedTree, 
-                backend: circuitBackend, 
-                //deploymentBlock,
-            })
-            balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-            assert.equal(balanceBobPublic, amountToReMint1 + amountToReMint2 + amountToReMint3, "bob didn't receive the expected amount of re-minted tokens")
-
-
-            const reMintTx4 = await proofAndSelfRelay({
-                amount:amountToReMint1, 
-                recipient:bob.account.address, 
-                //callData, 
-                privateWallet:alicePrivate,
-                burnAddresses:[aliceBurnAccount.burnAddress], 
-                wormholeToken:wormholeToken, 
-                archiveClient:publicClient, 
-                //fullNodeClient, 
-                //preSyncedTree, 
-                backend: circuitBackend, 
-                //deploymentBlock,
-            })
         })
     })
 })
