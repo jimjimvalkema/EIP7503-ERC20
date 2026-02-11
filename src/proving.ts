@@ -233,7 +233,7 @@ export async function getBackend(circuitSize: number, threads?: number) {
 }
 
 export async function generateProof({ proofInputs, backend }: { proofInputs: ProofInputs1n | ProofInputs4n, backend?: UltraHonkBackend }) {
-    const circuitSize = hexToNumber(proofInputs.amount_burn_addresses) >= 2 ? 4 : 2
+    const circuitSize = getCircuitSize(proofInputs.burn_data_public.length)
     backend = backend ?? await getBackend(circuitSize, undefined)
 
     const circuitJson = circuitSize === 2 ? privateTransfer2InCircuit : privateTransfer41InCircuit;

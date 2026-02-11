@@ -92,7 +92,7 @@ export async function proofAndSelfRelay(
             }
             amountLeft -= amountToClaim
             const newTotalSpent = amountToClaim + BigInt(burnAccount.totalSpent)
-            encryptedTotalSpends.push(await encryptTotalSpend({viewingKey:burnAccount.viewingKey, amount:newTotalSpent}))
+            encryptedTotalSpends.push(await encryptTotalSpend({viewingKey:BigInt(burnAccount.viewingKey), amount:newTotalSpent}))
             burnAccountsAndAmounts.push({
                 burnAccount:burnAccount,
                 amountToClaim:amountToClaim
@@ -103,10 +103,11 @@ export async function proofAndSelfRelay(
         }
     }
     if (amountLeft !== 0n) {
-        throw new Error("not enough balances in selected burn accounts")
+        throw new Error(`not enough balances in selected burn accounts, short of ${Number(amountLeft)}`)
     }
 
     // last circuit size is always largest
+    console.log(`burn accounts selected: ${burnAccountsAndAmounts.map((b)=>`${b.burnAccount.burnAddress},spendable:${b.burnAccount.spendableBalance},burned:${b.burnAccount.totalBurned},amountToBeClaimed:${b.amountToClaim}`)}`)
     if (burnAccountsAndAmounts.length > LARGEST_CIRCUIT_SIZE) {
         throw new Error(`need to consume more than LARGEST_CIRCUIT_SIZE of: ${LARGEST_CIRCUIT_SIZE}, but need to consume: ${burnAccountsAndAmounts.length} burnAccount to make the transaction. Please consolidate balance to make this tx`)
     }
@@ -181,6 +182,8 @@ export async function proofAndSelfRelay(
     })
 
     const proofInputs = {...publicInputs, ...privateInputs} as ProofInputs1n | ProofInputs4n
+
+    //console.log({proofInputs})
     const zkProof = await generateProof({ proofInputs:proofInputs, backend:backend })
     // TODO make sure all these inputs are Hex so the can be a JSON
     return await freeRelayTx({

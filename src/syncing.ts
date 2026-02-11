@@ -63,7 +63,7 @@ export async function getSyncedMerkleTree(
     return { tree, lastSyncedBlock, firstSyncedBlock: deploymentBlock } as PreSyncedTree
 }
 
-async function encrypt({ plaintext, viewingKey, padding=ENCRYPTED_TOTAL_SPENT_PADDING }: { plaintext: string, viewingKey: Hex, padding?:number }): Promise<Hex> {
+async function encrypt({ plaintext, viewingKey, padding=ENCRYPTED_TOTAL_SPENT_PADDING }: { plaintext: string, viewingKey: bigint, padding?:number }): Promise<Hex> {
     if (plaintext.length > padding) {
         throw new Error(`Plaintext too long: ${plaintext.length} > ${padding}`)
     }
@@ -73,7 +73,7 @@ async function encrypt({ plaintext, viewingKey, padding=ENCRYPTED_TOTAL_SPENT_PA
 
     const key = await crypto.subtle.importKey(
         'raw',
-        hexToBytes(viewingKey).slice(),
+        hexToBytes(toHex(viewingKey, { size: 32 })).slice(),
         'AES-GCM',
         false,
         ['encrypt']
@@ -85,19 +85,23 @@ async function encrypt({ plaintext, viewingKey, padding=ENCRYPTED_TOTAL_SPENT_PA
         new TextEncoder().encode(padded)
     )
 
-    return concatHex([
+    const encryptedBlob = concatHex([
         bytesToHex(iv),
         bytesToHex(new Uint8Array(encrypted))
     ])
+
+    // console.log({encryptedWithViewingKey:BigInt(viewingKey),padded, encryptedBlob})
+    // console.log({padded})
+    return encryptedBlob
 }
 
-async function decrypt({ viewingKey, cipherText }: { viewingKey: Hex, cipherText: Hex }) {
+async function decrypt({ viewingKey, cipherText }: { viewingKey: bigint, cipherText: Hex }) {
     const iv = hexToBytes(sliceHex(cipherText, 0, 12)).slice()
     const encrypted = hexToBytes(sliceHex(cipherText, 12)).slice()
 
     const key = await crypto.subtle.importKey(
         'raw',
-        hexToBytes(viewingKey, { size: 32 }).slice(),
+        hexToBytes(toHex(viewingKey, { size: 32 })).slice(),
         'AES-GCM',
         false,
         ['decrypt']
@@ -112,12 +116,12 @@ async function decrypt({ viewingKey, cipherText }: { viewingKey: Hex, cipherText
     return new TextDecoder().decode(decrypted).replace(/\0+$/, '')
 }
 
-export async function encryptTotalSpend({ viewingKey, amount }: { viewingKey: Hex, amount: bigint }):Promise<Hex> {
+export async function encryptTotalSpend({ viewingKey, amount }: { viewingKey: bigint, amount: bigint }):Promise<Hex> {
     const json = {totalSpend:toHex(amount, {size:32})}
     return await encrypt({plaintext:JSON.stringify(json), viewingKey})
 }
 
-export async function decryptTotalSpend({ viewingKey, totalSpentEncrypted }: { viewingKey: Hex, totalSpentEncrypted: Hex }):Promise<bigint> {
+export async function decryptTotalSpend({ viewingKey, totalSpentEncrypted }: { viewingKey: bigint, totalSpentEncrypted: Hex }):Promise<bigint> {
     const decryptedJson = JSON.parse(await decrypt({ viewingKey: viewingKey, cipherText: totalSpentEncrypted }))
     return BigInt(decryptedJson.totalSpend)
 }
@@ -135,6 +139,7 @@ export async function syncBurnAccount(
     let totalSpent = BigInt(burnAccount.totalSpent ?? 0n)
     let isNullified = true;
     let lastSpendBlockNum: bigint = 0n
+    let lastNullifier:bigint = 0n;
     while (isNullified) {
         const nullifier = hashNullifier({ accountNonce: accountNonce, viewingKey: viewingKey })
         const nullifiedAtBlock = await wormholeToken.read.nullifiers([nullifier])
@@ -144,6 +149,7 @@ export async function syncBurnAccount(
         }
         accountNonce += 1n
         lastSpendBlockNum = nullifiedAtBlock
+        lastNullifier = nullifier
     }
 
     const logs = await archiveNode.getContractEvents({
@@ -152,11 +158,14 @@ export async function syncBurnAccount(
         eventName: "Nullified",
         fromBlock: lastSpendBlockNum,
         toBlock: lastSpendBlockNum,
+        args: {
+            nullifier: lastNullifier,
+        },
     })
     // accountNonce not 0? we have spent before!
     if (accountNonce !== 0n) {
         const totalSpentEncrypted = logs[0].args.totalSpentEncrypted as Hex;
-        totalSpent = await decryptTotalSpend({totalSpentEncrypted:totalSpentEncrypted, viewingKey:toHex(viewingKey)});
+        totalSpent = await decryptTotalSpend({totalSpentEncrypted:totalSpentEncrypted, viewingKey:BigInt(viewingKey)});
     }
 
     const totalReceived = await wormholeToken.read.balanceOf([burnAccount.burnAddress]);
