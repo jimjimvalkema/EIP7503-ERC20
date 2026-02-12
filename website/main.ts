@@ -9,8 +9,8 @@ import sepoliaDeployments from "../ignition/deployments/chain-11155111/deployed_
 import { convertRelayerInputsFromHex, convertRelayerInputsToHex, createRelayerInputs, proofAndSelfRelay, relayTx } from '../src/transact.js';
 import { getBackend } from '../src/proving.js';
 import { EMPTY_FEE_DATA } from '../src/constants.js';
-import dotenv from 'dotenv'
-dotenv.config()
+// import dotenv from 'dotenv'
+// dotenv.config()
 
 
 const pendingRelayTxsEl = document.getElementById("pendingRelayTxs")
@@ -32,6 +32,7 @@ const publicClient = createPublicClient({
   chain: sepolia, // Your target chain
   transport: http(process.env.ETHEREUM_RPC), // Public RPC URL
 })
+console.log(process.env.ETHEREUM_RPC,"AAAAAAAAAAAAAAAAAAAAAAAa")
 const wormholeToken = getContract({ abi: WormholeTokenArtifact.abi, address: wormholeTokenAddress, client: { public: publicClient } }) as unknown as WormholeToken
 setNonWalletInfo(wormholeToken)
 
