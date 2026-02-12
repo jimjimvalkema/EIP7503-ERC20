@@ -131,7 +131,7 @@ describe("Token", async function () {
 
         it("should make keys", async function () {
             const { viewingKey, powNonce, pubKey } = await getPrivateAccount({ wallet: alice })
-            const powHash = hashPow({ pubKeyX: pubKey.x, powNonce: powNonce });
+            const powHash = hashPow({ pubKeyX: pubKey.x, powNonce: powNonce, viewingKey });
             assert(powHash < POW_DIFFICULTY, `powHash:${powHash} not smaller then POW_DIFFICULTY:${POW_DIFFICULTY} with powNonce:${powNonce} and pubKeyX:${pubKey.x}`)
         })
 
@@ -205,6 +205,7 @@ describe("Token", async function () {
             })
 
             const formattedProofInputs = formatProofInputs(unFormattedProofInputs)
+            console.log({formattedProofInputs:JSON.stringify(formattedProofInputs)})
             if (logNoirTests) { console.log(noir_test_main_self_relay(formattedProofInputs)) }
         })
 

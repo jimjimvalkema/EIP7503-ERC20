@@ -2,8 +2,8 @@ import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, he
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_RECEIVED_DOMAIN as TOTAL_RECEIVED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { FeeData, SignatureData, SyncedPrivateWallet, UnsyncedPrivateWallet } from "./types.js";
-export function verifyPowNonce({ pubKeyX, powNonce, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, powNonce: bigint, difficulty?: bigint }) {
-    const powHash = hashPow({ pubKeyX, powNonce });
+export function verifyPowNonce({ pubKeyX, powNonce, difficulty = POW_DIFFICULTY, viewingKey }: { pubKeyX: Hex, powNonce: bigint,viewingKey:bigint, difficulty?: bigint }) {
+    const powHash = hashPow({ pubKeyX, powNonce, viewingKey });
     return powHash > difficulty
 }
 
@@ -27,20 +27,20 @@ export function getViewingKey({ signature }: { signature: Hex }) {
     return viewingKey
 }
 
-export function hashAddress({ pubKeyX, powNonce }: { pubKeyX: Hex, powNonce: bigint }) {
+export function hashAddress({ pubKeyX, powNonce, viewingKey }: { pubKeyX: Hex, powNonce: bigint,viewingKey:bigint }) {
     const pubKeyField = hexToBigInt("0x"+pubKeyX.slice(2+2) as Hex) //slice first byte so it fits in a field
-    const addressHash = poseidon2Hash([pubKeyField, powNonce, PRIVATE_ADDRESS_TYPE]);
+    const addressHash = poseidon2Hash([pubKeyField, powNonce,viewingKey, PRIVATE_ADDRESS_TYPE]);
     return addressHash
 }
 
-export function getPrivateAddress({ pubKeyX, powNonce }: { pubKeyX: Hex, powNonce: bigint }) {
-    const addressHash = hashAddress({ pubKeyX, powNonce })
+export function getPrivateAddress({ pubKeyX, powNonce,viewingKey }: { pubKeyX: Hex, powNonce: bigint, viewingKey:bigint }) {
+    const addressHash = hashAddress({ pubKeyX, powNonce,viewingKey })
     return getAddress("0x"+toHex(addressHash,{size:32}).slice(2+24)) //slice off bytes and make it the address type in viem
 
 }
 
-export function hashPow({ pubKeyX, powNonce }: { pubKeyX: Hex, powNonce: bigint }) {
-    const addressHash = hashAddress({ pubKeyX, powNonce })
+export function hashPow({ pubKeyX, powNonce, viewingKey }: { pubKeyX: Hex, powNonce: bigint, viewingKey:bigint }) {
+    const addressHash = hashAddress({ pubKeyX, powNonce,viewingKey })
     const powHash = poseidon2Hash([powNonce, addressHash]);
     return powHash
 }
@@ -77,7 +77,7 @@ export function hashSignatureInputs({ recipientAddress, amount, feeData }: { rec
 
 export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY }: { pubKeyX: Hex, viewingKey: bigint, difficulty?: bigint }) {
     let powNonce: bigint = viewingKey;
-    let powHash: bigint = hashPow({ pubKeyX, powNonce });
+    let powHash: bigint = hashPow({ pubKeyX, powNonce, viewingKey });
     let hashingRounds = 0
     console.log("doing PoW")
     do {
@@ -85,7 +85,7 @@ export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY 
             break;
         }
         powNonce = powHash;
-        powHash = hashPow({ pubKeyX, powNonce })
+        powHash = hashPow({ pubKeyX, powNonce, viewingKey })
         hashingRounds += 1
     } while (powHash >= difficulty)
     return powNonce
@@ -98,7 +98,7 @@ export async function getPrivateAccount({ wallet, message = VIEWING_KEY_SIG_MESS
     const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature })
     const viewingKey = getViewingKey({ signature: signature })
     const powNonce = findPoWNonce({ pubKeyX: pubKeyX, viewingKey: viewingKey })
-    const burnAddress = getPrivateAddress({ pubKeyX: pubKeyX, powNonce: powNonce })
+    const burnAddress = getPrivateAddress({ pubKeyX: pubKeyX, powNonce: powNonce, viewingKey })
     const accountNonce = 0n
     return {viem:{wallet}, viewingKey, powNonce, pubKey: { x: pubKeyX, y: pubKeyY }, burnAddress, accountNonce }
 }

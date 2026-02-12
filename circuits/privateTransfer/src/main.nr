@@ -37,7 +37,7 @@ fn compute_root(
 // and viewing_key should be deterministically derived from the seed-phrase / priv_key, ex: deterministicSign(my_priv_key, "some standard message that notifies the user the viewing_key is created, etc")
 // ethereum signatures are already deterministic, there is mailability, but we don't care about that in this case
 // we want the preserve the "i only need my seed-phrase to recover" UX, which is very important!!!!
-fn get_private_address(pub_key: Field, pow_nonce: Field ) -> Field {
+fn get_private_address(pub_key: Field, pow_nonce: Field, viewing_key: Field) -> Field {
     // EIP7503 reintroduces an attack vector with address collisions because addresses are only 20 bytes. This time its with EOAs and ZKwormhole addresses. 
     // This allows the attacker to find a address that is both a EOA and a zkwormhole address. Which allows the hacker to mint infinite tokens.
     // The cost for this attack is estimated to be 10 billion dollars in 2021.
@@ -46,7 +46,7 @@ fn get_private_address(pub_key: Field, pow_nonce: Field ) -> Field {
     // Here we add pow_nonce to the address hashing and the PoW verification to force the attacker to do a PoW challenge on each attempt
     // pow_nonce need to be added to address_hash input other wise the attacker can find colliding address and do the PoW challenge afterwards
     // the pow_hash has the address_hash as input to prevent the attacker from reusing pow_nonces
-    let address_hash: Field = Poseidon2::hash([pub_key,pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
+    let address_hash: Field = Poseidon2::hash([pub_key,pow_nonce,viewing_key, PRIVATE_ADDRESS_TYPE], 4);
     let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
     assert_lt(pow_hash, POW_DIFFICULTY); //"pow failed: pow_nonce results in hash that is not < POW_DIFFICULTY"
     // let pow_diff: Field = pow_hash/POW_DIFFICULTY;
@@ -169,7 +169,7 @@ fn main(
     let mut small_pub_key_x: [u8; 32] = signature_data.public_key_x;
     small_pub_key_x[0] = 0;
     let pub_key_x_field: Field = Field::from_be_bytes(small_pub_key_x);
-    let private_address: Field = get_private_address(pub_key_x_field, pow_nonce);
+    let private_address: Field = get_private_address(pub_key_x_field, pow_nonce, viewing_key);
 
     let total_received_leaf: Field = hash_total_received_leaf(private_address, total_received);
 
