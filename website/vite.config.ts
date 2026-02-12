@@ -3,6 +3,9 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 //import wasm from 'vite-plugin-wasm';  
 
 export default defineConfig({
+  server: {
+    allowedHosts: ['eip7503-erc20.jimjim.dev', 'erc20-eip7503.jimjim.dev'],
+  },
   plugins: [
     nodePolyfills(),
     //wasm(),  // Add this plugin
