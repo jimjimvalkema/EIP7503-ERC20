@@ -78,13 +78,13 @@ yarn hardhat run scripts/deployPoseidon2.ts --network sepolia
 ```
 
 ## deployed addresses
-### sepolia 
-WormholeToken - [0x67Cc5Ac2029aaA9FD56F7D036d61f2d80A034c10](https://sepolia.etherscan.io/address/0x67Cc5Ac2029aaA9FD56F7D036d61f2d80A034c10)  
+### sepolia  
+WormholeToken - [0x762028F34CA53EaF88B86bDac9977216c824e1DB](https://sepolia.etherscan.io/address/0x762028F34CA53EaF88B86bDac9977216c824e1DB)  
 
 
-PrivateTransferVerifier - [0x342149C7108bb2b0052624f61629f5813B9B9466](https://sepolia.etherscan.io/address/0x342149C7108bb2b0052624f61629f5813B9B9466)  
-ZKTranscriptLib - [0x8F961e056967DD2A1170dBeCd9e5E51CA815B0D9](https://sepolia.etherscan.io/address/0x8F961e056967DD2A1170dBeCd9e5E51CA815B0D9)  
-leanIMTPoseidon2 - [0xcbf45ce9650A8F4E51933A13857016B1A44c3d94](https://sepolia.etherscan.io/address/0xcbf45ce9650A8F4E51933A13857016B1A44c3d94)  
+PrivateTransferVerifier - [0x288c97Ae097eDe51d4ed8DF56812B8603207169B](https://sepolia.etherscan.io/address/0x288c97Ae097eDe51d4ed8DF56812B8603207169B)  
+ZKTranscriptLib - [0xD5917825cEac16dF6B12cCa7C8C1C016B921161e](https://sepolia.etherscan.io/address/0xD5917825cEac16dF6B12cCa7C8C1C016B921161e)  
+leanIMTPoseidon2 - [0x7810C9AE22BcFF547CC4494A61ecB882a6048d6b](https://sepolia.etherscan.io/address/0x7810C9AE22BcFF547CC4494A61ecB882a6048d6b)  
 
 
 ## run ui

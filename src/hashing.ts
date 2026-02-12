@@ -79,6 +79,7 @@ export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY 
     let powNonce: bigint = viewingKey;
     let powHash: bigint = hashPow({ pubKeyX, powNonce, viewingKey });
     let hashingRounds = 0
+    const start = Date.now()
     console.log("doing PoW")
     do {
         if (powHash < difficulty) {
@@ -88,6 +89,8 @@ export function findPoWNonce({ pubKeyX, viewingKey, difficulty = POW_DIFFICULTY 
         powHash = hashPow({ pubKeyX, powNonce, viewingKey })
         hashingRounds += 1
     } while (powHash >= difficulty)
+
+    console.log(`done POW: done ${hashingRounds} hashing rounds in ${Date.now()-start}ms `)
     return powNonce
 }
 
