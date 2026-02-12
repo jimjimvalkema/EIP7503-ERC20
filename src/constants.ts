@@ -1,4 +1,4 @@
-import { getAddress, Hex, padHex, toHex } from "viem";
+import { Address, getAddress, Hex, padHex, toHex } from "viem";
 import { MerkleData, RelayerInputs, u1AsHexArr, u32AsHex } from "./types.js";
 import feeEstimatorRelayerData from "./feeEstimatorRelayerData.json"
 import { formatMerkleProof } from "./proving.js";
@@ -16,8 +16,9 @@ export const TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544n; // UTF8("TOTAL_B
 export const TOTAL_SPENT_DOMAIN = 0x544f54414c5f5350454e44n; // UTF8("TOTAL_SPEND").toHex()
 export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034343698204186575808495616n;
 export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
-export const POW_LEADING_ZEROS = 3n;
+export const POW_LEADING_ZEROS = 4n;
 export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
+console.log({POW_DIFFICULTY:toHex(POW_DIFFICULTY,{size:32})})
 export const MAX_TREE_DEPTH = 40 as const;
 export const ENCRYPTED_TOTAL_SPENT_PADDING = 256 // leaving some space for other things. Fits about 3 other key value pairs
 export const EAS_BYTE_LEN_OVERHEAD = 28
@@ -46,12 +47,25 @@ export const EMPTY_UNFORMATTED_MERKLE_PROOF: LeanIMTMerkleProof<bigint> = {
 export const EMPTY_MERKLE_PROOF: MerkleData = formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF,MAX_TREE_DEPTH)
 
 export const zeroAddress = getAddress(padHex("0x00", { size: 20 }))
-// export const EMPTY_FEE_DATA: FeeData = {
-//     relayerAddress: zeroAddress,
-//     priorityFee: 0n,
-//     conversionRate: 0n,
-//     maxFee: 0n,
-//     feeToken: zeroAddress,
-// }
 
-//export const FEE_ESTIMATOR_DATA:RelayerInputsHex = convertRelayerInputsToHex(feeEstimatorRelayerData as RelayerInputs)
+
+const PRIVATE_RE_MINT_DOMAIN_NAME = "zkwormholes-token" as const;
+const PRIVATE_RE_MINT_VERSION = "1"
+
+export function getPrivateReMintDomain(chainId:number, verifyingContract:Address) {
+    return {
+        name: PRIVATE_RE_MINT_DOMAIN_NAME,
+        version: PRIVATE_RE_MINT_VERSION,
+        chainId: chainId,
+        verifyingContract: verifyingContract,
+    } as const;
+}
+
+export const PRIVATE_RE_MINT_712_TYPES = {
+    privateReMint: [
+        { name: "_recipientAddress", type: "address" },
+        { name: "_amount", type: "uint256" },
+        { name: "_callData", type: "bytes" },
+        { name: "_totalSpentEncrypted", type: "bytes[]" },
+    ],
+} as const;

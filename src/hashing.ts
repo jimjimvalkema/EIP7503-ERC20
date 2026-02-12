@@ -1,6 +1,6 @@
-import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex } from "viem";
+import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex, hashTypedData } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
+import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
 import { FeeData, SignatureData, SignatureInputs, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.js";
 import { PrivateWallet } from "./PrivateWallet.js"
 import { padArray } from "./proving.js";
@@ -125,24 +125,52 @@ export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty
     return powNonce
 }
 
-export async function signPrivateTransfer({ privateWallet, signatureInputs }: { privateWallet: PrivateWallet, signatureInputs:SignatureInputs }):
-    Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex, poseidonHash: Hex, preImageOfKeccak: Hex }> {
-    const sigHash = hashSignatureInputs(signatureInputs)
-    //console.log({sigHash})
-    // blind signing yay!
-    // const signature = await privateWallet.viem.wallet.request({
-    //     method: 'eth_sign',
-    //     params: [(privateWallet.viem.wallet.account?.address as Address), poseidonHash],
-    // });
+export async function signPrivateTransfer({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: PrivateWallet, signatureInputs:SignatureInputs, chainId:number, tokenAddress:Address }):
+    Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }> {
+    chainId ??= await privateWallet.viemWallet.getChainId()
+    
+        // const sigHash = hashSignatureInputs(signatureInputs)
+    // //console.log({sigHash})
+    // // blind signing yay!
+    // // const signature = await privateWallet.viem.wallet.request({
+    // //     method: 'eth_sign',
+    // //     params: [(privateWallet.viem.wallet.account?.address as Address), poseidonHash],
+    // // });
 
-    //@notice i force viem to sign with the eth account that privateWallet expects, not the main account selected by the user. Always do that and do not!!: `WalletClient.account?.address`
-    const signature = await privateWallet.viemWallet.signMessage({ message: { raw: sigHash }, account: privateWallet.privateData.ethAccount })
-    const preImageOfKeccak = toPrefixedMessage({ raw: sigHash })
-    const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);
+    // //@notice i force viem to sign with the eth account that privateWallet expects, not the main account selected by the user. Always do that and do not!!: `WalletClient.account?.address`
+    // const signature = await privateWallet.viemWallet.signMessage({ message: { raw: sigHash }, account: privateWallet.privateData.ethAccount })
+    // const preImageOfKeccak = toPrefixedMessage({ raw: sigHash })
+    // const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);
 
-    const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: KeccakWrappedPoseidonHash, signature: signature })
-    // const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
-    // const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
+    // const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: KeccakWrappedPoseidonHash, signature: signature })
+    // // const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
+    // // const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
+    const message = {
+        _recipientAddress: signatureInputs.recipientAddress,
+        _amount: signatureInputs.amount,
+        _callData: signatureInputs.callData,
+        _totalSpentEncrypted: signatureInputs.encryptedTotalSpends,
+    };
+
+    // The digest — same hash the contract produces via _hashTypedDataV4
+    const domain = getPrivateReMintDomain(chainId,tokenAddress)
+    const hash = hashTypedData({
+        domain:domain,
+        types:PRIVATE_RE_MINT_712_TYPES,
+        primaryType: "privateReMint",
+        message,
+    });
+
+    // The signature
+    const signature = await privateWallet.viemWallet.signTypedData({
+        account:privateWallet.privateData.ethAccount,
+        domain:domain,
+        types:PRIVATE_RE_MINT_712_TYPES,
+        primaryType: "privateReMint",
+        message,
+    });
+
+    const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature });
     return {
         viemFormatSignature: { signature, pubKeyX, pubKeyY },
         signatureData: {
@@ -150,9 +178,7 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs }: { 
             public_key_y: hexToU8sAsHexArr(pubKeyY, 32) as u8sAsHexArrLen32,
             signature: hexToU8sAsHexArr(signature.slice(0, 2 + 128) as Hex, 64) as u8sAsHexArrLen64, // slice(0, 2 + 128) because we need to skip last byte, i don't remember why that byte is there
         },
-        signatureHash: KeccakWrappedPoseidonHash,
-        poseidonHash: sigHash,
-        preImageOfKeccak: preImageOfKeccak
+        signatureHash: hash,
     }
 
 }

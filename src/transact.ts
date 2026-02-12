@@ -122,7 +122,9 @@ export async function proofAndSelfRelay(
     // ---- do async stuff concurrently, signing, syncing ----
     const allSignatureDataPromise = signPrivateTransfer({
         privateWallet: privateWallet,
-        signatureInputs: signatureInputs
+        signatureInputs: signatureInputs,
+        chainId:Number(chainId),
+        tokenAddress: wormholeToken.address
     })
     const syncedTreePromise = getSyncedMerkleTree({
         wormholeToken,

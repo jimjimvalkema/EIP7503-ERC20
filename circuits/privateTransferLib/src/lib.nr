@@ -13,9 +13,9 @@ global PRIVATE_ADDRESS_TYPE: Field = 0x5a4b574f524d484f4c45; // UTF8("ZKWORMHOLE
 global TOTAL_BURNED_DOMAIN: Field = 0x544f54414c5f4255524e4544; // UTF8("TOTAL_BURNED").toHex()
 global TOTAL_SPENT_DOMAIN: Field = 0x544f54414c5f5350454e44; // UTF8("TOTAL_SPEND").toHex()
 // @TODO find out what number would be secure enough!
-// const POW_LEADING_ZEROS = 3n;
+// const POW_LEADING_ZEROS = 4n;
 // const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
-global POW_DIFFICULTY: Field =  0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;//0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff // find a nonce that result in a hash that is hash < POW_DIFFICULTY
+global POW_DIFFICULTY: Field =  0x0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;//0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff // find a nonce that result in a hash that is hash < POW_DIFFICULTY
 
 global MAX_TREE_DEPTH: u32 = 40;
 

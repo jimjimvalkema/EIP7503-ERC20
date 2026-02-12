@@ -1,30 +1,35 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
 
+
+// @TODO 
 pragma solidity ^0.8.3;
 
 import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol"; 
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.sol";
 import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
 import {IVerifier} from "./privateTransfer2InVerifier.sol";
 
-struct FeeData {
-    // relayerAddress = 0 <= self relay, relayerAddress = 1 <= msg.sender will relay, all other will send it to that address like expected
-    address relayerAddress;
-    // there is no way for the contract to know what priority fee is set so the spender just has to set it for the relayer (who ofc can choose a different number)
-    uint256 priorityFee;
-    // gas usage can change in network upgrades or when the merkle tree grows deeper
-    // price of eth in fee_token * gas_used
-    uint256 conversionRate;
-    // in the contract the fee is calculated feeAmountInFeeToken = (pubInput.priority_fee + block.baseFee) * pubInput.conversion_rate
-    // and should feeAmountInFeeToken < max_fee. conversionRate = gasUsage*tokenPriceInWei*relayerBonusFactor. 
-    // ex gasUsage=45000,tokenPriceInEth=0.048961448,relayerBonusFactor=10%
-    // conversionRate = 45000 * 48955645000000000 * 1.1
-    uint256 maxFee;
-    // fee_token is not that interesting rn because it really can only be the token it self or eth,
-    // but in the future where it is integrated as a deposit method of a rail-gun like system it can be use full.
-    address feeToken;
-}
+// struct FeeData {
+//     // relayerAddress = 0 <= self relay, relayerAddress = 1 <= msg.sender will relay, all other will send it to that address like expected
+//     address relayerAddress;
+//     // there is no way for the contract to know what priority fee is set so the spender just has to set it for the relayer (who ofc can choose a different number)
+//     uint256 priorityFee;
+//     // gas usage can change in network upgrades or when the merkle tree grows deeper
+//     // price of eth in fee_token * gas_used
+//     uint256 conversionRate;
+//     // in the contract the fee is calculated feeAmountInFeeToken = (pubInput.priority_fee + block.baseFee) * pubInput.conversion_rate
+//     // and should feeAmountInFeeToken < max_fee. conversionRate = gasUsage*tokenPriceInWei*relayerBonusFactor. 
+//     // ex gasUsage=45000,tokenPriceInEth=0.048961448,relayerBonusFactor=10%
+//     // conversionRate = 45000 * 48955645000000000 * 1.1
+//     uint256 maxFee;
+//     // fee_token is not that interesting rn because it really can only be the token it self or eth,
+//     // but in the future where it is integrated as a deposit method of a rail-gun like system it can be use full.
+//     // address feeToken;
+// }
+
+
 
 error VerificationFailed();
 // accountNoteNullifier is indexed so users can search for it and find out the total amount spend, which is needed to make the next spend the next spent
@@ -33,7 +38,7 @@ event Nullified(uint256 indexed nullifier, bytes totalSpentEncrypted);
 event StorageRootAdded(uint256 blockNumber);
 event NewLeaf(uint256 leaf);
 
-contract WormholeToken is ERC20WithWormHoleMerkleTree {
+contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     // this is so leafs from received balance and spent balance wont get mixed up
     uint256 constant public TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544; //  UTF8("TOTAL_BURNED").toHex()
     address internal constant POSEIDON2_ADDRESS = 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C; // yul-recompile-200: 0xb41072641808e6186eF5246fE1990e46EB45B65A gas: 62572, huff: 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C gas:39 627, yul-lib: 0x925e05cfb89f619BE3187Bf13D355A6D1864D24D,
@@ -43,8 +48,6 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
     mapping (uint256 => uint256) public nullifiers; // accountNoteNullifier -> blockNumber
     mapping (uint256 => bool) public roots;
 
-    // @TODO @CLEARSING will be remove when clearsign
-    bytes constant ETH_SIGN_PREFIX = hex"19457468657265756d205369676e6564204d6573736167653a0a3332";//abi.encodePacked("\x19Ethereum Signed Message:\n");    
     uint40 currentLeafIndex;
 
     uint256 public amountFreeTokens = 1000000*10**decimals();
@@ -58,42 +61,42 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
      */
     constructor(address _privateTransferVerifier1In, address _privateTransferVerifier4In)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
+        EIP712("zkwormholes-token", "1") 
     {
         privateTransferVerifier1In = _privateTransferVerifier1In;
         privateTransferVerifier4In = _privateTransferVerifier4In;
     }
- 
-    function _getMessageWithEthPrefix(bytes32 message) public pure returns(bytes memory){
-        return abi.encodePacked(ETH_SIGN_PREFIX, message);
+
+
+    bytes32 private constant _REMINT_TYPEHASH =
+        keccak256(
+            "privateReMint(address _recipientAddress,uint256 _amount,bytes _callData,bytes[] _totalSpentEncrypted)"
+        );
+
+    function _hashBytesArray(bytes[] memory items) internal pure returns (bytes32) {
+        bytes32[] memory hashes = new bytes32[](items.length);
+        for (uint256 i = 0; i < items.length; i++) {
+            hashes[i] = keccak256(items[i]);
+        }
+        return keccak256(abi.encodePacked(hashes));
     }
 
-    function _hashSignatureInputs(address _recipientAddress, uint256 _amount, bytes memory _callData, bytes[] memory _totalSpentEncrypted) public pure returns(bytes32) {
-        bytes memory input;
-        if (_totalSpentEncrypted.length == 2) {
-            input = abi.encodePacked(
-                _recipientAddress,
-                _amount,
-                _callData,
-                _totalSpentEncrypted[0],
-                _totalSpentEncrypted[1]
-            ); 
-
-        } if (_totalSpentEncrypted.length == 4) {
-            input = abi.encodePacked(
-                _recipientAddress,
-                _amount,
-                _callData,
-                _totalSpentEncrypted[0],
-                _totalSpentEncrypted[1],
-                _totalSpentEncrypted[2],
-                _totalSpentEncrypted[3]
-            ); 
-        } 
-
-        bytes32 preKeccak = keccak256(input);
-        // TODO check that bytes32 wont create unexpected zeros
-        bytes32 keccakHash = keccak256(_getMessageWithEthPrefix(preKeccak));
-        return keccakHash;
+    function _hashSignatureInputs(
+        address _recipientAddress,
+        uint256 _amount,
+        bytes memory _callData,
+        bytes[] memory _totalSpentEncrypted
+    ) public view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _REMINT_TYPEHASH,                     // 1. typehash first
+                _recipientAddress,                    // 2. address encodes directly
+                _amount,                              // 3. uint256 encodes directly
+                keccak256(_callData),                 // 4. bytes → keccak256
+                _hashBytesArray(_totalSpentEncrypted) // 5. bytes[] → hash each, then pack & hash
+            )
+        );
+        return _hashTypedDataV4(structHash);
     }
 
     function hashPoseidon2T3(uint256[3] memory input) public view returns (uint256) {
@@ -137,9 +140,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
         //if (tx.origin == _to || _to.code.length > 0) {return;}
         
         // @WARNING you might be tempted to create smarter ways to check if its for sure not a private address. 
-        // Example: check that `_to` is an smartcontract (_to.code.length > 0) or store the tx.origin address somewhere in a mapping like "allKnownEOAs" to check to save gas on future transfers. 
-        // Registering your EOA in "allKnownEOAs" / using smartcontract accounts saves you on gas in the future. But that creates perverse incentives that break plausible deniability.
-        // doing so will cause every EOA owner to register in "allKnownEOAs" / use smartcontract accounts and then there is no plausible deniability left since it's now "looks weird" to not do that.
+        // Example: check that `_to` is an smart contract (_to.code.length > 0) or store the tx.origin address somewhere in a mapping like "allKnownEOAs" to check to save gas on future transfers. 
+        // Registering your EOA in "allKnownEOAs" / using smart contract accounts saves you on gas in the future. But that creates perverse incentives that break plausible deniability.
+        // doing so will cause every EOA owner to register in "allKnownEOAs" / use smart contract accounts and then there is no plausible deniability left since it's now "looks weird" to not do that.
         // Even doing account != contract is bad in that sense. Since account based wallets would also save on gas.
         
 
@@ -241,13 +244,13 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree {
 
     }
 
-    function _calculateFees(FeeData calldata _feeData, uint256 _amount) private view returns(uint256, uint256) {
-        require(_feeData.feeToken == address(this), "alternative payment tokens is not implemented yet");
-        uint256 _relayerReward = (_feeData.priorityFee + block.basefee) * _feeData.conversionRate;
-        uint256 _recipientAmount = _amount - _relayerReward;
-        assert(_feeData.maxFee >= _relayerReward);
-        return (_relayerReward, _recipientAmount);
-    }
+    // function _calculateFees(FeeData calldata _feeData, uint256 _amount) private view returns(uint256, uint256) {
+    //     require(_feeData.feeToken == address(this), "alternative payment tokens is not implemented yet");
+    //     uint256 _relayerReward = (_feeData.priorityFee + block.basefee) * _feeData.conversionRate;
+    //     uint256 _recipientAmount = _amount - _relayerReward;
+    //     assert(_feeData.maxFee >= _relayerReward);
+    //     return (_relayerReward, _recipientAmount);
+    // }
 
     function privateReMint(
         uint256 _amount,
