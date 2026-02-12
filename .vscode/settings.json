@@ -2,6 +2,7 @@
     "cSpell.words": [
         "basefee",
         "Becarefull",
+        "chainid",
         "ciphertext",
         "Merkle",
         "nargo",
@@ -10,6 +11,7 @@
         "secp",
         "Tornadocash",
         "viem",
-        "zkwormhole"
+        "zkwormhole",
+        "zkwormholes"
     ]
 }

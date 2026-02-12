@@ -1,39 +1,71 @@
-import { getAddress, padHex } from "viem";
-import { FeeData, RelayerInputs, RelayerInputsHex } from "./types.js";
+import { Address, getAddress, Hex, padHex, toHex } from "viem";
+import { MerkleData, RelayerInputs, u1AsHexArr, u32AsHex } from "./types.js";
 import feeEstimatorRelayerData from "./feeEstimatorRelayerData.json"
-import { convertRelayerInputsToHex } from "./transact.js";
+import { formatMerkleProof } from "./proving.js";
+import { LeanIMTMerkleProof } from "@zk-kit/lean-imt";
+//import { convertRelayerInputsToHex } from "./transact.js";
 
 export const WormholeTokenContractName = "WormholeToken"
 export const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
-export const PrivateTransferVerifierContractName = "PrivateTransferVerifier"
-export const ZKTranscriptLibContractName = "ZKTranscriptLib"
+export const PrivateTransfer1InVerifierContractName = "privateTransfer2InVerifier"
+export const PrivateTransfer4InVerifierContractName = "privateTransfer4InVerifier"
+export const ZKTranscriptLibContractName = "contracts/privateTransfer2InVerifier.sol:ZKTranscriptLib"
 
-export const TOTAL_RECEIVED_DOMAIN = 0x52454345495645445F544F54414Cn; // UTF8("total_received").toHex()
-export const TOTAL_SPENT_DOMAIN = 0x5350454E545F544F54414Cn; // UTF8("total_spent").toHex()
-export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("zkwormhole")].map(b=>b.toString(16)).join('') as Hex
+export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('') as Hex
+export const TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544n; // UTF8("TOTAL_BURNED").toHex()
+export const TOTAL_SPENT_DOMAIN = 0x544f54414c5f5350454e44n; // UTF8("TOTAL_SPEND").toHex()
 export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034343698204186575808495616n;
 export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
 export const POW_LEADING_ZEROS = 4n;
 export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
-export const MAX_TREE_DEPTH = 40;
+console.log({POW_DIFFICULTY:toHex(POW_DIFFICULTY,{size:32})})
+export const MAX_TREE_DEPTH = 40 as const;
+export const ENCRYPTED_TOTAL_SPENT_PADDING = 256 // leaving some space for other things. Fits about 3 other key value pairs
+export const EAS_BYTE_LEN_OVERHEAD = 28
 
 export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
-    11155111:9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a
+    11155111: 9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a
 }
 
+// should always be sorted
+export const CIRCUIT_SIZES = [2,4];
+export const LARGEST_CIRCUIT_SIZE = CIRCUIT_SIZES[CIRCUIT_SIZES.length-1]
 export const VIEWING_KEY_SIG_MESSAGE = `
 You are about to create your viewing key for your zkwormhole account! \n
 Yay! :D Becarefull signing this on untrusted websites.
 Here is some salt: TODO
 `
 
-export const zeroAddress = getAddress(padHex("0x00", { size: 20 }))
-export const EMPTY_FEE_DATA: FeeData = {
-    relayerAddress: zeroAddress,
-    priorityFee: 0n,
-    conversionRate: 0n,
-    maxFee: 0n,
-    feeToken: zeroAddress,
+export const EMPTY_UNFORMATTED_MERKLE_PROOF: LeanIMTMerkleProof<bigint> = {
+    root: 0n,
+    leaf: 0n,
+    index: 0,
+    siblings: [], 
 }
 
-//export const FEE_ESTIMATOR_DATA:RelayerInputsHex = convertRelayerInputsToHex(feeEstimatorRelayerData as RelayerInputs)
+
+export const EMPTY_MERKLE_PROOF: MerkleData = formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF,MAX_TREE_DEPTH)
+
+export const zeroAddress = getAddress(padHex("0x00", { size: 20 }))
+
+
+const PRIVATE_RE_MINT_DOMAIN_NAME = "zkwormholes-token" as const;
+const PRIVATE_RE_MINT_VERSION = "1"
+
+export function getPrivateReMintDomain(chainId:number, verifyingContract:Address) {
+    return {
+        name: PRIVATE_RE_MINT_DOMAIN_NAME,
+        version: PRIVATE_RE_MINT_VERSION,
+        chainId: chainId,
+        verifyingContract: verifyingContract,
+    } as const;
+}
+
+export const PRIVATE_RE_MINT_712_TYPES = {
+    privateReMint: [
+        { name: "_recipientAddress", type: "address" },
+        { name: "_amount", type: "uint256" },
+        { name: "_callData", type: "bytes" },
+        { name: "_totalSpentEncrypted", type: "bytes[]" },
+    ],
+} as const;
