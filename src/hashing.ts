@@ -48,10 +48,21 @@ export function hashAddress({ blindedAddressDataHash, powNonce }: { blindedAddre
     return addressHash
 }
 
+export function getBurnAddressSafe({ blindedAddressDataHash, powNonce, difficulty=POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty:bigint }) {
+    const addressHash = hashAddress({ blindedAddressDataHash, powNonce })
+    const powHash = poseidon2Hash([powNonce, addressHash]);
+    if(powHash < difficulty === false) {throw new Error(`
+Invalid powNonce. 
+powNonce:${toHex(powNonce,{size:32})} 
+blindedAddressDataHash: ${toHex(blindedAddressDataHash,{size:32})}
+results in a PoW hash of: ${toHex(powHash,{size:32})}
+    `)}
+    return getAddress("0x" + toHex(addressHash, { size: 32 }).slice(2 + 24)) //slice off bytes and make it the address type in viem
+}
+
 export function getBurnAddress({ blindedAddressDataHash, powNonce }: { blindedAddressDataHash: bigint, powNonce: bigint }) {
     const addressHash = hashAddress({ blindedAddressDataHash, powNonce })
     return getAddress("0x" + toHex(addressHash, { size: 32 }).slice(2 + 24)) //slice off bytes and make it the address type in viem
-
 }
 
 export function hashPow({ blindedAddressDataHash, powNonce }: { blindedAddressDataHash: bigint, powNonce: bigint }) {
@@ -84,35 +95,35 @@ export function padWithRandomHex({ arr, len, hexSize, dir }: { arr: Hex[], len: 
     return dir === 'left' ? [...padding, ...arr] : [...arr, ...padding]
 }
 
-export function hashSignatureInputs(signatureInputs: SignatureInputs, encryptedBlobPlainTextSize=ENCRYPTED_TOTAL_SPENT_PADDING) {
-    const encryptedBlobLen = encryptedBlobPlainTextSize + EAS_BYTE_LEN_OVERHEAD
-    if (signatureInputs.encryptedTotalSpends.length <= 2) {
-        signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:2, hexSize:encryptedBlobLen, dir:"right"})
-        return keccak256(
-            encodePacked(
-                ['address', 'uint256', 'bytes','bytes','bytes'],
-                [signatureInputs.recipientAddress, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1]]
-            ))
+// export function hashSignatureInputs(signatureInputs: SignatureInputs, encryptedBlobPlainTextSize=ENCRYPTED_TOTAL_SPENT_PADDING) {
+//     const encryptedBlobLen = encryptedBlobPlainTextSize + EAS_BYTE_LEN_OVERHEAD
+//     if (signatureInputs.encryptedTotalSpends.length <= 2) {
+//         signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:2, hexSize:encryptedBlobLen, dir:"right"})
+//         return keccak256(
+//             encodePacked(
+//                 ['address', 'uint256', 'bytes','bytes','bytes'],
+//                 [signatureInputs.recipientAddress, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1]]
+//             ))
 
-    } else if (signatureInputs.encryptedTotalSpends.length <= 4) {
-        signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:4, hexSize:encryptedBlobLen, dir:"right"})
-        return keccak256(
-            encodePacked(
-                ['address', 'uint256', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes'],
-                [signatureInputs.recipientAddress, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1], signatureInputs.encryptedTotalSpends[2], signatureInputs.encryptedTotalSpends[3]]
-            ))
-    }
-    else {
-        throw new Error("amount of encryptedTotalSpends not supported")
-    }
-}
+//     } else if (signatureInputs.encryptedTotalSpends.length <= 4) {
+//         signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:4, hexSize:encryptedBlobLen, dir:"right"})
+//         return keccak256(
+//             encodePacked(
+//                 ['address', 'uint256', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes'],
+//                 [signatureInputs.recipientAddress, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1], signatureInputs.encryptedTotalSpends[2], signatureInputs.encryptedTotalSpends[3]]
+//             ))
+//     }
+//     else {
+//         throw new Error("amount of encryptedTotalSpends not supported")
+//     }
+// }
 
 export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, startingValue: bigint, difficulty?: bigint }) {
     let powNonce: bigint = startingValue;
     let powHash: bigint = hashPow({ blindedAddressDataHash, powNonce });
     let hashingRounds = 0
     const start = Date.now()
-    console.log("doing PoW")
+    console.log(`doing PoW. difficulty:${toHex(difficulty, {size:32})}`)
     do {
         if (powHash < difficulty) {
             break;
@@ -121,7 +132,12 @@ export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty
         powHash = hashPow({ blindedAddressDataHash, powNonce })
         hashingRounds += 1
     } while (powHash >= difficulty)
-    console.log(`did ${hashingRounds} hashing rounds. It took ${Date.now() - start}ms`)
+    console.log(`
+found powNonce:${toHex(powNonce,{size:32})} 
+with blindedAddressDataHash:${toHex(blindedAddressDataHash,{size:32})}, 
+did ${hashingRounds} hashing rounds. 
+It took ${Date.now() - start}ms
+    `)
     return powNonce
 }
 

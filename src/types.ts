@@ -88,7 +88,13 @@ export interface ProofInputs4n extends ProofInputs {
 }
 
 
-export interface UnsyncedBurnAccount {
+export interface NotOwnedBurnAccount {
+    readonly powNonce: Hex;
+    readonly burnAddress: Address;
+    readonly blindedAddressDataHash: Hex;
+}
+
+export interface UnsyncedBurnAccount extends NotOwnedBurnAccount {
     /**used to encrypt total spend, unconstrained, not a circuit input */
     readonly viewingKey: Hex;
     readonly isDeterministicViewKey: Boolean;
@@ -97,6 +103,7 @@ export interface UnsyncedBurnAccount {
     readonly burnAddress: Address;
     readonly chainId: Hex;
     readonly blindedAddressDataHash: Hex;
+    readonly spendingPubKeyX: Hex;
 }
 
 export interface SyncedBurnAccount extends UnsyncedBurnAccount {

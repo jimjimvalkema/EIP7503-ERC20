@@ -18,8 +18,8 @@ export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034
 export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
 export const POW_LEADING_ZEROS = 4n;
 export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
-console.log({POW_DIFFICULTY:toHex(POW_DIFFICULTY,{size:32})})
-export const MAX_TREE_DEPTH = 40 as const;
+
+export const MAX_TREE_DEPTH = 42 as const;
 export const ENCRYPTED_TOTAL_SPENT_PADDING = 256 // leaving some space for other things. Fits about 3 other key value pairs
 export const EAS_BYTE_LEN_OVERHEAD = 28
 

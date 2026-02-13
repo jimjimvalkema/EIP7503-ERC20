@@ -17,7 +17,21 @@ global TOTAL_SPENT_DOMAIN: Field = 0x544f54414c5f5350454e44; // UTF8("TOTAL_SPEN
 // const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
 global POW_DIFFICULTY: Field =  0x0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;//0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff // find a nonce that result in a hash that is hash < POW_DIFFICULTY
 
-global MAX_TREE_DEPTH: u32 = 40;
+// ---------- why max tree depth 42 --------------------
+// const erc20Tps = 35_000;
+// const zkwormholeTps = erc20Tps / 10;
+// const bulkMerkleInserts = 1; // becomes relevant once large reMints emitting multiple commitments are more gas efficient then simple burns. 
+// const insertsPerYear = bulkMerkleInserts * zkwormholeTps * 60*60*24*365;
+// const treeDepth = 42;
+// (2**treeDepth) / insertsPerYear
+
+// depth 42 allows for 40 years on a 35_000 tps chain (megaEth recent stress test) if every tx is a burn tx
+// after that, any tokens burned will be actually be burned for real and you will never get them back!
+// any tokens before that are fine. That leaf will always exist and the contract always stores that root.
+// you can burn tokens before the tree is at a depth above 42, and reMint them a 100 years later those will always be there.
+// the ui can warn you, but contract cant prevent it because the contract can't know if your address is a burn address or a normal address!
+// ----------------------------------------------------------
+global MAX_TREE_DEPTH: u32 = 42; // TODO make this configurable outside lib
 
 fn merkle_hasher(leaves: [Field; 2]) -> Field {
     Poseidon2::hash(leaves, 2)

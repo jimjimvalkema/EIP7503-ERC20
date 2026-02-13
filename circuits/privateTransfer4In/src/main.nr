@@ -1,6 +1,6 @@
 use privateTransferLib::{spendFromBurnAddresses, BurnDataPublic, BurnDataPrivate, SignatureData};
 
-// why only 4?
+// should not go smaller then 2 because then the fact that someone is consolidating balances leaks
 global BURN_ADDRESSES_LEN: u32 = 4; 
 fn main(
     //----- public inputs
@@ -12,7 +12,7 @@ fn main(
     // --- private inputs ---
     signature_data: SignatureData,      
     burn_data_private: [BurnDataPrivate; BURN_ADDRESSES_LEN],
-    amount_burn_addresses:u32 // always one but still a input to be consistent with other circuits
+    amount_burn_addresses: u32 // always one but still a input to be consistent with other circuits
 ) {
 
     // one signature for all burns. Cheaper, better UX, but you cant spent with different private keys

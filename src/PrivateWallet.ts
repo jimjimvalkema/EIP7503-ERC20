@@ -155,12 +155,13 @@ export class PrivateWallet {
 
         const burnAddress = getBurnAddress({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(powNonce) })
         const burnAccount: UnsyncedBurnAccount = {
-            viewingKey: toHex(viewingKey as bigint),
+            viewingKey: toHex(viewingKey as bigint, {size:32}),
             isDeterministicViewKey: isDeterministicViewKey,
-            powNonce: toHex(powNonce),
+            powNonce: toHex(powNonce, {size:32}),
             burnAddress: burnAddress,
             chainId: toHex(chainId),
-            blindedAddressDataHash: toHex(blindedAddressDataHash),
+            blindedAddressDataHash: toHex(blindedAddressDataHash, {size:32}),
+            spendingPubKeyX: spendingPubKeyX
         }
 
         this.privateData.burnAccounts.push(burnAccount)

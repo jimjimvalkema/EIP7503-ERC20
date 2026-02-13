@@ -67,6 +67,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         privateTransferVerifier4In = _privateTransferVerifier4In;
     }
 
+    function treeSize() public view  returns (uint256) {
+        return tree.size;
+    }
 
     bytes32 private constant _REMINT_TYPEHASH =
         keccak256(
