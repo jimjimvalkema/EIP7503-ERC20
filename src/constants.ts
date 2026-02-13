@@ -28,7 +28,7 @@ export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
 }
 
 // should always be sorted
-export const CIRCUIT_SIZES = [2,4];
+export const CIRCUIT_SIZES = [2,112];
 export const LARGEST_CIRCUIT_SIZE = CIRCUIT_SIZES[CIRCUIT_SIZES.length-1]
 export const VIEWING_KEY_SIG_MESSAGE = `
 You are about to create your viewing key for your zkwormhole account! \n

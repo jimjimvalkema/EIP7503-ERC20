@@ -252,6 +252,16 @@ export async function freeRelayTx({publicInputs,proof,signatureInputs, wallet, w
     const _snarkProof = toHex(proof.proof)
     const _callData = signatureInputs.callData
     const _totalSpentEncrypted = signatureInputs.encryptedTotalSpends
+    // console.log({        _amount,
+    //     _to,
+    //     _accountNoteHashes,
+    //     _accountNoteNullifiers,
+    //     _root,
+    //     _snarkProof,
+    //     _callData,
+    //     _totalSpentEncrypted
+    // })
+    // console.log({_accountNoteHashesLen:_accountNoteHashes.length})
     return await wormholeTokenContract.write.privateReMint([
         _amount,
         _to,
@@ -262,4 +272,5 @@ export async function freeRelayTx({publicInputs,proof,signatureInputs, wallet, w
         _callData,
         _totalSpentEncrypted
     ],{account:wallet.account?.address as Address})
+    //return toHex(0n)
 }

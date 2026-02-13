@@ -207,7 +207,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         uint256[] memory _accountNoteNullifiers   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
     ) public pure returns (bytes32[] memory) {
         if (_accountNoteHashes.length == 2) {
-            bytes32[] memory publicInputs = new bytes32[](38);
+            bytes32[] memory publicInputs = new bytes32[](34 + 2*2);
 
             publicInputs[0] = bytes32(_root);
             publicInputs[1] = bytes32(uint256(_amount));
@@ -215,15 +215,17 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
             for (uint256 i = 0; i < 32; i++) {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }
-            publicInputs[34] = bytes32(_accountNoteHashes[0]);
-            publicInputs[35] = bytes32(_accountNoteNullifiers[0]);
-            publicInputs[36] = bytes32(_accountNoteHashes[1]);
-            publicInputs[37] = bytes32(_accountNoteNullifiers[1]);
+
+            uint256 noteHashesOffSet = 32 + signatureHashOffset;
+            for (uint256 i = 0; i < _accountNoteHashes.length ; i++) {
+                publicInputs[2 * i + noteHashesOffSet] = bytes32(_accountNoteHashes[i]);
+                publicInputs[2 * i + noteHashesOffSet + 1] = bytes32(_accountNoteNullifiers[i]);
+            }
 
             return publicInputs;
 
-        } else if (_accountNoteHashes.length == 4) {
-            bytes32[] memory publicInputs = new bytes32[](42);
+        } else if (_accountNoteHashes.length == 112) {
+            bytes32[] memory publicInputs = new bytes32[](34 + 112*2);
 
             publicInputs[0] = bytes32(_root);
             publicInputs[1] = bytes32(uint256(_amount));
@@ -231,14 +233,12 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
             for (uint256 i = 0; i < 32; i++) {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }
-            publicInputs[34] = bytes32(_accountNoteHashes[0]);
-            publicInputs[35] = bytes32(_accountNoteNullifiers[0]);
-            publicInputs[36] = bytes32(_accountNoteHashes[1]);
-            publicInputs[37] = bytes32(_accountNoteNullifiers[1]);
-            publicInputs[38] = bytes32(_accountNoteHashes[2]);
-            publicInputs[39] = bytes32(_accountNoteNullifiers[2]);
-            publicInputs[40] = bytes32(_accountNoteHashes[3]);
-            publicInputs[41] = bytes32(_accountNoteNullifiers[3]);
+
+            uint256 noteHashesOffSet = 32 + signatureHashOffset;
+            for (uint256 i = 0; i < _accountNoteHashes.length ; i++) {
+                publicInputs[2 * i + noteHashesOffSet] = bytes32(_accountNoteHashes[i]);
+                publicInputs[2 * i + noteHashesOffSet + 1] = bytes32(_accountNoteNullifiers[i]);
+            }
 
             return publicInputs;
         } else {
@@ -302,7 +302,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
             if (!IVerifier(privateTransferVerifier1In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
             }
-        } else if (_accountNoteNullifiers.length == 4) {
+        } else if (_accountNoteNullifiers.length == 112) {
             if (!IVerifier(privateTransferVerifier4In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
             }

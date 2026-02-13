@@ -64,13 +64,24 @@ fn hash_burn_address(blinded_address_data_hash: Field, pow_nonce: Field ) -> Fie
     let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
     assert_lt(pow_hash, POW_DIFFICULTY); //"pow failed: pow_nonce results in hash that is not < POW_DIFFICULTY"
 
-    // replace last 12 bytes with zero since address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
-    let mut address_bytes: [u8;32] = address_hash.to_be_bytes();
-    for index in 0..12 {
-        address_bytes[index] = 0;
+    // // replace last 12 bytes with zero since a eth address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
+    let bytes: [u8; 32] = address_hash.to_be_bytes();
+    let mut eth_address: Field = 0;
+    for i in 12..32 {
+        eth_address = eth_address * 256 + bytes[i] as Field;
     }
+    eth_address
+
+
+    // this way of doing it makes the ram requirement super large? idk there was something that made it super hard to go beyond 4 burnaddress and this might be it?
+    // replace last 12 bytes with zero since address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
+    // let mut address_bytes: [u8;32] = address_hash.to_be_bytes();
+    // for index in 0..12 {
+    //     address_bytes[index] = 0;
+    // }
     
-    bytes32_to_field(address_bytes)
+    // let eth_address: Field = bytes32_to_field(address_bytes);
+    // eth_address
 }
 
 fn hash_total_burned_leaf(private_address: Field, total_burned: Field) -> Field {

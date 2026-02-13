@@ -1,7 +1,6 @@
 use privateTransferLib::{spendFromBurnAddresses, BurnDataPublic, BurnDataPrivate, SignatureData};
-
-// should not go smaller then 2 because then the fact that someone is consolidating balances leaks
-global BURN_ADDRESSES_LEN: u32 = 4; 
+// is not set higher to prevent going to over wasm ram limit. 132 is confirmed too high
+global BURN_ADDRESSES_LEN: u32 = 112; 
 fn main(
     //----- public inputs
     root: pub Field,
