@@ -1,7 +1,0 @@
-[package]
-name = "privateTransfer4In"
-type = "bin"
-authors = [""]
-
-[dependencies]
-privateTransferLib = { path = "../privateTransferLib" }

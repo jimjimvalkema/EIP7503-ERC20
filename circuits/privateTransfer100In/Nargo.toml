@@ -1,5 +1,5 @@
 [package]
-name = "privateTransfer2In"
+name = "privateTransfer100In"
 type = "bin"
 authors = [""]
 

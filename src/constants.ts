@@ -8,7 +8,7 @@ import { LeanIMTMerkleProof } from "@zk-kit/lean-imt";
 export const WormholeTokenContractName = "WormholeToken"
 export const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
 export const PrivateTransfer1InVerifierContractName = "privateTransfer2InVerifier"
-export const PrivateTransfer4InVerifierContractName = "privateTransfer4InVerifier"
+export const PrivateTransfer100InVerifierContractName = "privateTransfer100InVerifier"
 export const ZKTranscriptLibContractName = "contracts/privateTransfer2InVerifier.sol:ZKTranscriptLib"
 
 export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('') as Hex
@@ -19,7 +19,7 @@ export const FIELD_MODULUS = 218882428718392752222464057452572750885483644004160
 export const POW_LEADING_ZEROS = 4n;
 export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
 
-export const MAX_TREE_DEPTH = 42 as const;
+export const MAX_TREE_DEPTH = 44 as const;
 export const ENCRYPTED_TOTAL_SPENT_PADDING = 256 // leaving some space for other things. Fits about 3 other key value pairs
 export const EAS_BYTE_LEN_OVERHEAD = 28
 
@@ -28,7 +28,7 @@ export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
 }
 
 // should always be sorted
-export const CIRCUIT_SIZES = [2,112];
+export const CIRCUIT_SIZES = [2,100];
 export const LARGEST_CIRCUIT_SIZE = CIRCUIT_SIZES[CIRCUIT_SIZES.length-1]
 export const VIEWING_KEY_SIG_MESSAGE = `
 You are about to create your viewing key for your zkwormhole account! \n

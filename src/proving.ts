@@ -8,7 +8,7 @@ import { getSyncedMerkleTree } from "./syncing.js"
 import { ProofData, UltraHonkBackend } from '@aztec/bb.js';
 import { CompiledCircuit, InputMap, Noir } from "@noir-lang/noir_js"
 import privateTransfer2InCircuit from '../circuits/privateTransfer2In/target/privateTransfer2In.json';
-import privateTransfer41InCircuit from '../circuits/privateTransfer4In/target/privateTransfer4In.json';
+import privateTransfer41InCircuit from '../circuits/privateTransfer100In/target/privateTransfer100In.json';
 
 import { Fr } from "@aztec/aztec.js"
 import { PrivateWallet } from "./PrivateWallet.js"

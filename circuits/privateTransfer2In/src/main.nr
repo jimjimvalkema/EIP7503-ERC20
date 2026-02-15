@@ -1,4 +1,5 @@
 use privateTransferLib::{spendFromBurnAddresses, BurnDataPublic, BurnDataPrivate, SignatureData};
+use constants::{MAX_TREE_DEPTH,POW_DIFFICULTY};
 
 // should not go smaller then 2 because then the fact that someone is consolidating balances leaks
 global BURN_ADDRESSES_LEN: u32 = 2; 
@@ -11,7 +12,7 @@ fn main(
     burn_data_public: pub [BurnDataPublic; BURN_ADDRESSES_LEN],
     // --- private inputs ---
     signature_data: SignatureData,      
-    burn_data_private: [BurnDataPrivate; BURN_ADDRESSES_LEN],
+    burn_data_private: [BurnDataPrivate<MAX_TREE_DEPTH>; BURN_ADDRESSES_LEN],
     amount_burn_addresses: u32 // always one but still a input to be consistent with other circuits
 ) {
 
@@ -29,7 +30,7 @@ fn main(
     small_pub_key_x[0] = 0;
     let pub_key_x_field: Field = Field::from_be_bytes(small_pub_key_x);
 
-    spendFromBurnAddresses(
+    spendFromBurnAddresses::<MAX_TREE_DEPTH, POW_DIFFICULTY>(
         root,
         chain_id,
         amount,

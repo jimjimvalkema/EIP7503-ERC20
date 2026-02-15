@@ -53,18 +53,18 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     uint256 public amountFreeTokens = 1000000*10**decimals();
 
     address public privateTransferVerifier1In;
-    address public privateTransferVerifier4In;
+    address public privateTransferVerifier100In;
     LeanIMTData public tree;
     
     /**
      * 
      */
-    constructor(address _privateTransferVerifier1In, address _privateTransferVerifier4In)
+    constructor(address _privateTransferVerifier1In, address _privateTransferVerifier100In)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
         EIP712("zkwormholes-token", "1") 
     {
         privateTransferVerifier1In = _privateTransferVerifier1In;
-        privateTransferVerifier4In = _privateTransferVerifier4In;
+        privateTransferVerifier100In = _privateTransferVerifier100In;
     }
 
     function treeSize() public view  returns (uint256) {
@@ -224,8 +224,8 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
             return publicInputs;
 
-        } else if (_accountNoteHashes.length == 112) {
-            bytes32[] memory publicInputs = new bytes32[](34 + 112*2);
+        } else if (_accountNoteHashes.length == 100) {
+            bytes32[] memory publicInputs = new bytes32[](34 + 100*2);
 
             publicInputs[0] = bytes32(_root);
             publicInputs[1] = bytes32(uint256(_amount));
@@ -278,7 +278,10 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         require(roots[_root], "invalid root");
         bytes32 signatureHash = _hashSignatureInputs(_to, _amount, _callData, _totalSpentEncrypted);
         //@jimjim technically _feeData doesn't need to be here. It can be in a contract that handles that
-        // @TODO make relayer contract!!!
+        // @TODO make fees in here anyway. since 712 signing is not flexible enough to also decode that call data rn
+        // @TODO do something with the calldata and add parameter to choose which contract to call
+        // @TODO fee should have a separate refund address so user can pay exact amounts and sent the rest back to a one time burn address
+        // @TODO relayer accounting should be simpler. ethPriceToken, maxRelayerFee, estimatedGasCost, estimatedPriorityFee
         // if (_feeData.relayerAddress == address(0)) {
         //     //-- self relay --
         //     // inserts _accountNoteHash into the merkle tree as well
@@ -302,8 +305,8 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
             if (!IVerifier(privateTransferVerifier1In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
             }
-        } else if (_accountNoteNullifiers.length == 112) {
-            if (!IVerifier(privateTransferVerifier4In).verify(_snarkProof, publicInputs)) {
+        } else if (_accountNoteNullifiers.length == 100) {
+            if (!IVerifier(privateTransferVerifier100In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
             }
         } else {

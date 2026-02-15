@@ -9,13 +9,13 @@ use dep::std::field::{bytes32_to_field, bn254::{
 use binary_merkle_root::binary_merkle_root;
 
 // domain separators
-global PRIVATE_ADDRESS_TYPE: Field = 0x5a4b574f524d484f4c45; // UTF8("ZKWORMHOLE").toHex() [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('')
-global TOTAL_BURNED_DOMAIN: Field = 0x544f54414c5f4255524e4544; // UTF8("TOTAL_BURNED").toHex()
-global TOTAL_SPENT_DOMAIN: Field = 0x544f54414c5f5350454e44; // UTF8("TOTAL_SPEND").toHex()
+pub global PRIVATE_ADDRESS_TYPE: Field = 0x5a4b574f524d484f4c45; // UTF8("ZKWORMHOLE").toHex() [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('')
+pub global TOTAL_BURNED_DOMAIN: Field = 0x544f54414c5f4255524e4544; // UTF8("TOTAL_BURNED").toHex()
+pub global TOTAL_SPENT_DOMAIN: Field = 0x544f54414c5f5350454e44; // UTF8("TOTAL_SPEND").toHex()
 // @TODO find out what number would be secure enough!
 // const POW_LEADING_ZEROS = 4n;
 // const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
-global POW_DIFFICULTY: Field =  0x0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;//0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff // find a nonce that result in a hash that is hash < POW_DIFFICULTY
+// pub global POW_DIFFICULTY: Field =  0x0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;//0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff // find a nonce that result in a hash that is hash < pow_difficulty
 
 // ---------- why max tree depth 42 --------------------
 // const erc20Tps = 35_000;
@@ -31,15 +31,14 @@ global POW_DIFFICULTY: Field =  0x0000ffffffffffffffffffffffffffffffffffffffffff
 // you can burn tokens before the tree is at a depth above 42, and reMint them a 100 years later those will always be there.
 // the ui can warn you, but contract cant prevent it because the contract can't know if your address is a burn address or a normal address!
 // ----------------------------------------------------------
-global MAX_TREE_DEPTH: u32 = 42; // TODO make this configurable outside lib
 
 fn merkle_hasher(leaves: [Field; 2]) -> Field {
     Poseidon2::hash(leaves, 2)
 }
 
-fn merkle_hash_root(
+fn merkle_hash_root<let MAX_TREE_DEPTH: u32>(
     leaf: Field,
-    merkle_data: MerkleData,
+    merkle_data: MerkleData<MAX_TREE_DEPTH>,
 ) -> Field {
     binary_merkle_root(
         merkle_hasher,
@@ -59,10 +58,10 @@ fn hash_blinded_burn_address_data(spending_pub_key_x:Field, chain_id:Field, view
 }
 
 // pow_nonce acts both as a PoW to make finding a hash collision between EOA and BurnAddress harder
-fn hash_burn_address(blinded_address_data_hash: Field, pow_nonce: Field ) -> Field {
+fn hash_burn_address(blinded_address_data_hash: Field, pow_nonce: Field, pow_difficulty: Field ) -> Field {
     let address_hash: Field = Poseidon2::hash([blinded_address_data_hash, pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
     let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
-    assert_lt(pow_hash, POW_DIFFICULTY); //"pow failed: pow_nonce results in hash that is not < POW_DIFFICULTY"
+    assert_lt(pow_hash, pow_difficulty); //"pow failed: pow_nonce results in hash that is not < pow_difficulty"
 
     // // replace last 12 bytes with zero since a eth address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
     let bytes: [u8; 32] = address_hash.to_be_bytes();
@@ -117,7 +116,7 @@ pub struct SignatureData {
     pub signature: [u8; 64],
 }
 
-pub struct MerkleData {
+pub struct MerkleData<let MAX_TREE_DEPTH: u32> {
     depth: u32,
     // TODO maybe we can save on memory computing indices on the spot instead?
     indices: [u1; MAX_TREE_DEPTH],
@@ -130,7 +129,7 @@ pub struct BurnDataPublic {
     account_note_nullifier: Field,                   
 }
 
-pub struct BurnDataPrivate {                
+pub struct BurnDataPrivate <let MAX_TREE_DEPTH: u32> {                
     //-----very privacy sensitive data -----
     /*blinds note hashes and nullifiers, separate from blinding_pow to support senders making fresh burn account on the recipients behave*/
     viewing_key: Field,    
@@ -142,25 +141,25 @@ pub struct BurnDataPrivate {
     amount_to_spend: Field,                     
     // inclusion proof
     prev_account_nonce: Field,               
-    prev_account_note_merkle_data: MerkleData,
-    total_burned_merkle_data: MerkleData,
+    prev_account_note_merkle_data: MerkleData<MAX_TREE_DEPTH>,
+    total_burned_merkle_data: MerkleData<MAX_TREE_DEPTH>,
 }
 
-pub fn spendFromBurnAddresses(
+pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32, let POW_DIFFICULTY: Field>(
     //public
     root: Field, 
     chain_id: Field,
     total_amount_to_spent: Field, 
     burn_data_public: [BurnDataPublic],
     //private
-    burn_data_private: [BurnDataPrivate],
+    burn_data_private: [BurnDataPrivate<MAX_TREE_DEPTH>],
     spending_pub_key_x: Field,    
     amount_burn_addresses: u32
 ) {
     let mut amount_verified: Field = 0;
     for i in 0..burn_data_private.len() {
         if( i < amount_burn_addresses) {
-            spendFromBurnAddress(
+            spendFromBurnAddress::<MAX_TREE_DEPTH, POW_DIFFICULTY>(
                 //public
                 root,
                 chain_id,
@@ -187,7 +186,7 @@ pub fn spendFromBurnAddresses(
     assert(amount_verified == total_amount_to_spent, "aggregated burn address amounts do not match amount to spend");
 }
 
-pub fn spendFromBurnAddress(
+pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32, let POW_DIFFICULTY: Field>(
     // public
     root: Field,
     chain_id: Field,
@@ -206,22 +205,22 @@ pub fn spendFromBurnAddress(
 
     // private inclusion proof
     prev_account_nonce: Field,
-    prev_account_note_merkle_data: MerkleData,
-    total_burned_merkle_data: MerkleData
+    prev_account_note_merkle_data: MerkleData<MAX_TREE_DEPTH>,
+    total_burned_merkle_data: MerkleData<MAX_TREE_DEPTH>
 ) {
   
     let blinded_address_data_hash: Field = hash_blinded_burn_address_data(spending_pub_key_x, chain_id, viewing_key );
-    let private_address: Field = hash_burn_address(blinded_address_data_hash, pow_nonce);
+    let private_address: Field = hash_burn_address(blinded_address_data_hash, pow_nonce, POW_DIFFICULTY);
 
     // verify how much is "burned"
     let total_burned_leaf: Field = hash_total_burned_leaf(private_address, total_burned);
-    let root_total_burned: Field = merkle_hash_root(total_burned_leaf, total_burned_merkle_data);
+    let root_total_burned: Field = merkle_hash_root::<MAX_TREE_DEPTH>(total_burned_leaf, total_burned_merkle_data);
     assert(root_total_burned == root, "total_burned merkle proof invalid");
 
     if prev_account_nonce != 0 {
         // verify how much was spent in total before this tx: verify prev_total_spent
         let prev_account_note_hash: Field = hash_total_spent_leaf(prev_total_spent, prev_account_nonce,blinded_address_data_hash, viewing_key);
-        let computed_prev_root: Field = merkle_hash_root(prev_account_note_hash, prev_account_note_merkle_data);
+        let computed_prev_root: Field = merkle_hash_root::<MAX_TREE_DEPTH>(prev_account_note_hash, prev_account_note_merkle_data);
         assert(computed_prev_root == root, "prev account note merkle proof invalid");
     } else {
         // we have to skip merkle proofs since a previous spent balance does not exist
