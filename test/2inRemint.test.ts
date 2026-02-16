@@ -179,7 +179,7 @@ describe("Token", async function () {
 
             const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             // PoW nonce hashing is with workers so can be done in parallel!
-            const [aliceBurnAccount1, aliceBurnAccount2] = await Promise.all([alicePrivate.createNewBurnAccount(), alicePrivate.createNewBurnAccount()])
+            const [aliceBurnAccount1, aliceBurnAccount2] = await Promise.all([alicePrivate.createNewBurnAccount({async:true}), alicePrivate.createNewBurnAccount({async:true})])
 
 
             const claimableBurnAddress = [aliceBurnAccount1.burnAddress, aliceBurnAccount2.burnAddress];

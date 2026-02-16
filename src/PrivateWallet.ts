@@ -3,10 +3,9 @@
 import type { Address, Hex, WalletClient } from "viem";
 import {hashMessage, hexToBytes, toBytes, toHex } from "viem";
 import type { BurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
-import { extractPubKeyFromSig, findPoWNonce, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.ts";
+import { extractPubKeyFromSig, findPoWNonce, findPoWNonceAsync, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.ts";
 import { POW_DIFFICULTY, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { findPoWNonceAsync } from "./hashingAsync.ts";
 //import { findPoWNonceAsync } from "./hashingAsync.js";
 
 /**
@@ -129,11 +128,37 @@ export class PrivateWallet {
     }
 
     /**
-     * @notice prompts user to sign a message if viewingKey is not set. 
-     * @Warning Setting the viewing key your self is dangerous, inability to recover the viewing key will result in loss of funds
-     * @returns 
+     * Creates a new burn account by generating (or accepting) a viewing key,
+     * deterministically finds a pow nonce,
+     * and deriving the corresponding burn address.
+     *
+     * By default, the viewing key is deterministically derived from an internal
+     * root and counter. If a custom `viewingKey` is provided, it is used as-is —
+     * but note that losing a non-deterministic viewing key means permanent loss
+     * of access to the associated funds.
+     *
+     * @param options - Optional configuration object.
+     * @param options.viewingKey - A custom viewing key. If omitted, one is
+     *   deterministically derived. **Warning:** providing your own key bypasses
+     *   deterministic recovery — loss of this key results in loss of funds.
+     * @param options.chainId - Target chain ID. Defaults to `this.defaultChainId`.
+     *   Must be in `this.acceptedChainIds`.
+     * @param options.powNonce - A pre-computed proof-of-work nonce. If omitted,
+     *   one is computed deterministically using the specified `difficulty`. 
+     *  **Warning:** providing your own powNonce bypasses
+     *   deterministic recovery — loss of this key results in loss of funds.
+     * @param options.difficulty - PoW difficulty override. Defaults to
+     *   `this.powDifficulty`.
+     * @param options.async - If `true`, uses it's own webworker thread. This helps not freezing the ui. Defaults to
+     *   `false`.
+     *
+     * @returns The newly created {@link UnsyncedBurnAccount}, which is also
+     *   appended to `this.privateData.burnAccounts`.
+     *
+     * @throws {Error} If `chainId` is not in `this.acceptedChainIds`.
+     * @throws {Error} If a provided `powNonce` fails verification.
      */
-    async createNewBurnAccount({ powNonce, viewingKey, chainId, difficulty = this.powDifficulty }: { chainId?: bigint, powNonce?: bigint, viewingKey?: bigint, difficulty?: bigint }={}) {
+    async createNewBurnAccount({ powNonce, viewingKey, chainId, difficulty = this.powDifficulty, async=false }: { async?: boolean,chainId?: bigint, powNonce?: bigint, viewingKey?: bigint, difficulty?: bigint }={}) {
         // assumes viewingKey is not deterministically derived, at least not the usual way. If viewingKey param is set
         // @TODO @warptoad chainId is automatically set to mainnet, for warptoad 
         chainId ??= this.defaultChainId
@@ -151,8 +176,11 @@ export class PrivateWallet {
 
         // TODO derive blindingPow
         if (powNonce === undefined) {
-            //powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
-            powNonce = await findPoWNonceAsync({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty }) as bigint
+            if(async) {
+                powNonce = await findPoWNonceAsync({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty }) as bigint
+            } else {
+                powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
+            }
         }
         if (verifyPowNonce({ blindedAddressDataHash, powNonce: BigInt(powNonce) }) === false) { throw new Error("Provided powNonce is not valid") }
 
