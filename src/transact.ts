@@ -1,12 +1,15 @@
-import { Address, Hex, PublicClient, toBytes, toHex, WalletClient, zeroAddress } from "viem";
-import { WormholeTokenTest } from "../test/2inRemint.test.js";
-import { NotOwnedBurnAccount, PreSyncedTree, ProofInputs1n, ProofInputs4n, PublicProofInputs, SignatureInputs, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.js";
-import { generateProof, getSpendableBalanceProof, getPubInputs, getPrivInputs, BurnAccountProof, padArray } from "./proving.js";
-import { ProofData, UltraHonkBackend } from "@aztec/bb.js";
-import { getSyncedMerkleTree, getDeploymentBlock, syncMultipleBurnAccounts, encryptTotalSpend } from "./syncing.js";
-import { getBurnAddress, getBurnAddressSafe, hashBlindedAddressData, hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, padWithRandomHex, signPrivateTransfer } from "./hashing.js";
-import { PrivateWallet } from "./PrivateWallet.js";
-import { CIRCUIT_SIZES, EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, LARGEST_CIRCUIT_SIZE, MAX_TREE_DEPTH, POW_DIFFICULTY } from "./constants.js";
+import type { Address, Hex, PublicClient, WalletClient } from "viem";
+import { toHex } from "viem";
+import type { WormholeTokenTest } from "../test/2inRemint.test.ts";
+import type { NotOwnedBurnAccount, PreSyncedTree, ProofInputs1n, ProofInputs4n, PublicProofInputs, SignatureInputs, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts";
+import { generateProof, getSpendableBalanceProof, getPubInputs, getPrivInputs, padArray } from "./proving.ts";
+import type { BurnAccountProof } from "./proving.ts";
+import type { ProofData } from "@aztec/bb.js";
+import { UltraHonkBackend } from "@aztec/bb.js";
+import { getSyncedMerkleTree, getDeploymentBlock, syncMultipleBurnAccounts, encryptTotalSpend } from "./syncing.ts";
+import { getBurnAddress, getBurnAddressSafe, hashBlindedAddressData, hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, padWithRandomHex, signPrivateTransfer } from "./hashing.ts";
+import { PrivateWallet } from "./PrivateWallet.ts";
+import { CIRCUIT_SIZES, EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, LARGEST_CIRCUIT_SIZE, MAX_TREE_DEPTH, POW_DIFFICULTY } from "./constants.ts";
 
 
 export function getHashedInputs(

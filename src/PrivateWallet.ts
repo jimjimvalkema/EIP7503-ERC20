@@ -1,11 +1,13 @@
 // PrivateWallet is a wrapper that exposes some ov viems WalletClient functions and requires them to only ever use one ethAccount
 
-import { Address, hashMessage, Hex, hexToBytes, toBytes, toHex, WalletClient } from "viem";
-import { BurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.js"
-import { extractPubKeyFromSig, findPoWNonce, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.js";
-import { POW_DIFFICULTY, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
+import type { Address, Hex, WalletClient } from "viem";
+import {hashMessage, hexToBytes, toBytes, toHex } from "viem";
+import type { BurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
+import { extractPubKeyFromSig, findPoWNonce, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.ts";
+import { POW_DIFFICULTY, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { syncBurnAccount } from "./syncing.js";
+import { findPoWNonceAsync } from "./hashingAsync.ts";
+//import { findPoWNonceAsync } from "./hashingAsync.js";
 
 /**
  * A class that wraps around a viem WalletClient to enable creation of privateBurnAccounts that all have the same pubKey
@@ -149,7 +151,8 @@ export class PrivateWallet {
 
         // TODO derive blindingPow
         if (powNonce === undefined) {
-            powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
+            //powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
+            powNonce = await findPoWNonceAsync({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty }) as bigint
         }
         if (verifyPowNonce({ blindedAddressDataHash, powNonce: BigInt(powNonce) }) === false) { throw new Error("Provided powNonce is not valid") }
 

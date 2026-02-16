@@ -1,12 +1,10 @@
-import { Address, GetContractReturnType, hashMessage, Hex, PublicClient, toHex, WalletClient } from "viem";
-import { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/artifacts.js";
-import { SignMessageReturnType } from "viem/accounts";
-import { InputMap } from "@noir-lang/noir_js";
-import { ProofData } from "@aztec/bb.js";
+import  { hashMessage, toHex } from "viem";
+import type  { Address, GetContractReturnType, Hex, PublicClient, WalletClient } from "viem";
+import type { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/artifacts.js";
+import type { SignMessageReturnType } from "viem/accounts";
+import type { InputMap } from "@noir-lang/noir_js";
+import type { ProofData } from "@aztec/bb.js";
 import { LeanIMT } from "@zk-kit/lean-imt";
-import { VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
-import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { extractPubKeyFromSig, getBurnAddress, getViewingKey, verifyPowNonce } from "./hashing.js";
 
 export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Required<{ public?: PublicClient; wallet?: WalletClient; }>>
 

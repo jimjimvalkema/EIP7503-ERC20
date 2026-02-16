@@ -5,16 +5,16 @@ import { network } from "hardhat";
 
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
-import { padHex, Hash, getContract, parseEventLogs, Hex } from "viem";
 
 import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer1InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName, PrivateTransfer100InVerifierContractName } from "../src/constants.js";
 import { getSyncedMerkleTree } from "../src/syncing.js";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { getBackend } from "../src/proving.js";
-import { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
+import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { proofAndSelfRelay, safeBurn, superSafeBurn } from "../src/transact.js";
-import { RelayerInputs } from "../src/types.js";
+import type { RelayerInputs } from "../src/types.js";
 import { PrivateWallet } from "../src/PrivateWallet.js";
+import { getContract, padHex, parseEventLogs, type Hash, type Hex } from "viem";
 
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
 
@@ -178,8 +178,9 @@ describe("Token", async function () {
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
             const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
-            const aliceBurnAccount1 = await alicePrivate.createNewBurnAccount()
-            const aliceBurnAccount2 = await alicePrivate.createNewBurnAccount()
+            // PoW nonce hashing is with workers so can be done in parallel!
+            const [aliceBurnAccount1, aliceBurnAccount2] = await Promise.all([alicePrivate.createNewBurnAccount(), alicePrivate.createNewBurnAccount()])
+
 
             const claimableBurnAddress = [aliceBurnAccount1.burnAddress, aliceBurnAccount2.burnAddress];
             const reMintRecipient = bob.account.address

@@ -1,18 +1,23 @@
-import { hexToBytes, Hex, Address, PublicClient, toHex, hexToNumber } from "viem"
-import { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs } from "./types.js"
-import { CIRCUIT_SIZES, EMPTY_UNFORMATTED_MERKLE_PROOF, MAX_TREE_DEPTH } from "./constants.js"
-import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer } from "./hashing.js"
-import { LeanIMT, LeanIMTMerkleProof } from "@zk-kit/lean-imt"
-import { WormholeTokenTest } from "../test/2inRemint.test.js"
-import { getSyncedMerkleTree } from "./syncing.js"
-import { ProofData, UltraHonkBackend } from '@aztec/bb.js';
-import { CompiledCircuit, InputMap, Noir } from "@noir-lang/noir_js"
-import privateTransfer2InCircuit from '../circuits/privateTransfer2In/target/privateTransfer2In.json';
-import privateTransfer41InCircuit from '../circuits/privateTransfer100In/target/privateTransfer100In.json';
+import { hexToBytes, toHex, hexToNumber } from "viem"
+import type { Hex, Address, PublicClient, TypedDataDomain} from "viem"
+import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs } from "./types.js"
+import { CIRCUIT_SIZES, EMPTY_UNFORMATTED_MERKLE_PROOF, MAX_TREE_DEPTH } from "./constants.ts"
+import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer } from "./hashing.ts"
+import type {LeanIMTMerkleProof} from  "@zk-kit/lean-imt"
+import { LeanIMT } from "@zk-kit/lean-imt"
+import type { WormholeTokenTest } from "../test/2inRemint.test.ts"
+import { getSyncedMerkleTree } from "./syncing.ts"
+import type { ProofData } from '@aztec/bb.js';
+import { UltraHonkBackend } from '@aztec/bb.js';
+import type { CompiledCircuit, InputMap } from "@noir-lang/noir_js"
+import { Noir } from "@noir-lang/noir_js"
+import privateTransfer2InCircuit from '../circuits/privateTransfer2In/target/privateTransfer2In.json' with { type: 'json' };
+import privateTransfer41InCircuit from '../circuits/privateTransfer100In/target/privateTransfer100In.json'  with { type: 'json' };
 
 import { Fr } from "@aztec/aztec.js"
-import { PrivateWallet } from "./PrivateWallet.js"
-import { getCircuitSize } from "./transact.js"
+import { PrivateWallet } from "./PrivateWallet.ts"
+import { getCircuitSize } from "./transact.ts"
+import { assert } from "node:console"
 
 export function padArray<T>({ arr, size, value, dir }: { arr: T[], size: number, value?: T, dir?: "left" | "right" }): T[] {
     if (arr.length > size) { throw new Array(`array is larger then target size. Array len: ${arr.length}, target len: ${size}`) }

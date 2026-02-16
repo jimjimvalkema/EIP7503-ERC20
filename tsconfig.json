@@ -4,10 +4,12 @@
     "module": "node16",
     "target": "es2022",
     "strict": true,
-    "resolveJsonModule":true,
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "node16",
     "outDir": "dist",
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true
   }
 }

@@ -1,11 +1,13 @@
-import { Hex, Signature, recoverPublicKey, Account, hashMessage, hexToBigInt, hexToBytes, Hash, WalletClient, Address, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex, hashTypedData } from "viem";
+import type { Hex, Signature, Account, Hash, WalletClient, Address,} from "viem";
+import { recoverPublicKey, hashMessage, hexToBigInt, hexToBytes, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex, hashTypedData } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.js";
-import { FeeData, SignatureData, SignatureInputs, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.js";
-import { PrivateWallet } from "./PrivateWallet.js"
-import { padArray } from "./proving.js";
-import { encryptTotalSpend } from "./syncing.js";
+import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
+import type { FeeData, SignatureData, SignatureInputs, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.ts";
+import { PrivateWallet } from "./PrivateWallet.ts"
+import { padArray } from "./proving.ts";
+import { encryptTotalSpend } from "./syncing.ts";
 import { Fr } from "@aztec/aztec.js";
+
 export function verifyPowNonce({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty?: bigint }) {
     const powHash = hashPow({ blindedAddressDataHash, powNonce });
     return powHash < difficulty
@@ -48,15 +50,17 @@ export function hashAddress({ blindedAddressDataHash, powNonce }: { blindedAddre
     return addressHash
 }
 
-export function getBurnAddressSafe({ blindedAddressDataHash, powNonce, difficulty=POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty:bigint }) {
+export function getBurnAddressSafe({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty: bigint }) {
     const addressHash = hashAddress({ blindedAddressDataHash, powNonce })
     const powHash = poseidon2Hash([powNonce, addressHash]);
-    if(powHash < difficulty === false) {throw new Error(`
+    if (powHash < difficulty === false) {
+        throw new Error(`
 Invalid powNonce. 
-powNonce:${toHex(powNonce,{size:32})} 
-blindedAddressDataHash: ${toHex(blindedAddressDataHash,{size:32})}
-results in a PoW hash of: ${toHex(powHash,{size:32})}
-    `)}
+powNonce:${toHex(powNonce, { size: 32 })} 
+blindedAddressDataHash: ${toHex(blindedAddressDataHash, { size: 32 })}
+results in a PoW hash of: ${toHex(powHash, { size: 32 })}
+    `)
+    }
     return getAddress("0x" + toHex(addressHash, { size: 32 }).slice(2 + 24)) //slice off bytes and make it the address type in viem
 }
 
@@ -123,7 +127,7 @@ export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty
     let powHash: bigint = hashPow({ blindedAddressDataHash, powNonce });
     let hashingRounds = 0
     const start = Date.now()
-    console.log(`doing PoW. difficulty:${toHex(difficulty, {size:32})}`)
+    console.log(`doing PoW. difficulty:${toHex(difficulty, { size: 32 })}`)
     do {
         if (powHash < difficulty) {
             break;
@@ -133,19 +137,19 @@ export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty
         hashingRounds += 1
     } while (powHash >= difficulty)
     console.log(`
-found powNonce:${toHex(powNonce,{size:32})} 
-with blindedAddressDataHash:${toHex(blindedAddressDataHash,{size:32})}, 
+found powNonce:${toHex(powNonce, { size: 32 })} 
+with blindedAddressDataHash:${toHex(blindedAddressDataHash, { size: 32 })}, 
 did ${hashingRounds} hashing rounds. 
 It took ${Date.now() - start}ms
     `)
     return powNonce
 }
 
-export async function signPrivateTransfer({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: PrivateWallet, signatureInputs:SignatureInputs, chainId:number, tokenAddress:Address }):
+export async function signPrivateTransfer({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: PrivateWallet, signatureInputs: SignatureInputs, chainId: number, tokenAddress: Address }):
     Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }> {
     chainId ??= await privateWallet.viemWallet.getChainId()
-    
-        // const sigHash = hashSignatureInputs(signatureInputs)
+
+    // const sigHash = hashSignatureInputs(signatureInputs)
     // //console.log({sigHash})
     // // blind signing yay!
     // // const signature = await privateWallet.viem.wallet.request({
@@ -169,19 +173,19 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
     };
 
     // The digest — same hash the contract produces via _hashTypedDataV4
-    const domain = getPrivateReMintDomain(chainId,tokenAddress)
+    const domain = getPrivateReMintDomain(chainId, tokenAddress)
     const hash = hashTypedData({
-        domain:domain,
-        types:PRIVATE_RE_MINT_712_TYPES,
+        domain: domain,
+        types: PRIVATE_RE_MINT_712_TYPES,
         primaryType: "privateReMint",
         message,
     });
 
     // The signature
     const signature = await privateWallet.viemWallet.signTypedData({
-        account:privateWallet.privateData.ethAccount,
-        domain:domain,
-        types:PRIVATE_RE_MINT_712_TYPES,
+        account: privateWallet.privateData.ethAccount,
+        domain: domain,
+        types: PRIVATE_RE_MINT_712_TYPES,
         primaryType: "privateReMint",
         message,
     });

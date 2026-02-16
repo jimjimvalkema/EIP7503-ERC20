@@ -1,8 +1,6 @@
-import { Address, getAddress, Hex, padHex, toHex } from "viem";
-import { MerkleData, RelayerInputs, u1AsHexArr, u32AsHex } from "./types.js";
-import feeEstimatorRelayerData from "./feeEstimatorRelayerData.json"
-import { formatMerkleProof } from "./proving.js";
-import { LeanIMTMerkleProof } from "@zk-kit/lean-imt";
+import type { Address } from "viem";
+import { getAddress, padHex } from "viem"
+import type { LeanIMTMerkleProof } from "@zk-kit/lean-imt";
 //import { convertRelayerInputsToHex } from "./transact.js";
 
 export const WormholeTokenContractName = "WormholeToken"
@@ -42,9 +40,6 @@ export const EMPTY_UNFORMATTED_MERKLE_PROOF: LeanIMTMerkleProof<bigint> = {
     index: 0,
     siblings: [], 
 }
-
-
-export const EMPTY_MERKLE_PROOF: MerkleData = formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF,MAX_TREE_DEPTH)
 
 export const zeroAddress = getAddress(padHex("0x00", { size: 20 }))
 

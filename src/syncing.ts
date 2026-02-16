@@ -1,12 +1,14 @@
 import { queryEventInChunks } from "@warptoad/gigabridge-js/viem-utils"
-import { LeanIMTHashFunction, LeanIMT } from "@zk-kit/lean-imt"
-import { Abi, AbiEvent, Address, bytesToHex, concatHex, Hex, hexToBytes, presignMessagePrefix, PublicClient, sliceHex, toBytes, toHex } from "viem"
-import { WormholeTokenTest } from "../test/2inRemint.test.js"
-import { ENCRYPTED_TOTAL_SPENT_PADDING, WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.js"
-import { BurnAccount, PreSyncedTree, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.js"
+import type { LeanIMTHashFunction } from "@zk-kit/lean-imt"
+import {LeanIMT } from "@zk-kit/lean-imt"
+import type { Abi, AbiEvent, Address, Hex, PublicClient} from "viem"
+import {bytesToHex, concatHex, hexToBytes, presignMessagePrefix, sliceHex, toBytes, toHex } from "viem"
+import type { WormholeTokenTest } from "../test/2inRemint.test.ts"
+import { ENCRYPTED_TOTAL_SPENT_PADDING, WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.ts"
+import type { BurnAccount, PreSyncedTree, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts"
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { hashNullifier } from "./hashing.js"
-import { PrivateWallet } from "./PrivateWallet.js"
+import { hashNullifier } from "./hashing.ts"
+import { PrivateWallet } from "./PrivateWallet.ts"
 
 export function getDeploymentBlock(chainId: number) {
     if (Number(chainId) in WORMHOLE_TOKEN_DEPLOYMENT_BLOCK) {
