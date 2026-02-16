@@ -12,7 +12,7 @@ import { getSyncedMerkleTree } from "../src/syncing.js";
 import { getBackend } from "../src/proving.js";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { proofAndSelfRelay, safeBurn, superSafeBurn } from "../src/transact.js";
-import type { BurnAccount, RelayerInputs } from "../src/types.js";
+import type { BurnAccount, RelayerInputs, UnsyncedBurnAccount } from "../src/types.js";
 import { PrivateWallet } from "../src/PrivateWallet.js";
 import { getContract, padHex, parseEventLogs, type Hash, type Hex } from "viem";
 
@@ -214,7 +214,7 @@ describe("Token", async function () {
             const amountBurnAddresses = 100
 
             //TODO this does not work. the counter does not increase and it just generates the same address. PrivateWallet should have a generate bulk burn accounts method
-            const burnAccounts:BurnAccount[] = await Promise.all(new Array(amountBurnAddresses).fill(alicePrivate.createNewBurnAccount({async:true})))
+            const burnAccounts:UnsyncedBurnAccount[] = await alicePrivate.createBurnAccounts(amountBurnAddresses,{async:true})
             console.log({burnAccounts, burnAccountsWallet:alicePrivate.privateData.burnAccounts})
             const claimableBurnAddress = burnAccounts.map((b:BurnAccount)=>b.burnAddress)
 

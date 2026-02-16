@@ -1,8 +1,8 @@
 // PrivateWallet is a wrapper that exposes some ov viems WalletClient functions and requires them to only ever use one ethAccount
 
 import type { Address, Hex, WalletClient } from "viem";
-import {hashMessage, hexToBytes, toBytes, toHex } from "viem";
-import type { BurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
+import { hashMessage, hexToBytes, toBytes, toHex } from "viem";
+import type { BurnAccount, noPowBurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
 import { extractPubKeyFromSig, findPoWNonce, findPoWNonceAsync, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.ts";
 import { POW_DIFFICULTY, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
@@ -23,7 +23,7 @@ export class PrivateWallet {
     readonly privateData: PrivateWalletData;
     readonly powDifficulty: bigint;
     readonly acceptedChainIds: bigint[];
-    readonly defaultChainId:bigint;
+    readonly defaultChainId: bigint;
 
     //deterministic viewingKey Root. The same ethAccount can always recover to this key. User only needs to know their seed phrase to recover funds
     private detViewKeyRoot: Hex | undefined;
@@ -36,8 +36,8 @@ export class PrivateWallet {
      */
     constructor(
         viemWallet: WalletClient,
-        { privateWalletData, viewKeySigMessage = VIEWING_KEY_SIG_MESSAGE, powDifficulty = POW_DIFFICULTY,acceptedChainIds=[1n], defaultChainId}:
-            { privateWalletData?: PrivateWalletData, viewKeySigMessage?: string, powDifficulty?: bigint,acceptedChainIds?:bigint[], defaultChainId?:bigint }={}
+        { privateWalletData, viewKeySigMessage = VIEWING_KEY_SIG_MESSAGE, powDifficulty = POW_DIFFICULTY, acceptedChainIds = [1n], defaultChainId }:
+            { privateWalletData?: PrivateWalletData, viewKeySigMessage?: string, powDifficulty?: bigint, acceptedChainIds?: bigint[], defaultChainId?: bigint } = {}
     ) {
         this.viemWallet = viemWallet
         this.powDifficulty = powDifficulty
@@ -45,14 +45,14 @@ export class PrivateWallet {
 
         // only one accepted chainId? thats default!
         // more? 1n is default, if it is accepted!
-        if(defaultChainId === undefined) {
+        if (defaultChainId === undefined) {
             if (this.acceptedChainIds.length === 1) {
                 this.defaultChainId = this.acceptedChainIds[0]
             } else {
-                if ( this.acceptedChainIds.includes(1n)){
+                if (this.acceptedChainIds.includes(1n)) {
                     this.defaultChainId = 1n
                 } else {
-                    throw new Error(`defaultChainId needs to be set. example: new PrivateWallet(viemWallet,{defaultChainId:${Number(acceptedChainIds[0])},acceptedChainIds:[${acceptedChainIds.map((v=>Number(v)+"n")).toString()}]})`)
+                    throw new Error(`defaultChainId needs to be set. example: new PrivateWallet(viemWallet,{defaultChainId:${Number(acceptedChainIds[0])},acceptedChainIds:[${acceptedChainIds.map((v => Number(v) + "n")).toString()}]})`)
                 }
             }
         } else {
@@ -158,7 +158,7 @@ export class PrivateWallet {
      * @throws {Error} If `chainId` is not in `this.acceptedChainIds`.
      * @throws {Error} If a provided `powNonce` fails verification.
      */
-    async createNewBurnAccount({ powNonce, viewingKey, chainId, difficulty = this.powDifficulty, async=false }: { async?: boolean,chainId?: bigint, powNonce?: bigint, viewingKey?: bigint, difficulty?: bigint }={}) {
+    async createNewBurnAccount({ powNonce, viewingKey, chainId, difficulty = this.powDifficulty, async = false }: { async?: boolean, chainId?: bigint, powNonce?: bigint, viewingKey?: bigint, difficulty?: bigint } = {}) {
         // assumes viewingKey is not deterministically derived, at least not the usual way. If viewingKey param is set
         // @TODO @warptoad chainId is automatically set to mainnet, for warptoad 
         chainId ??= this.defaultChainId
@@ -176,7 +176,7 @@ export class PrivateWallet {
 
         // TODO derive blindingPow
         if (powNonce === undefined) {
-            if(async) {
+            if (async) {
                 powNonce = await findPoWNonceAsync({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty }) as bigint
             } else {
                 powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
@@ -186,17 +186,76 @@ export class PrivateWallet {
 
         const burnAddress = getBurnAddress({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(powNonce) })
         const burnAccount: UnsyncedBurnAccount = {
-            viewingKey: toHex(viewingKey as bigint, {size:32}),
+            viewingKey: toHex(viewingKey as bigint, { size: 32 }),
             isDeterministicViewKey: isDeterministicViewKey,
-            powNonce: toHex(powNonce, {size:32}),
+            powNonce: toHex(powNonce, { size: 32 }),
             burnAddress: burnAddress,
             chainId: toHex(chainId),
-            blindedAddressDataHash: toHex(blindedAddressDataHash, {size:32}),
+            blindedAddressDataHash: toHex(blindedAddressDataHash, { size: 32 }),
             spendingPubKeyX: spendingPubKeyX
         }
 
         this.privateData.burnAccounts.push(burnAccount)
 
         return burnAccount
+    }
+
+    /**
+     * Creates a multiple burn accounts in bulk deterministically finds a pow nonce,
+     * and deriving the corresponding burn address.
+     * 
+     * @notice finds PoW nonces in parallel when async:true
+     *
+     * @param options - Optional configuration object.
+     * @param options.chainId - Target chain ID. Defaults to `this.defaultChainId`.
+     *   Must be in `this.acceptedChainIds`.
+     * @param options.difficulty - PoW difficulty override. Defaults to
+     *   `this.powDifficulty`.
+     * @param options.async - If `true`, uses it's own webworker thread. This helps not freezing the ui. Defaults to
+     *   `false`.
+     *
+     * @returns The newly created {@link UnsyncedBurnAccount}, which is also
+     *   appended to `this.privateData.burnAccounts`.
+     *
+     * @throws {Error} If `chainId` is not in `this.acceptedChainIds`.
+     * @throws {Error} If a provided `powNonce` fails verification.
+     * 
+     * @TODO it's probably inefficient to spawn a worker for each burn account if it exceeds available threads, but i assume most people don't need that many burn accounts at once
+     */
+    async createBurnAccounts(amountOfBurnAccounts: number, { chainId, difficulty = this.powDifficulty, async = false }: { async?: boolean, chainId?: bigint, difficulty?: bigint } = {}) {
+        chainId ??= this.defaultChainId
+        const burnAccountsPromises = new Array(amountOfBurnAccounts).fill(0).map((v,i)=>this.createBurnAccountFromViewKeyIndex({ viewingKeyIndex:this.detViewKeyCounter+i, chainId:chainId, difficulty:difficulty, async:async}))
+        const burnAccounts = await Promise.all(burnAccountsPromises)
+        this.detViewKeyCounter += amountOfBurnAccounts
+        this.privateData.burnAccounts = [...this.privateData.burnAccounts, ...burnAccounts]
+        return burnAccounts
+    }
+
+    async createBurnAccountFromViewKeyIndex({ viewingKeyIndex, chainId, difficulty = this.powDifficulty, async = false }: { viewingKeyIndex:number, async?: boolean, chainId: bigint, viewingKey?: bigint, difficulty?: bigint }) {
+        chainId ??= this.defaultChainId
+        const { x: spendingPubKeyX } = await this.getPubKey()
+        const viewingKey = poseidon2Hash([
+                BigInt(await this.getDeterministicViewKeyRoot()),
+                BigInt(viewingKeyIndex)
+            ])
+        const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX, viewingKey: viewingKey as bigint, chainId: chainId })
+        let powNonce:bigint;
+        if (async) {
+            powNonce = await findPoWNonceAsync({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty }) as bigint
+        } else {
+            powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
+        }
+        const burnAddress = getBurnAddress({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(powNonce) })
+        const burnAccount: UnsyncedBurnAccount = {
+            viewingKey: toHex(viewingKey as bigint, { size: 32 }),
+            isDeterministicViewKey: true,
+            powNonce: toHex(powNonce, { size: 32 }),
+            burnAddress: burnAddress,
+            chainId: toHex(chainId),
+            blindedAddressDataHash: toHex(blindedAddressDataHash, { size: 32 }),
+            spendingPubKeyX: spendingPubKeyX
+        }
+        return burnAccount
+
     }
 }

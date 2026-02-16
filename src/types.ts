@@ -86,6 +86,12 @@ export interface ProofInputs4n extends ProofInputs {
 }
 
 
+export interface noPowBurnAccount {
+    viewingKey:bigint,
+    spendingPubKeyX:Hex,
+    blindedAddressDataHash:bigint 
+}
+
 export interface NotOwnedBurnAccount {
     readonly powNonce: Hex;
     readonly burnAddress: Address;
