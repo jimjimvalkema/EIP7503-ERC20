@@ -157,9 +157,9 @@ describe("Token", async function () {
             })
 
             // first one is always real. The rest should be the same size as the real one
-            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.totalSpentEncrypted.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
+            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.encryptedTotalSpends.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
             for (const nullifiedEvent of nullifiedEvents) {
-                const encryptedBlobByteLen = (nullifiedEvent.args.totalSpentEncrypted.length - 2) / 2
+                const encryptedBlobByteLen = (nullifiedEvent.args.encryptedTotalSpends.length - 2) / 2
                 assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
                 assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
                 assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")
@@ -227,9 +227,9 @@ describe("Token", async function () {
             })
 
             // first one is always real. The rest should be the same size as the real one
-            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.totalSpentEncrypted.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
+            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.encryptedTotalSpends.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
             for (const nullifiedEvent of nullifiedEvents) {
-                const encryptedBlobByteLen = (nullifiedEvent.args.totalSpentEncrypted.length - 2) / 2
+                const encryptedBlobByteLen = (nullifiedEvent.args.encryptedTotalSpends.length - 2) / 2
                 assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
                 assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
                 assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")

@@ -58,9 +58,32 @@ export function getPrivateReMintDomain(chainId:number, verifyingContract:Address
 
 export const PRIVATE_RE_MINT_712_TYPES = {
     privateReMint: [
-        { name: "_recipientAddress", type: "address" },
+        { name: "_recipient", type: "address" },
         { name: "_amount", type: "uint256" },
         { name: "_callData", type: "bytes" },
-        { name: "_totalSpentEncrypted", type: "bytes[]" },
+        { name: "_callCanFail", type: "bool" },
+        { name: "_callValue", type: "uint256" },
+        { name: "_encryptedTotalSpends", type: "bytes[]" },
+    ],
+} as const;
+
+export const PRIVATE_RE_MINT_RELAYER_712_TYPES = {
+    privateReMintRelayer: [
+        { name: "_recipient", type: "address" },
+        { name: "_amount", type: "uint256" },
+        { name: "_callData", type: "bytes" },
+        { name: "_callCanFail", type: "bool" },
+        { name: "_callValue", type: "uint256" },
+        { name: "_encryptedTotalSpends", type: "bytes[]" },
+        { name: "_feeData", type: "FeeData" },
+    ],
+    FeeData: [
+        { name: "ethPriceToken", type: "uint256" },
+        { name: "maxFee", type: "uint256" },
+        { name: "amountForRecipient", type: "uint256" },
+        { name: "estimatedGasCost", type: "uint256" },
+        { name: "estimatedPriorityFee", type: "uint256" },
+        { name: "refundAddress", type: "address" },
+        { name: "relayerAddress", type: "address" },
     ],
 } as const;

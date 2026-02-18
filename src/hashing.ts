@@ -141,7 +141,7 @@ export function padWithRandomHex({ arr, len, hexSize, dir }: { arr: Hex[], len: 
 //         return keccak256(
 //             encodePacked(
 //                 ['address', 'uint256', 'bytes','bytes','bytes'],
-//                 [signatureInputs.recipientAddress, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1]]
+//                 [signatureInputs.recipient, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1]]
 //             ))
 
 //     } else if (signatureInputs.encryptedTotalSpends.length <= 4) {
@@ -149,7 +149,7 @@ export function padWithRandomHex({ arr, len, hexSize, dir }: { arr: Hex[], len: 
 //         return keccak256(
 //             encodePacked(
 //                 ['address', 'uint256', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes'],
-//                 [signatureInputs.recipientAddress, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1], signatureInputs.encryptedTotalSpends[2], signatureInputs.encryptedTotalSpends[3]]
+//                 [signatureInputs.recipient, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1], signatureInputs.encryptedTotalSpends[2], signatureInputs.encryptedTotalSpends[3]]
 //             ))
 //     }
 //     else {
@@ -201,10 +201,12 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
     // // const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
     // // const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
     const message = {
-        _recipientAddress: signatureInputs.recipientAddress,
-        _amount: signatureInputs.amount,
+        _recipient: signatureInputs.recipient,
+        _amount: signatureInputs.amountToReMint,
         _callData: signatureInputs.callData,
-        _totalSpentEncrypted: signatureInputs.encryptedTotalSpends,
+        _callCanFail: signatureInputs.callCanFail,
+        _callValue: signatureInputs.callValue,  // <-- add this
+        _encryptedTotalSpends: signatureInputs.encryptedTotalSpends,
     };
 
     // The digest — same hash the contract produces via _hashTypedDataV4
@@ -237,6 +239,8 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
     }
 
 }
+
+
 function hexToU8sAsHexArr(hex: Hex, len: number): u8AsHex[] {
     const unPadded = hexToByteArray(hex)
     const padded = padArray({ arr: unPadded, size: len, value: "0x00", dir: "left" })

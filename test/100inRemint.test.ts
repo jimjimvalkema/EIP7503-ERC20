@@ -61,149 +61,149 @@ describe("Token", async function () {
     })
 
     describe("Token", async function () {
-        // it("reMint 3x from 1 burn account", async function () {
-        //     const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
-        //     const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
-        //     await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
+        it("reMint 3x from 1 burn account", async function () {
+            const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
+            const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
+            await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
-        //     const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
-        //     const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
-        //     const amountToBurn = 1000n * 10n ** 18n;
-        //     await superSafeBurn(aliceBurnAccount, wormholeTokenAlice, amountToBurn)
+            const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
+            const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
+            const amountToBurn = 1000n * 10n ** 18n;
+            await superSafeBurn(aliceBurnAccount, wormholeTokenAlice, amountToBurn)
 
-        //     const claimableBurnAddress = [aliceBurnAccount.burnAddress];
-        //     const reMintRecipient = bob.account.address
+            const claimableBurnAddress = [aliceBurnAccount.burnAddress];
+            const reMintRecipient = bob.account.address
 
-        //     // reMint 3 times since the 1st tx needs no commitment inclusion proof, the 2nd one the total spend balance read only contains information of one spend
-        //     const reMintAmounts = [69n, 69000n, 420n * 10n ** 18n]
-        //     let expectedRecipientBalance = 0n
-        //     let reMintTxs: Hex[] = []
-        //     for (const reMintAmount of reMintAmounts) {
-        //         const reMintTx = await proofAndSelfRelay({
-        //             amount: reMintAmount,
-        //             recipient: reMintRecipient,
-        //             //callData, 
-        //             privateWallet: alicePrivate,
-        //             burnAddresses: claimableBurnAddress,
-        //             wormholeToken: wormholeToken,
-        //             archiveClient: publicClient,
-        //             //fullNodeClient, 
-        //             //preSyncedTree, 
-        //             backend: circuitBackend,
-        //             //deploymentBlock,
-        //             //blocksPerGetLogsReq
-        //             circuitSize:CIRCUIT_SIZE // we only use one burn account but we can pretend we did 4. No-one wil know hehe
-        //         })
-        //         expectedRecipientBalance += reMintAmount
-        //         reMintTxs.push(reMintTx)
-        //         const balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
+            // reMint 3 times since the 1st tx needs no commitment inclusion proof, the 2nd one the total spend balance read only contains information of one spend
+            const reMintAmounts = [69n, 69000n, 420n * 10n ** 18n]
+            let expectedRecipientBalance = 0n
+            let reMintTxs: Hex[] = []
+            for (const reMintAmount of reMintAmounts) {
+                const reMintTx = await proofAndSelfRelay({
+                    amount: reMintAmount,
+                    recipient: reMintRecipient,
+                    //callData, 
+                    privateWallet: alicePrivate,
+                    burnAddresses: claimableBurnAddress,
+                    wormholeToken: wormholeToken,
+                    archiveClient: publicClient,
+                    //fullNodeClient, 
+                    //preSyncedTree, 
+                    backend: circuitBackend,
+                    //deploymentBlock,
+                    //blocksPerGetLogsReq
+                    circuitSize:CIRCUIT_SIZE // we only use one burn account but we can pretend we did 4. No-one wil know hehe
+                })
+                expectedRecipientBalance += reMintAmount
+                reMintTxs.push(reMintTx)
+                const balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
 
-        //         assert.equal(balanceBobPublic, expectedRecipientBalance, "bob didn't receive the expected amount of re-minted tokens")
-        //     }
+                assert.equal(balanceBobPublic, expectedRecipientBalance, "bob didn't receive the expected amount of re-minted tokens")
+            }
 
-        //     const receipts = await Promise.all(
-        //         reMintTxs.map((tx) =>
-        //             publicClient.getTransactionReceipt({ hash: tx })
-        //         )
-        //     )
-        //     const logs = receipts.flatMap((r) => r.logs)
-        //     const gasCosts = receipts.flatMap((r) => r.gasUsed)
-        //     console.log({gasCosts})
-        //     const nullifiedEvents = parseEventLogs({
-        //         abi: wormholeToken.abi,
-        //         logs: logs,
-        //         eventName: "Nullified"
-        //     })
+            const receipts = await Promise.all(
+                reMintTxs.map((tx) =>
+                    publicClient.getTransactionReceipt({ hash: tx })
+                )
+            )
+            const logs = receipts.flatMap((r) => r.logs)
+            const gasCosts = receipts.flatMap((r) => r.gasUsed)
+            console.log({gasCosts})
+            const nullifiedEvents = parseEventLogs({
+                abi: wormholeToken.abi,
+                logs: logs,
+                eventName: "Nullified"
+            })
 
-        //     // first one is always real. The rest should be the same size as the real one
-        //     const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.totalSpentEncrypted.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
-        //     for (const nullifiedEvent of nullifiedEvents) {
-        //         const encryptedBlobByteLen = (nullifiedEvent.args.totalSpentEncrypted.length - 2) / 2
-        //         assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
-        //         assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
-        //         assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")
-        //     }
+            // first one is always real. The rest should be the same size as the real one
+            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.encryptedTotalSpends.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
+            for (const nullifiedEvent of nullifiedEvents) {
+                const encryptedBlobByteLen = (nullifiedEvent.args.encryptedTotalSpends.length - 2) / 2
+                assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
+                assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
+                assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")
+            }
 
-        //     // finally check if enough was burned
-        //     const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
-        //     const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([claimableBurnAddress[0]])
-        //     assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
-        //     assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
-        // })
+            // finally check if enough was burned
+            const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
+            const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([claimableBurnAddress[0]])
+            assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
+            assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
+        })
 
-        // it("reMint 3x from 3 burn accounts", async function () {
-        //     const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
-        //     const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
-        //     await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
+        it("reMint 3x from 3 burn accounts", async function () {
+            const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
+            const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
+            await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
-        //     const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
-        //     const aliceBurnAccount1 = await alicePrivate.createNewBurnAccount()
-        //     const aliceBurnAccount2 = await alicePrivate.createNewBurnAccount()
-        //     const aliceBurnAccount3 = await alicePrivate.createNewBurnAccount()
+            const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
+            const aliceBurnAccount1 = await alicePrivate.createNewBurnAccount()
+            const aliceBurnAccount2 = await alicePrivate.createNewBurnAccount()
+            const aliceBurnAccount3 = await alicePrivate.createNewBurnAccount()
 
-        //     const claimableBurnAddress = [aliceBurnAccount1.burnAddress, aliceBurnAccount2.burnAddress, aliceBurnAccount3.burnAddress];
-        //     const reMintRecipient = bob.account.address
+            const claimableBurnAddress = [aliceBurnAccount1.burnAddress, aliceBurnAccount2.burnAddress, aliceBurnAccount3.burnAddress];
+            const reMintRecipient = bob.account.address
 
-        //     // reMint 3 times since the 1st tx needs no commitment inclusion proof, the 2nd one the total spend balance read only contains information of one spend
-        //     const reMintAmounts = [69n, 69000n, 420n * 10n ** 18n]
-        //     let expectedRecipientBalance = 0n
-        //     let reMintTxs: Hex[] = []
-        //     for (const reMintAmount of reMintAmounts) {
-        //         await superSafeBurn(aliceBurnAccount1, wormholeTokenAlice, reMintAmount / 3n + 1n)
-        //         await superSafeBurn(aliceBurnAccount2, wormholeTokenAlice, reMintAmount / 3n + 1n)
-        //         await superSafeBurn(aliceBurnAccount3, wormholeTokenAlice, reMintAmount / 3n + 1n)
+            // reMint 3 times since the 1st tx needs no commitment inclusion proof, the 2nd one the total spend balance read only contains information of one spend
+            const reMintAmounts = [69n, 69000n, 420n * 10n ** 18n]
+            let expectedRecipientBalance = 0n
+            let reMintTxs: Hex[] = []
+            for (const reMintAmount of reMintAmounts) {
+                await superSafeBurn(aliceBurnAccount1, wormholeTokenAlice, reMintAmount / 3n + 1n)
+                await superSafeBurn(aliceBurnAccount2, wormholeTokenAlice, reMintAmount / 3n + 1n)
+                await superSafeBurn(aliceBurnAccount3, wormholeTokenAlice, reMintAmount / 3n + 1n)
 
-        //         const reMintTx = await proofAndSelfRelay({
-        //             amount: reMintAmount,
-        //             recipient: reMintRecipient,
-        //             //callData, 
-        //             privateWallet: alicePrivate,
-        //             burnAddresses: claimableBurnAddress,
-        //             wormholeToken: wormholeToken,
-        //             archiveClient: publicClient,
-        //             //fullNodeClient, 
-        //             //preSyncedTree, 
-        //             backend: circuitBackend,
-        //             //deploymentBlock,
-        //             //blocksPerGetLogsReq 
-        //         })
-        //         expectedRecipientBalance += reMintAmount
-        //         reMintTxs.push(reMintTx)
+                const reMintTx = await proofAndSelfRelay({
+                    amount: reMintAmount,
+                    recipient: reMintRecipient,
+                    //callData, 
+                    privateWallet: alicePrivate,
+                    burnAddresses: claimableBurnAddress,
+                    wormholeToken: wormholeToken,
+                    archiveClient: publicClient,
+                    //fullNodeClient, 
+                    //preSyncedTree, 
+                    backend: circuitBackend,
+                    //deploymentBlock,
+                    //blocksPerGetLogsReq 
+                })
+                expectedRecipientBalance += reMintAmount
+                reMintTxs.push(reMintTx)
 
-        //         const balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
+                const balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
 
-        //         assert.equal(balanceBobPublic, expectedRecipientBalance, "bob didn't receive the expected amount of re-minted tokens")
-        //     }
+                assert.equal(balanceBobPublic, expectedRecipientBalance, "bob didn't receive the expected amount of re-minted tokens")
+            }
 
-        //     const receipts = await Promise.all(
-        //         reMintTxs.map((tx) =>
-        //             publicClient.getTransactionReceipt({ hash: tx })
-        //         )
-        //     )
-        //     const logs = receipts.flatMap((r) => r.logs)
-        //     const nullifiedEvents = parseEventLogs({
-        //         abi: wormholeToken.abi,
-        //         logs: logs,
-        //         eventName: "Nullified"
-        //     })
+            const receipts = await Promise.all(
+                reMintTxs.map((tx) =>
+                    publicClient.getTransactionReceipt({ hash: tx })
+                )
+            )
+            const logs = receipts.flatMap((r) => r.logs)
+            const nullifiedEvents = parseEventLogs({
+                abi: wormholeToken.abi,
+                logs: logs,
+                eventName: "Nullified"
+            })
 
-        //     // first one is always real. The rest should be the same size as the real one
-        //     const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.totalSpentEncrypted.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
-        //     for (const nullifiedEvent of nullifiedEvents) {
-        //         const encryptedBlobByteLen = (nullifiedEvent.args.totalSpentEncrypted.length - 2) / 2
-        //         assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
-        //         assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
-        //         assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")
-        //     }
+            // first one is always real. The rest should be the same size as the real one
+            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.encryptedTotalSpends.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
+            for (const nullifiedEvent of nullifiedEvents) {
+                const encryptedBlobByteLen = (nullifiedEvent.args.encryptedTotalSpends.length - 2) / 2
+                assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
+                assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
+                assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")
+            }
 
-        //     // finally check if enough was burned
-        //     // const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
-        //     // const burnedBalanceAlicePrivate1 = await wormholeTokenAlice.read.balanceOf([claimableBurnAddress[0]])
-        //     // const burnedBalanceAlicePrivate2 = await wormholeTokenAlice.read.balanceOf([claimableBurnAddress[1]])
-        //     // assert.equal(burnedBalanceAlicePrivate1, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
-        //     // assert.equal(burnedBalanceAlicePrivate2, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
-        //     // assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn*2n, "alice didn't burn the expected amount of tokens")
-        // })
+            // finally check if enough was burned
+            // const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
+            // const burnedBalanceAlicePrivate1 = await wormholeTokenAlice.read.balanceOf([claimableBurnAddress[0]])
+            // const burnedBalanceAlicePrivate2 = await wormholeTokenAlice.read.balanceOf([claimableBurnAddress[1]])
+            // assert.equal(burnedBalanceAlicePrivate1, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
+            // assert.equal(burnedBalanceAlicePrivate2, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
+            // assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn*2n, "alice didn't burn the expected amount of tokens")
+        })
 
         it("reMint 3x from 100 burn accounts", async function () {
             const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
@@ -213,9 +213,7 @@ describe("Token", async function () {
             const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             const amountBurnAddresses = 100
 
-            //TODO this does not work. the counter does not increase and it just generates the same address. PrivateWallet should have a generate bulk burn accounts method
             const burnAccounts:UnsyncedBurnAccount[] = await alicePrivate.createBurnAccounts(amountBurnAddresses,{async:true})
-            console.log({burnAccounts, burnAccountsWallet:alicePrivate.privateData.burnAccounts})
             const claimableBurnAddress = burnAccounts.map((b:BurnAccount)=>b.burnAddress)
 
             const reMintRecipient = bob.account.address
@@ -264,9 +262,9 @@ describe("Token", async function () {
             })
 
             // first one is always real. The rest should be the same size as the real one
-            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.totalSpentEncrypted.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
+            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.encryptedTotalSpends.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
             for (const nullifiedEvent of nullifiedEvents) {
-                const encryptedBlobByteLen = (nullifiedEvent.args.totalSpentEncrypted.length - 2) / 2
+                const encryptedBlobByteLen = (nullifiedEvent.args.encryptedTotalSpends.length - 2) / 2
                 assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
                 assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
                 assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")

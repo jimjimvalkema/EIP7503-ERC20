@@ -8,6 +8,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {SNARK_SCALAR_FIELD} from "zk-kit-lean-imt-custom-hash/Constants.sol";
 
 /**
  * @dev Implementation of the {IERC20} interface.
@@ -51,6 +52,7 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
 
     function _updateBalanceInMerkleTree(address _to, uint256 _newBalance) virtual internal;
     function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _accountNoteHashes) virtual internal;
+    function _updateBalanceInMerkleTree(address[] memory _to, uint256[] memory _newBalance, uint256[] memory _accountNoteHashes) virtual internal;
     function _insertManyInMerkleTree(uint256[] memory _accountNoteHashes) virtual internal;
 
     /**
@@ -208,11 +210,9 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
             }
         } else {
             uint256 newBalance;
-            unchecked {
-                // Overflow not possible: balance + value is at most totalSupply, which we know fits into a uint256.
-                newBalance = _balances[to] + value;
-    
-            }
+            newBalance = _balances[to] + value;
+            require(newBalance < SNARK_SCALAR_FIELD, "balance can't go over the FIELD LIMIT");
+
             _balances[to] = newBalance;
 
             // we only care about `to` since zkwormhole accounts can only receive from the public not spend
@@ -231,7 +231,7 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
      * 
      * Same as _update but added _accountNoteHash so it use insertMany to save on gas and _totalSupply doesn't increase
      */
-    function _privateReMint(address to, uint256 value, uint256[] memory _accountNoteHashes) internal virtual {
+    function _reMint(address to, uint256 value, uint256[] memory _accountNoteHashes) internal virtual {
         if (to == address(0)) {
             unchecked {
                 // Overflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
@@ -240,12 +240,10 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
             _insertManyInMerkleTree(_accountNoteHashes);
         } else {
             uint256 newBalance;
-            unchecked {
-                // Overflow not possible: balance + value is at most totalSupply, which we know fits into a uint256.
-                newBalance = _balances[to] + value;
-    
-            }
+            newBalance = _balances[to] + value;
+
             _balances[to] = newBalance;
+            require(newBalance < SNARK_SCALAR_FIELD, "balance can't go over the FIELD LIMIT");
 
             // we only care about `to` since zkwormhole accounts can only receive from the public not spend
             // so the _balances[to] number goes up only :D
@@ -253,6 +251,33 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
             _updateBalanceInMerkleTree(to, newBalance, _accountNoteHashes);
         }
         emit Transfer(address(0), to, value);
+    }
+
+    function _reMintBulk(address[] memory recipients, uint256[] memory amounts, uint256[] memory _accountNoteHashes) internal virtual {
+        uint256[] memory newBalances = new uint256[](amounts.length);
+        for (uint i = 0; i < recipients.length; i++) {
+            address to = recipients[i];
+            uint256 value = amounts[i];
+            if (to == address(0)) {
+                unchecked {
+                    // Overflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
+                    _totalSupply -= value;
+                }
+                _insertManyInMerkleTree(_accountNoteHashes);
+            } else {
+                uint256 newBalance;
+                newBalance = _balances[to] + value;
+                _balances[to] = newBalance;
+                require(newBalance < SNARK_SCALAR_FIELD, "balance can't go over the FIELD LIMIT");
+
+                // we only care about `to` since zkwormhole accounts can only receive from the public not spend
+                // so the _balances[to] number goes up only :D
+                // this inserts both _accountNoteHash and poseidon2(to, newBalance)
+                newBalances[i] = newBalance;
+            }
+            emit Transfer(address(0), to, value);
+        }
+        _updateBalanceInMerkleTree(recipients, newBalances, _accountNoteHashes);
     }
 
     /**

@@ -166,7 +166,7 @@ export async function syncBurnAccount(
     })
     // accountNonce not 0? we have spent before!
     if (accountNonce !== 0n) {
-        const totalSpentEncrypted = logs[0].args.totalSpentEncrypted as Hex;
+        const totalSpentEncrypted = logs[0].args.encryptedTotalSpends as Hex;
         totalSpent = await decryptTotalSpend({totalSpentEncrypted:totalSpentEncrypted, viewingKey:BigInt(viewingKey)});
     }
 

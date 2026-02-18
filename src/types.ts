@@ -26,10 +26,12 @@ export interface SignatureData extends InputMap {
 }
 
 export interface SignatureInputs {
-    recipientAddress: Address,
-    amount: bigint,
+    recipient: Address,
+    amountToReMint: bigint,
     callData: Hex,
-    encryptedTotalSpends: Hex[]
+    callValue: bigint,
+    callCanFail: boolean,
+    encryptedTotalSpends: Hex[],
 }
 
 export interface MerkleData extends InputMap {

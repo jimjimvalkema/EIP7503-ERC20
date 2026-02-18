@@ -109,10 +109,9 @@ export async function superSafeBurn(burnAccount:UnsyncedBurnAccount|SyncedBurnAc
 }
 
 export async function proofAndSelfRelay(
-    { amount, recipient, callData, privateWallet,burnAddresses, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth=MAX_TREE_DEPTH,encryptedBlobLen=ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
-        { amount: bigint, recipient: Address, callData?: Hex, privateWallet: PrivateWallet,burnAddresses:Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint,circuitSize?:number, maxTreeDepth?:number,encryptedBlobLen?:number }
+    { amount, recipient, callData="0x",callValue=0n,callCanFail=true, privateWallet,burnAddresses, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth=MAX_TREE_DEPTH,encryptedBlobLen=ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
+        { amount: bigint, recipient: Address, callData?: Hex,callCanFail?:boolean, callValue?:bigint,privateWallet: PrivateWallet,burnAddresses:Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint,circuitSize?:number, maxTreeDepth?:number,encryptedBlobLen?:number }
 ) {
-    callData ??= "0x";
     fullNodeClient ??= archiveClient;
     const chainId = BigInt(await fullNodeClient.getChainId())
     deploymentBlock ??= getDeploymentBlock(Number(chainId))
@@ -166,9 +165,11 @@ export async function proofAndSelfRelay(
     circuitSize ??= getCircuitSize(burnAccountsAndAmounts.length)
 
     const signatureInputs:SignatureInputs = {        
-        recipientAddress: recipient,
-        amount: amount,
+        recipient: recipient,
+        amountToReMint: amount,
         callData: callData,
+        callCanFail: callCanFail,
+        callValue: callValue,
         encryptedTotalSpends: padWithRandomHex({arr:encryptedTotalSpends, len:circuitSize, hexSize:encryptedBlobLen, dir:"right"})
     }
     
@@ -247,14 +248,20 @@ export async function proofAndSelfRelay(
 }
 
 export async function freeRelayTx({publicInputs,proof,signatureInputs, wallet, wormholeTokenContract}:{publicInputs:PublicProofInputs,proof:ProofData,signatureInputs:SignatureInputs, wallet:WalletClient, wormholeTokenContract:WormholeTokenTest}) {
-    const _amount = BigInt(publicInputs.amount)
-    const _to = signatureInputs.recipientAddress
     const _accountNoteHashes = publicInputs.burn_data_public.map((v)=>BigInt(v.account_note_hash))
     const _accountNoteNullifiers = publicInputs.burn_data_public.map((v)=>BigInt(v.account_note_nullifier))
     const _root = BigInt(publicInputs.root)
     const _snarkProof = toHex(proof.proof)
-    const _callData = signatureInputs.callData
-    const _totalSpentEncrypted = signatureInputs.encryptedTotalSpends
+    const _signatureInputs = signatureInputs
+    // {
+    //     amountToReMint: signatureInputs.amountToReMint,
+    //     recipient: signatureInputs.recipient,
+    //     callData: signatureInputs.callData,
+    //     encryptedTotalSpends: signatureInputs.encryptedTotalSpends,
+    //     callCanFail: signatureInputs.callCanFail,
+    //     callValue:signatureInputs.callValue
+
+    // }
     // console.log({        _amount,
     //     _to,
     //     _accountNoteHashes,
@@ -266,14 +273,11 @@ export async function freeRelayTx({publicInputs,proof,signatureInputs, wallet, w
     // })
     // console.log({_accountNoteHashesLen:_accountNoteHashes.length})
     return await wormholeTokenContract.write.privateReMint([
-        _amount,
-        _to,
-        _accountNoteHashes,
+        _accountNoteHashes,     
         _accountNoteNullifiers,
         _root,
         _snarkProof,
-        _callData,
-        _totalSpentEncrypted
+        _signatureInputs
     ],{account:wallet.account?.address as Address})
     //return toHex(0n)
 }

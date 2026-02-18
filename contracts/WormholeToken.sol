@@ -11,30 +11,30 @@ import {LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.s
 import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
 import {IVerifier} from "./privateTransfer2InVerifier.sol";
 
-// struct FeeData {
-//     // relayerAddress = 0 <= self relay, relayerAddress = 1 <= msg.sender will relay, all other will send it to that address like expected
-//     address relayerAddress;
-//     // there is no way for the contract to know what priority fee is set so the spender just has to set it for the relayer (who ofc can choose a different number)
-//     uint256 priorityFee;
-//     // gas usage can change in network upgrades or when the merkle tree grows deeper
-//     // price of eth in fee_token * gas_used
-//     uint256 conversionRate;
-//     // in the contract the fee is calculated feeAmountInFeeToken = (pubInput.priority_fee + block.baseFee) * pubInput.conversion_rate
-//     // and should feeAmountInFeeToken < max_fee. conversionRate = gasUsage*tokenPriceInWei*relayerBonusFactor. 
-//     // ex gasUsage=45000,tokenPriceInEth=0.048961448,relayerBonusFactor=10%
-//     // conversionRate = 45000 * 48955645000000000 * 1.1
-//     uint256 maxFee;
-//     // fee_token is not that interesting rn because it really can only be the token it self or eth,
-//     // but in the future where it is integrated as a deposit method of a rail-gun like system it can be use full.
-//     // address feeToken;
-// }
+struct FeeData {
+    uint256 ethPriceToken;
+    uint256 maxFee; 
+    uint256 amountForRecipient;
+    uint256 estimatedGasCost; 
+    uint256 estimatedPriorityFee;
+    address refundAddress;
+    address relayerAddress;
+}
 
+struct SignatureInputs {
+    address recipient;
+    uint256 amountToReMint;
+    bytes callData;
+    bool callCanFail;
+    uint256 callValue;
+    bytes[] encryptedTotalSpends;
+}
 
 
 error VerificationFailed();
 // accountNoteNullifier is indexed so users can search for it and find out the total amount spend, which is needed to make the next spend the next spent
 // the nullifiers mapping contains the blockNumber it was nullified at. This can be used for a faster syncing strategy
-event Nullified(uint256 indexed nullifier, bytes totalSpentEncrypted);
+event Nullified(uint256 indexed nullifier, bytes encryptedTotalSpends);
 event StorageRootAdded(uint256 blockNumber);
 event NewLeaf(uint256 leaf);
 
@@ -71,10 +71,19 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         return tree.size;
     }
 
-    bytes32 private constant _REMINT_TYPEHASH =
+    bytes32 private constant _RE_MINT_TYPEHASH =
         keccak256(
-            "privateReMint(address _recipientAddress,uint256 _amount,bytes _callData,bytes[] _totalSpentEncrypted)"
+            "privateReMint(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends)"
         );
+
+    bytes32 private constant _RE_MINT_RELAYER_TYPEHASH =
+        keccak256(
+            "privateReMintRelayer(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends,FeeData _feeData)FeeData(uint256 ethPriceToken,uint256 maxFee,uint256 amountForRecipient,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
+        );
+
+    bytes32 private constant _FEEDATA_TYPEHASH = keccak256(
+        "FeeData(uint256 ethPriceToken,uint256 maxFee,uint256 amountForRecipient,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
+    );
 
     function _hashBytesArray(bytes[] memory items) internal pure returns (bytes32) {
         bytes32[] memory hashes = new bytes32[](items.length);
@@ -84,19 +93,50 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         return keccak256(abi.encodePacked(hashes));
     }
 
+    function _hashFeeData(FeeData memory _feeData) internal pure returns (bytes32) {
+        return keccak256(abi.encode(
+            _FEEDATA_TYPEHASH,
+            _feeData.ethPriceToken,
+            _feeData.maxFee,
+            _feeData.amountForRecipient,
+            _feeData.estimatedGasCost,
+            _feeData.estimatedPriorityFee,
+            _feeData.refundAddress,
+            _feeData.relayerAddress
+        ));
+    }
+
     function _hashSignatureInputs(
-        address _recipientAddress,
-        uint256 _amount,
-        bytes memory _callData,
-        bytes[] memory _totalSpentEncrypted
+        SignatureInputs calldata _signatureInputs
     ) public view returns (bytes32) {
         bytes32 structHash = keccak256(
             abi.encode(
-                _REMINT_TYPEHASH,                     // 1. typehash first
-                _recipientAddress,                    // 2. address encodes directly
-                _amount,                              // 3. uint256 encodes directly
-                keccak256(_callData),                 // 4. bytes → keccak256
-                _hashBytesArray(_totalSpentEncrypted) // 5. bytes[] → hash each, then pack & hash
+                _RE_MINT_TYPEHASH,
+                _signatureInputs.recipient,
+                _signatureInputs.amountToReMint,
+                keccak256(_signatureInputs.callData),
+                _signatureInputs.callCanFail,
+                _signatureInputs.callValue,
+                _hashBytesArray(_signatureInputs.encryptedTotalSpends)
+            )
+        );
+        return _hashTypedDataV4(structHash);
+    }
+
+    function _hashSignatureInputsRelayer(
+        SignatureInputs calldata _signatureInputs,
+        FeeData calldata _feeData
+    ) public view returns (bytes32) {
+        bytes32 structHash = keccak256(
+            abi.encode(
+                _RE_MINT_RELAYER_TYPEHASH,
+                _signatureInputs.recipient,
+                _signatureInputs.amountToReMint,
+                keccak256(_signatureInputs.callData),
+                _signatureInputs.callCanFail,
+                _signatureInputs.callValue,
+                _hashBytesArray(_signatureInputs.encryptedTotalSpends),
+                _hashFeeData(_feeData)
             )
         );
         return _hashTypedDataV4(structHash);
@@ -164,7 +204,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         // and we only need to insert _accountNoteHash
         // tx.origin is always a EOA
         if (tx.origin == _to ) {
-            _insertManyInMerkleTree( _accountNoteHashes);
+            _insertManyInMerkleTree(_accountNoteHashes);
         } else {
             uint256 accountBalanceLeaf = hashBalanceLeaf(_to, _newBalance);
 
@@ -180,9 +220,35 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
                 }
                 _insertManyInMerkleTree(leafs);
             }
-
-
         }
+    }
+
+    function _updateBalanceInMerkleTree(address[] memory _accounts, uint256[] memory _newBalances, uint256[] memory _accountNoteHashes) override internal {        
+        // check if account == tx.origin since in that case it's not a private address.
+        // and we only need to insert _accountNoteHash
+        // tx.origin is always a EOA
+        uint256[] memory leafs = new uint256[](_accounts.length + _accountNoteHashes.length);
+
+        uint256 leafsIndex = 0;
+        for (uint256 i = 0; i < _accounts.length; i++) {
+            if (tx.origin != _accounts[i]) {
+                uint256 accountBalanceLeaf = hashBalanceLeaf(_accounts[i], _newBalances[i]);
+                // only happens when someone receives an amount that exactly adds up to a balance that results a balance that had before
+                // very rare don't really want to check for this but leanIMT wont allow me to insert the same leaf twice
+                if(leanIMTPoseidon2.has(tree,accountBalanceLeaf)) {
+                    leafs[leafsIndex++] = accountBalanceLeaf;
+                }
+            }
+        }
+
+        for (uint256 i = 0; i < _accountNoteHashes.length; i++) {
+            leafs[leafsIndex++] = _accountNoteHashes[i];
+        }
+
+        // Trim array to actual length
+        assembly { mstore(leafs, leafsIndex) }
+
+        _insertManyInMerkleTree(leafs);
     }
 
     function root() public view returns(uint256){
@@ -247,59 +313,26 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
     }
 
-    // function _calculateFees(FeeData calldata _feeData, uint256 _amount) private view returns(uint256, uint256) {
-    //     require(_feeData.feeToken == address(this), "alternative payment tokens is not implemented yet");
-    //     uint256 _relayerReward = (_feeData.priorityFee + block.basefee) * _feeData.conversionRate;
-    //     uint256 _recipientAmount = _amount - _relayerReward;
-    //     assert(_feeData.maxFee >= _relayerReward);
-    //     return (_relayerReward, _recipientAmount);
-    // }
 
-    function privateReMint(
+    function _verifyReMint(
         uint256 _amount,
-        address _to,
         uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root,
         bytes calldata _snarkProof,
-        bytes calldata _callData,
-        bytes[] calldata _totalSpentEncrypted      
+        bytes[] calldata _encryptedTotalSpends,
+        bytes32 signatureHash
     ) public {
-        // @notice this has the side effect of burned balances not being spendable of a for of ethereum on a different chainId.
-        // long term we might need to research a different identifier
-        uint256 blockNumber = block.number;
+        require(roots[_root], "invalid root");
+        // check and store nullifiers, emit Nullified events with _encryptedTotalSpends blobs
         for (uint256 i = 0; i < _accountNoteNullifiers.length; i++) {
             uint256 _accountNoteNullifier = _accountNoteNullifiers[i];
             require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
-            nullifiers[_accountNoteNullifier] = blockNumber;
-            emit Nullified(_accountNoteNullifier, _totalSpentEncrypted[i]); 
+            nullifiers[_accountNoteNullifier] = block.number;
+            emit Nullified(_accountNoteNullifier, _encryptedTotalSpends[i]); 
         }
-        
-        require(roots[_root], "invalid root");
-        bytes32 signatureHash = _hashSignatureInputs(_to, _amount, _callData, _totalSpentEncrypted);
-        //@jimjim technically _feeData doesn't need to be here. It can be in a contract that handles that
-        // @TODO make fees in here anyway. since 712 signing is not flexible enough to also decode that call data rn
-        // @TODO do something with the calldata and add parameter to choose which contract to call
-        // @TODO fee should have a separate refund address so user can pay exact amounts and sent the rest back to a one time burn address
-        // @TODO relayer accounting should be simpler. ethPriceToken, maxRelayerFee, estimatedGasCost, estimatedPriorityFee
-        // if (_feeData.relayerAddress == address(0)) {
-        //     //-- self relay --
-        //     // inserts _accountNoteHash into the merkle tree as well
-        //     _privateReMint(_to, _amount, _accountNoteHashes);
-        // } else {
-        //     //-- use relayer --
-        //     address rewardRecipient = _feeData.relayerAddress;
-        //     if (_feeData.relayerAddress == address(1)) {
-        //         // this enables ex block builder to permissionlessly relay the tx
-        //         rewardRecipient = msg.sender;
-        //     }
-        //     (uint256 _relayerReward,uint256 _recipientAmount) = _calculateFees(_feeData, _amount);
-        //      // inserts _accountNoteHash into the merkle tree as well
-        //     _privateReMint(_to, _recipientAmount, _accountNoteHashes);
-        //     // @note this can cause a separate insert here that could be more efficient with insert many. But in most cases tx.origin == relayerAddress so not worth to optimize this.
-        //     _update(address(0), _feeData.relayerAddress, _relayerReward);
-        // }
 
+        // format public inputs and verify proof 
         bytes32[] memory publicInputs = _formatPublicInputs(_root, _amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
         if (_accountNoteNullifiers.length == 2) {
             if (!IVerifier(privateTransferVerifier1In).verify(_snarkProof, publicInputs)) {
@@ -312,8 +345,59 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         } else {
             revert("amount of note hashes not supported");
         }
+    }
 
-        _privateReMint(_to, _amount, _accountNoteHashes);
+    function privateReMint(
+        uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
+        uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256 _root,
+        bytes calldata _snarkProof,
+        SignatureInputs calldata _signatureInputs
+    ) public {
+        bytes32 _signatureHash = _hashSignatureInputs(_signatureInputs);
+        _verifyReMint(_signatureInputs.amountToReMint, _accountNoteHashes, _accountNoteNullifiers, _root, _snarkProof, _signatureInputs.encryptedTotalSpends, _signatureHash);
+        
+        // modified version of _mint that also inserts noteHashes and does not modify total supply!
+        _reMint(_signatureInputs.recipient, _signatureInputs.amountToReMint, _accountNoteHashes);
+        _processCall(_signatureInputs);
+    }
 
+
+    // @TODO stack too deep :/
+    function privateReMintRelayer(
+        uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
+        uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256 _root,
+        bytes calldata _snarkProof,
+        SignatureInputs calldata _signatureInputs,
+        FeeData calldata _feeData
+    ) public {
+        uint256 _fee = _feeData.ethPriceToken * _feeData.estimatedGasCost * (block.basefee + _feeData.estimatedPriorityFee);
+        require(_fee < _feeData.maxFee, "relayer fee is too high");
+        require(_signatureInputs.amountToReMint > _fee, "fee is more then amount being reMinted");
+        require(_feeData.amountForRecipient >= _signatureInputs.amountToReMint - _fee, "not enough left after fees for recipient");
+        uint256 _refundAmount = _signatureInputs.amountToReMint - _fee;
+
+        bytes32 _signatureHash = _hashSignatureInputsRelayer(_signatureInputs, _feeData);
+        _verifyReMint(_signatureInputs.amountToReMint, _accountNoteHashes, _accountNoteNullifiers, _root, _snarkProof, _signatureInputs.encryptedTotalSpends, _signatureHash);
+
+        // giga ugly solidity array bs :/
+        address[] memory recipients = new address[](3);
+        recipients[0] = _signatureInputs.recipient;
+        recipients[1] = _feeData.refundAddress;
+        recipients[2] = _feeData.relayerAddress;
+        uint256[] memory amounts = new uint256[](3);
+        amounts[0] = _feeData.amountForRecipient;
+        amounts[1] = _refundAmount;
+        amounts[2] = _fee;
+        _reMintBulk(recipients, amounts, _accountNoteHashes);
+        _processCall(_signatureInputs);
+    }
+
+    function _processCall(SignatureInputs calldata _signatureInputs) private {
+        if (_signatureInputs.callData.length != 0 || _signatureInputs.callValue > 0) { 
+            (bool success,) = _signatureInputs.recipient.call{value:_signatureInputs.callValue}(_signatureInputs.callData);
+            require(_signatureInputs.callCanFail || success, "call failed and was not allowed to fail");
+        }
     }
 }
