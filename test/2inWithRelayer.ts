@@ -13,8 +13,8 @@ import { getBackend } from "../src/proving.js";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.js";
 import { PrivateWallet } from "../src/PrivateWallet.js";
-import { getContract, padHex, parseEventLogs, toHex, type Hash, type Hex } from "viem";
-import type { RelayInputs } from "../src/types.ts";
+import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Hash, type Hex } from "viem";
+import type { FeeData, RelayInputs } from "../src/types.ts";
 
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
 
@@ -59,7 +59,7 @@ describe("Token", async function () {
     })
 
     describe("Token", async function () {
-        it("reMint 3x from 1 burn account", async function () {
+        it("reMint 1x from 1 burn account with relayer", async function () {
             const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
@@ -67,86 +67,70 @@ describe("Token", async function () {
             const chainId = BigInt(await publicClient.getChainId())
             const alicePrivate = new PrivateWallet(alice, { acceptedChainIds: [chainId] })
             const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
-            const amountToBurn = 100000n * 10n ** 18n;
+            const aliceRefundBurnAccount = await alicePrivate.createNewBurnAccount()
+            const decimalsToken = await wormholeToken.read.decimals()
+            const amountToBurn = parseUnits("42069", decimalsToken);
             await safeBurn(aliceBurnAccount, wormholeTokenAlice, amountToBurn)
 
-            const claimableBurnAddress = [aliceBurnAccount.burnAddress];
-            const reMintRecipient = bob.account.address
-
-            // reMint 3 times since the 1st tx needs no commitment inclusion proof, the 2nd one the total spend balance read only contains information of one spend
-            const reMintAmounts = [69000n *10n**18n, 690000n *10n**18n, 42000n *10n**18n]
-            const maxFee = BigInt(1 * 10**18)
-            let expectedRecipientBalance = 0n
-            let reMintTxs: Hex[] = []
-            const estimatedGasCost = 3_000_0000n
+            const decimalsTokenPrice = 8;
+            // 1 eth will give you 69 token. the eth price of token is 0.0144 eth (1/69)
+            const tokensPerEthPrice = parseUnits("69", decimalsTokenPrice)
+            const maxFee = parseUnits("5", decimalsToken)
+            const amountForRecipient = parseUnits("420", decimalsToken)
+            const reMintAmount = amountForRecipient + maxFee
+            const relayerBonus = parseUnits("1", decimalsToken)
+            const estimatedGasCost = 3_092_125n
             const estimatedPriorityFee = await publicClient.estimateMaxPriorityFeePerGas()
-
-            // @TODO use relayer account to relay, use fresh burn account for refund
-            for (const reMintAmount of reMintAmounts) {
-                const feeData = {
-                        ethPriceToken: toHex(1n),
-                        maxFee: toHex(maxFee),
-                        amountForRecipient: toHex(reMintAmount-maxFee),
-                        estimatedGasCost: toHex(estimatedGasCost),
-                        estimatedPriorityFee: toHex(estimatedPriorityFee),
-                        refundAddress: bob.account.address,
-                        relayerAddress: bob.account.address,
-                };
-                //@ts-ignore
-                const feeDataBigInt = Object.fromEntries(Object.keys(feeData).map((k)=>[k,BigInt(feeData[k])]))
-                console.log({feeDataBigInt, reMintAmount})
-                const relayerInputs = await createRelayerInputs({
-                    chainId : chainId,
-                    amount: reMintAmount,
-                    recipient: reMintRecipient,
-                    //callData, 
-                    privateWallet: alicePrivate,
-                    burnAddresses: claimableBurnAddress,
-                    wormholeToken: wormholeToken,
-                    archiveClient: publicClient,
-                    //fullNodeClient, 
-                    //preSyncedTree, 
-                    backend: circuitBackend,
-                    //deploymentBlock,
-                    //blocksPerGetLogsReq,
-                    feeData: feeData
-
-                })
-                const reMintTx = await relayTx({ relayInputs:relayerInputs as RelayInputs, wallet:alice, wormholeTokenContract:wormholeTokenAlice })
-                expectedRecipientBalance += reMintAmount
-                reMintTxs.push(reMintTx)
-
-                const balanceBobPublic = await wormholeTokenAlice.read.balanceOf([bob.account.address])
-
-                assert.equal(balanceBobPublic, expectedRecipientBalance, "bob didn't receive the expected amount of re-minted tokens")
+            const feeData: FeeData = {
+                tokensPerEthPrice: toHex(tokensPerEthPrice),
+                maxFee: toHex(maxFee),
+                amountForRecipient: toHex(amountForRecipient),
+                relayerBonus: toHex(relayerBonus),
+                estimatedGasCost: toHex(estimatedGasCost),
+                estimatedPriorityFee: toHex(estimatedPriorityFee),
+                refundAddress: aliceRefundBurnAccount.burnAddress,
+                relayerAddress: relayer.account.address,
             }
 
-            const receipts = await Promise.all(
-                reMintTxs.map((tx) =>
-                    publicClient.getTransactionReceipt({ hash: tx })
-                )
-            )
-            const logs = receipts.flatMap((r) => r.logs)
-            const nullifiedEvents = parseEventLogs({
-                abi: wormholeToken.abi,
-                logs: logs,
-                eventName: "Nullified"
+            const reMintRecipient = bob.account.address
+            const relayerInputs = await createRelayerInputs({
+                chainId: chainId,
+                amount: reMintAmount,
+                recipient: reMintRecipient,
+                //callData, 
+                privateWallet: alicePrivate,
+                //burnAddresses: [aliceBurnAccount.burnAddress],
+                wormholeToken: wormholeToken,
+                archiveClient: publicClient,
+                //fullNodeClient, 
+                //preSyncedTree, 
+                backend: circuitBackend,
+                //deploymentBlock,
+                //blocksPerGetLogsReq,
+                feeData: feeData
+
             })
+            const reMintTx = await relayTx({ relayInputs: relayerInputs as RelayInputs, wallet: alice, wormholeTokenContract: wormholeTokenAlice })
+            const recipientBalance = await wormholeToken.read.balanceOf([bob.account.address])
+            const refundAddressBalance = await wormholeToken.read.balanceOf([aliceRefundBurnAccount.burnAddress])
+            const relayerBalance = await wormholeToken.read.balanceOf([relayer.account.address])
 
-            // first one is always real. The rest should be the same size as the real one
-            const expectedEncryptedBlobByteLen = (nullifiedEvents[0].args.encryptedTotalSpends.length - 2) / 2 // remove 0x, divide by 2 because hex string len is double byte len
-            for (const nullifiedEvent of nullifiedEvents) {
-                const encryptedBlobByteLen = (nullifiedEvent.args.encryptedTotalSpends.length - 2) / 2
-                assert.equal(encryptedBlobByteLen, expectedEncryptedBlobByteLen, "encrypted blob length is not consistent")
-                assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
-                assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")
-            }
-
-            // finally check if enough was burned
-            const balanceAlicePublic = await wormholeTokenAlice.read.balanceOf([alice.account.address])
-            const burnedBalanceAlicePrivate = await wormholeTokenAlice.read.balanceOf([claimableBurnAddress[0]])
-            assert.equal(burnedBalanceAlicePrivate, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
-            assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn, "alice didn't burn the expected amount of tokens")
+            const txReceipt = await publicClient.getTransactionReceipt({ hash: reMintTx });
+            console.log({ 
+                gasCost: txReceipt.gasUsed, 
+                effectiveGasPrice: txReceipt.effectiveGasPrice, 
+                estimatedPriorityFee, estimatedGasCost 
+            })
+            console.log({
+                recipientBalance____: formatUnits(recipientBalance, decimalsToken),
+                refundAddressBalance: formatUnits(refundAddressBalance, decimalsToken),
+                relayerBalance______: formatUnits(relayerBalance, decimalsToken),
+            })
+            const totalReMinted = relayerBalance + refundAddressBalance + recipientBalance
+            assert.equal(totalReMinted, reMintAmount, "amount reMinted not matched");
+            assert.equal(recipientBalance, amountForRecipient, "recipient did not receive enough tokens");
+            assert(relayerBalance > relayerBonus, "relayer did not receive enough tokens");
+            assert.equal(refundAddressBalance, maxFee - relayerBalance, "refund is not equal to maxFee - relayerBalance")
         })
 
     })

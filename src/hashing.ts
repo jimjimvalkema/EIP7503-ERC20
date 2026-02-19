@@ -249,9 +249,10 @@ export async function signPrivateTransferWithFee({ privateWallet, signatureInput
         _callValue: BigInt(signatureInputs.callValue),
         _encryptedTotalSpends: signatureInputs.encryptedTotalSpends,
         _feeData: {
-            ethPriceToken: BigInt(signatureInputs.feeData.ethPriceToken),
+            tokensPerEthPrice: BigInt(signatureInputs.feeData.tokensPerEthPrice),
             maxFee: BigInt(signatureInputs.feeData.maxFee),
             amountForRecipient: BigInt(signatureInputs.feeData.amountForRecipient),
+            relayerBonus: BigInt(signatureInputs.feeData.relayerBonus),
             estimatedGasCost: BigInt(signatureInputs.feeData.estimatedGasCost),
             estimatedPriorityFee: BigInt(signatureInputs.feeData.estimatedPriorityFee),
             refundAddress: signatureInputs.feeData.refundAddress,

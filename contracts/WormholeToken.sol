@@ -12,9 +12,10 @@ import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
 import {IVerifier} from "./privateTransfer2InVerifier.sol";
 
 struct FeeData {
-    uint256 ethPriceToken;
+    uint256 tokensPerEthPrice;
     uint256 maxFee; 
     uint256 amountForRecipient;
+    uint256 relayerBonus;
     uint256 estimatedGasCost; 
     uint256 estimatedPriorityFee;
     address refundAddress;
@@ -51,6 +52,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     uint40 currentLeafIndex;
 
     uint256 public amountFreeTokens = 1000000*10**decimals();
+    uint256 public decimalsTokenPrice = 8;
 
     address public privateTransferVerifier1In;
     address public privateTransferVerifier100In;
@@ -78,11 +80,11 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
     bytes32 private constant _RE_MINT_RELAYER_TYPEHASH =
         keccak256(
-            "privateReMintRelayer(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends,FeeData _feeData)FeeData(uint256 ethPriceToken,uint256 maxFee,uint256 amountForRecipient,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
+            "privateReMintRelayer(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends,FeeData _feeData)FeeData(uint256 tokensPerEthPrice,uint256 maxFee,uint256 amountForRecipient,uint256 relayerBonus,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
         );
 
     bytes32 private constant _FEEDATA_TYPEHASH = keccak256(
-        "FeeData(uint256 ethPriceToken,uint256 maxFee,uint256 amountForRecipient,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
+        "FeeData(uint256 tokensPerEthPrice,uint256 maxFee,uint256 amountForRecipient,uint256 relayerBonus,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
     );
 
     function _hashBytesArray(bytes[] memory items) internal pure returns (bytes32) {
@@ -96,9 +98,10 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     function _hashFeeData(FeeData memory _feeData) internal pure returns (bytes32) {
         return keccak256(abi.encode(
             _FEEDATA_TYPEHASH,
-            _feeData.ethPriceToken,
+            _feeData.tokensPerEthPrice,
             _feeData.maxFee,
             _feeData.amountForRecipient,
+            _feeData.relayerBonus,
             _feeData.estimatedGasCost,
             _feeData.estimatedPriorityFee,
             _feeData.refundAddress,
@@ -362,6 +365,16 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         _processCall(_signatureInputs);
     }
 
+    function _calculateFee(FeeData calldata _feeData, uint256 _amountToReMint) public view returns(uint256,uint256) {
+        uint256 _feeInWei =  _feeData.estimatedGasCost * (block.basefee + _feeData.estimatedPriorityFee);
+        uint256 _fee = ((_feeInWei * _feeData.tokensPerEthPrice) / 10**decimalsTokenPrice) + _feeData.relayerBonus;
+        require(_fee < _feeData.maxFee, "relayer fee is too high");
+        require(_amountToReMint > _fee, "fee is more then amount being reMinted");
+        require((_amountToReMint - _fee) >= _feeData.amountForRecipient , "not enough left after fees for recipient");
+        uint256 _refundAmount = _feeData.maxFee - _fee;
+        return (_fee, _refundAmount);
+    }
+
     function privateReMintRelayer(
         uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
@@ -370,12 +383,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         SignatureInputs calldata _signatureInputs,
         FeeData calldata _feeData
     ) public {
-        uint256 _fee = _feeData.ethPriceToken * _feeData.estimatedGasCost * (block.basefee + _feeData.estimatedPriorityFee);
-        require(_fee < _feeData.maxFee, "relayer fee is too high");
-        require(_signatureInputs.amountToReMint > _fee, "fee is more then amount being reMinted");
-        require((_signatureInputs.amountToReMint - _fee) >= _feeData.amountForRecipient , "not enough left after fees for recipient");
-        uint256 _refundAmount = _signatureInputs.amountToReMint - _fee;
-
+        (uint256 _fee, uint256 _refundAmount) = _calculateFee(_feeData, _signatureInputs.amountToReMint);
         bytes32 _signatureHash = _hashSignatureInputsRelayer(_signatureInputs, _feeData);
         _verifyReMint(_signatureInputs.amountToReMint, _accountNoteHashes, _accountNoteNullifiers, _root, _snarkProof, _signatureInputs.encryptedTotalSpends, _signatureHash);
 

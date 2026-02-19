@@ -26,9 +26,10 @@ export interface SignatureData extends InputMap {
 }
 
 export interface FeeData {
-    ethPriceToken: Hex,
+    tokensPerEthPrice: Hex,
     maxFee: Hex,
     amountForRecipient: Hex,
+    relayerBonus: Hex,
     estimatedGasCost: Hex,
     estimatedPriorityFee: Hex,
     refundAddress: Address,

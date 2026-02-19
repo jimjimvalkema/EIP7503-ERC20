@@ -109,7 +109,7 @@ export async function superSafeBurn(burnAccount: UnsyncedBurnAccount | SyncedBur
 }
 
 export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses, amount }: { burnAccounts: SyncedBurnAccount[], selectBurnAddresses: Address[], amount: bigint }) {
-    const sortedBurnAccounts = burnAccounts.sort((a, b) => Number(a.spendableBalance) - Number(b.spendableBalance))
+    const sortedBurnAccounts = burnAccounts.sort((a, b) => Number(b.spendableBalance) - Number(a.spendableBalance))
     const encryptedTotalSpends: Hex[] = []
     // man so many copy pasta of same array and big name!! Fix it i cant read this!!!!
     const burnAccountsAndAmounts: { burnAccount: SyncedBurnAccount, amountToClaim: bigint }[] = []
@@ -154,8 +154,9 @@ export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddr
  */
 export async function createRelayerInputs(
     { chainId, amount, recipient, callData = "0x", callValue = 0n, callCanFail = true, feeData, privateWallet, burnAddresses, wormholeToken, archiveClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
-        { chainId: bigint, amount: bigint, recipient: Address, callData?: Hex, callCanFail?: boolean, callValue?: bigint, feeData?: FeeData, privateWallet: PrivateWallet, burnAddresses: Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number }
+        { chainId: bigint, amount: bigint, recipient: Address, callData?: Hex, callCanFail?: boolean, callValue?: bigint, feeData?: FeeData, privateWallet: PrivateWallet, burnAddresses?: Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number }
 ): Promise<SelfRelayInputs | RelayInputs> {
+    burnAddresses ??= privateWallet.privateData.burnAccounts.map((b)=>b.burnAddress)
     const syncedPrivateWallet = await syncMultipleBurnAccounts({
         wormholeToken: wormholeToken,
         archiveNode: archiveClient,
@@ -329,11 +330,11 @@ export async function relayTx({ relayInputs, wallet, wormholeTokenContract }: { 
         callValue: BigInt(relayInputs.signatureInputs.callValue)
 
     }
-    console.log(relayInputs)
     const feeData = {
-        ethPriceToken: BigInt(relayInputs.signatureInputs.feeData.ethPriceToken),
+        tokensPerEthPrice: BigInt(relayInputs.signatureInputs.feeData.tokensPerEthPrice),
         maxFee: BigInt(relayInputs.signatureInputs.feeData.maxFee),
         amountForRecipient: BigInt(relayInputs.signatureInputs.feeData.amountForRecipient),
+        relayerBonus: BigInt(relayInputs.signatureInputs.feeData.relayerBonus),
         estimatedGasCost: BigInt(relayInputs.signatureInputs.feeData.estimatedGasCost),
         estimatedPriorityFee: BigInt(relayInputs.signatureInputs.feeData.estimatedPriorityFee),
         refundAddress: relayInputs.signatureInputs.feeData.refundAddress,

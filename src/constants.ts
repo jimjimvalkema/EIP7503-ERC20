@@ -78,9 +78,10 @@ export const PRIVATE_RE_MINT_RELAYER_712_TYPES = {
         { name: "_feeData", type: "FeeData" },
     ],
     FeeData: [
-        { name: "ethPriceToken", type: "uint256" },
+        { name: "tokensPerEthPrice", type: "uint256" },
         { name: "maxFee", type: "uint256" },
         { name: "amountForRecipient", type: "uint256" },
+        { name: "relayerBonus", type: "uint256"},
         { name: "estimatedGasCost", type: "uint256" },
         { name: "estimatedPriorityFee", type: "uint256" },
         { name: "refundAddress", type: "address" },
