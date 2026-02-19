@@ -12,7 +12,6 @@ import { getSyncedMerkleTree } from "../src/syncing.js";
 import { getBackend } from "../src/proving.js";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { proofAndSelfRelay, safeBurn, superSafeBurn } from "../src/transact.js";
-import type { RelayerInputs } from "../src/types.js";
 import { PrivateWallet } from "../src/PrivateWallet.js";
 import { getContract, padHex, parseEventLogs, type Hash, type Hex } from "viem";
 
@@ -33,7 +32,6 @@ describe("Token", async function () {
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
     const circuitBackend = await getBackend(2, provingThreads);
     const [deployer, alice, bob, carol, relayer, feeEstimator] = await viem.getWalletClients()
-    let feeEstimatorRelayerInputs: RelayerInputs;
     //let feeEstimatorPrivate: UnsyncedPrivateWallet
 
 

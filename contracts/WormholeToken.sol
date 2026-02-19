@@ -362,8 +362,6 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         _processCall(_signatureInputs);
     }
 
-
-    // @TODO stack too deep :/
     function privateReMintRelayer(
         uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
@@ -375,17 +373,25 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         uint256 _fee = _feeData.ethPriceToken * _feeData.estimatedGasCost * (block.basefee + _feeData.estimatedPriorityFee);
         require(_fee < _feeData.maxFee, "relayer fee is too high");
         require(_signatureInputs.amountToReMint > _fee, "fee is more then amount being reMinted");
-        require(_feeData.amountForRecipient >= _signatureInputs.amountToReMint - _fee, "not enough left after fees for recipient");
+        require((_signatureInputs.amountToReMint - _fee) >= _feeData.amountForRecipient , "not enough left after fees for recipient");
         uint256 _refundAmount = _signatureInputs.amountToReMint - _fee;
 
         bytes32 _signatureHash = _hashSignatureInputsRelayer(_signatureInputs, _feeData);
         _verifyReMint(_signatureInputs.amountToReMint, _accountNoteHashes, _accountNoteNullifiers, _root, _snarkProof, _signatureInputs.encryptedTotalSpends, _signatureHash);
 
+        // optional let anyone claim the fee
+        address relayerAddress;
+        if (_feeData.relayerAddress == address(1)) {
+            relayerAddress = msg.sender;
+        } else {
+            relayerAddress = _feeData.relayerAddress;
+        }
+
         // giga ugly solidity array bs :/
         address[] memory recipients = new address[](3);
         recipients[0] = _signatureInputs.recipient;
         recipients[1] = _feeData.refundAddress;
-        recipients[2] = _feeData.relayerAddress;
+        recipients[2] = relayerAddress;
         uint256[] memory amounts = new uint256[](3);
         amounts[0] = _feeData.amountForRecipient;
         amounts[1] = _refundAmount;

@@ -1,17 +1,12 @@
-import type { Hex, Signature, Account, Hash, WalletClient, Address,} from "viem";
+import type { Hex, Signature, Account, Hash, WalletClient, Address, } from "viem";
 import { recoverPublicKey, hashMessage, hexToBigInt, hexToBytes, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex, hashTypedData } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
-import type { FeeData, SignatureData, SignatureInputs, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.ts";
+import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, PRIVATE_RE_MINT_RELAYER_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
+import type { FeeData, SignatureData, SignatureInputs, SignatureInputsWithFee, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.ts";
 import { PrivateWallet } from "./PrivateWallet.ts"
 import { padArray } from "./proving.ts";
 import { encryptTotalSpend } from "./syncing.ts";
 import { Fr } from "@aztec/aztec.js";
-import { Worker } from "node:worker_threads";
-
-
-const findPowNonceWorkerLocation = "workers/findPowNonce.ts";
-
 
 /**
  * TODO support browser and more common node environments
@@ -27,20 +22,40 @@ export async function findPoWNonceAsync({
     startingValue: bigint;
     difficulty: bigint;
 }): Promise<bigint> {
-    return new Promise((resolve, reject) => {
-        const worker = new Worker(
-            new URL(findPowNonceWorkerLocation, import.meta.url),
-            {
-                workerData: { blindedAddressDataHash, startingValue, difficulty },
-                execArgv: ["--experimental-transform-types"],
-            } as any,
-        );
-        worker.on("message", resolve);
-        worker.on("error", reject);
-        worker.on("exit", (code) => {
-            if (code !== 0) reject(new Error(`Worker exited with code ${code}`));
+    const params = { blindedAddressDataHash, startingValue, difficulty };
+    const isNode = typeof process !== "undefined" && process.versions != null && process.versions.node != null;
+    if (isNode) {
+        // node worker thread
+        const { Worker } = await import("worker_threads");
+        return new Promise((resolve, reject) => {
+            const worker = new Worker(
+                new URL("workers/findPowNonce.node.ts", import.meta.url),
+                {
+                    workerData: params,
+                    execArgv: ["--import", "tsx"],
+                },
+            );
+            worker.on("message", resolve);
+            worker.on("error", reject);
+            worker.on("exit", (code) => {
+                if (code !== 0) reject(new Error(`Worker exited with code ${code}`));
+            });
         });
-    });
+    } else {
+        // browser worker
+        return new Promise((resolve, reject) => {
+            const worker = new Worker(
+                new URL("workers/findPowNonce.browser.js", import.meta.url),
+                { type: "module" },
+            );
+            worker.onmessage = (e) => {
+                resolve(e.data);
+                worker.terminate();
+            };
+            worker.onerror = (e) => reject(e);
+            worker.postMessage(params);
+        });
+    }
 }
 
 export function verifyPowNonce({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty?: bigint }) {
@@ -184,28 +199,12 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
     Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }> {
     chainId ??= await privateWallet.viemWallet.getChainId()
 
-    // const sigHash = hashSignatureInputs(signatureInputs)
-    // //console.log({sigHash})
-    // // blind signing yay!
-    // // const signature = await privateWallet.viem.wallet.request({
-    // //     method: 'eth_sign',
-    // //     params: [(privateWallet.viem.wallet.account?.address as Address), poseidonHash],
-    // // });
-
-    // //@notice i force viem to sign with the eth account that privateWallet expects, not the main account selected by the user. Always do that and do not!!: `WalletClient.account?.address`
-    // const signature = await privateWallet.viemWallet.signMessage({ message: { raw: sigHash }, account: privateWallet.privateData.ethAccount })
-    // const preImageOfKeccak = toPrefixedMessage({ raw: sigHash })
-    // const KeccakWrappedPoseidonHash = keccak256(preImageOfKeccak);
-
-    // const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: KeccakWrappedPoseidonHash, signature: signature })
-    // // const pubKeyXHex = "0x" + publicKey.slice(4).slice(0, 64) as Hex
-    // // const pubKeyYHex = "0x" + publicKey.slice(4).slice(64, 128) as Hex
     const message = {
         _recipient: signatureInputs.recipient,
-        _amount: signatureInputs.amountToReMint,
+        _amount: BigInt(signatureInputs.amountToReMint),
         _callData: signatureInputs.callData,
         _callCanFail: signatureInputs.callCanFail,
-        _callValue: signatureInputs.callValue,  // <-- add this
+        _callValue: BigInt(signatureInputs.callValue),
         _encryptedTotalSpends: signatureInputs.encryptedTotalSpends,
     };
 
@@ -237,7 +236,55 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
         },
         signatureHash: hash,
     }
+}
+export async function signPrivateTransferWithFee({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: PrivateWallet, signatureInputs: SignatureInputsWithFee, chainId: number, tokenAddress: Address }):
+    Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }> {
+    chainId ??= await privateWallet.viemWallet.getChainId()
 
+    const message = {
+        _recipient: signatureInputs.recipient,
+        _amount: BigInt(signatureInputs.amountToReMint),
+        _callData: signatureInputs.callData,
+        _callCanFail: signatureInputs.callCanFail,
+        _callValue: BigInt(signatureInputs.callValue),
+        _encryptedTotalSpends: signatureInputs.encryptedTotalSpends,
+        _feeData: {
+            ethPriceToken: BigInt(signatureInputs.feeData.ethPriceToken),
+            maxFee: BigInt(signatureInputs.feeData.maxFee),
+            amountForRecipient: BigInt(signatureInputs.feeData.amountForRecipient),
+            estimatedGasCost: BigInt(signatureInputs.feeData.estimatedGasCost),
+            estimatedPriorityFee: BigInt(signatureInputs.feeData.estimatedPriorityFee),
+            refundAddress: signatureInputs.feeData.refundAddress,
+            relayerAddress: signatureInputs.feeData.relayerAddress,
+        },
+    };
+
+    const domain = getPrivateReMintDomain(chainId, tokenAddress)
+    const hash = hashTypedData({
+        domain: domain,
+        types: PRIVATE_RE_MINT_RELAYER_712_TYPES,
+        primaryType: "privateReMintRelayer",
+        message,
+    });
+
+    const signature = await privateWallet.viemWallet.signTypedData({
+        account: privateWallet.privateData.ethAccount,
+        domain: domain,
+        types: PRIVATE_RE_MINT_RELAYER_712_TYPES,
+        primaryType: "privateReMintRelayer",
+        message,
+    });
+
+    const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature });
+    return {
+        viemFormatSignature: { signature, pubKeyX, pubKeyY },
+        signatureData: {
+            public_key_x: hexToU8sAsHexArr(pubKeyX, 32) as u8sAsHexArrLen32,
+            public_key_y: hexToU8sAsHexArr(pubKeyY, 32) as u8sAsHexArrLen32,
+            signature: hexToU8sAsHexArr(signature.slice(0, 2 + 128) as Hex, 64) as u8sAsHexArrLen64,
+        },
+        signatureHash: hash,
+    }
 }
 
 

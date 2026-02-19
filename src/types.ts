@@ -25,13 +25,33 @@ export interface SignatureData extends InputMap {
     signature: u8sAsHexArrLen64;
 }
 
+export interface FeeData {
+    ethPriceToken: Hex,
+    maxFee: Hex,
+    amountForRecipient: Hex,
+    estimatedGasCost: Hex,
+    estimatedPriorityFee: Hex,
+    refundAddress: Address,
+    relayerAddress: Address,
+}
+
 export interface SignatureInputs {
     recipient: Address,
-    amountToReMint: bigint,
+    amountToReMint: Hex,
     callData: Hex,
-    callValue: bigint,
+    callValue: Hex,
     callCanFail: boolean,
     encryptedTotalSpends: Hex[],
+}
+
+export interface SignatureInputsWithFee {
+    recipient: Address,
+    amountToReMint: Hex,
+    callData: Hex,
+    callValue: Hex,
+    callCanFail: boolean,
+    encryptedTotalSpends: Hex[],
+    feeData: FeeData,
 }
 
 export interface MerkleData extends InputMap {
@@ -137,28 +157,6 @@ export interface PrivateWalletData {
     detViewKeyCounter?: number
 }
 
-
-export interface RelayerInputs {
-    pubInputs: PublicProofInputs;
-    zkProof: {
-        proof: Hex,
-        publicInputs: Hex[]
-    };
-}
-
-export interface FeeData {
-    relayerAddress: Address,
-    priorityFee: Hex,
-    conversionRate?: Hex,
-    conversionRateInputs?: {
-        estimatedGasUsed: Hex,
-        relayerBonusFactor: Hex,
-        tokenPriceInEth: Hex,
-    }
-    maxFee: Hex,
-    feeToken: Hex,
-}
-
 export interface SignatureHashPreImg {
     recipientAddress: Address,
     amount: Hex,
@@ -169,4 +167,16 @@ export interface PreSyncedTree {
     tree: LeanIMT<bigint>
     lastSyncedBlock: bigint,
     firstSyncedBlock: bigint
+}
+
+export interface SelfRelayInputs {
+    publicInputs:PublicProofInputs,
+    proof:Hex,
+    signatureInputs:SignatureInputs,
+}
+
+export interface RelayInputs {
+    publicInputs:PublicProofInputs,
+    proof:Hex,
+    signatureInputs:SignatureInputsWithFee,
 }
