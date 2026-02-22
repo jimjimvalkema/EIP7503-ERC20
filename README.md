@@ -44,6 +44,9 @@ assert_lt(pow_hash, POW_DIFFICULTY);
 
 `address_hash` then has the first 12 bytes set to 0, so it the same length as ethereum address *(this is also the cause of that collision attack vector 😬).*
 
+## TODO EXPLAIN MULTISPENDS, TODO MAKE UI ABLE TO DO THAT
+## TODO PROTOCOL SPEC
+
 ## optimizations
 Merkle tree: The balances tracked in the merkle tree update on **every** transfer, even if a user never intends to use any privacy. This is to preserve plausible deniability. However this can optimized by:
 * Only updating the recipient in the transfer, since burn addresses will never be senders! *(note that this does make the balance inaccurate for non burn addresses)*
@@ -77,7 +80,7 @@ deploy poseidon2 hasher with create2 (if it's not deployed yet)
 yarn hardhat run scripts/deployPoseidon2.ts --network sepolia
 ```
 
-## deployed addresses
+## deployed addresses TODO UPDATE THESE
 ### sepolia  
 WormholeToken - [0x762028F34CA53EaF88B86bDac9977216c824e1DB](https://sepolia.etherscan.io/address/0x762028F34CA53EaF88B86bDac9977216c824e1DB)  
 
