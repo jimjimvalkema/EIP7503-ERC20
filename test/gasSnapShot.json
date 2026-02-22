@@ -1,0 +1,100 @@
+{
+  "transfers": {
+    "2": {
+      "totalAmountInserts": 5,
+      "transferWithoutMerkle": {
+        "high": 27239,
+        "low": 27239
+      },
+      "transferWithMerkle___": {
+        "high": 165604,
+        "low": 168420
+      },
+      "depth": 3
+    },
+    "3": {
+      "totalAmountInserts": 13,
+      "transferWithoutMerkle": {
+        "high": 27239,
+        "low": 27239
+      },
+      "transferWithMerkle___": {
+        "high": 163728,
+        "low": 158566
+      },
+      "depth": 4
+    },
+    "4": {
+      "totalAmountInserts": 30,
+      "transferWithoutMerkle": {
+        "high": 27239,
+        "low": 27239
+      },
+      "transferWithMerkle___": {
+        "high": 194752,
+        "low": 176659
+      },
+      "depth": 5
+    },
+    "5": {
+      "totalAmountInserts": 62,
+      "transferWithoutMerkle": {
+        "high": 27239,
+        "low": 27239
+      },
+      "transferWithMerkle___": {
+        "high": 212845,
+        "low": 194752
+      },
+      "depth": 6
+    },
+    "6": {
+      "totalAmountInserts": 127,
+      "transferWithoutMerkle": {
+        "high": 27239,
+        "low": 27239
+      },
+      "transferWithMerkle___": {
+        "high": 230938,
+        "low": 212845
+      },
+      "depth": 7
+    },
+    "7": {
+      "totalAmountInserts": 255,
+      "transferWithoutMerkle": {
+        "high": 27239,
+        "low": 27239
+      },
+      "transferWithMerkle___": {
+        "high": 249032,
+        "low": 243870
+      },
+      "depth": 8
+    },
+    "8": {
+      "totalAmountInserts": 511,
+      "transferWithoutMerkle": {
+        "high": 27239,
+        "low": 27239
+      },
+      "transferWithMerkle___": {
+        "high": 267125,
+        "low": 261963
+      },
+      "depth": 9
+    },
+    "9": {
+      "totalAmountInserts": 1024,
+      "transferWithoutMerkle": {
+        "high": 27239,
+        "low": 27239
+      },
+      "transferWithMerkle___": {
+        "high": 298151,
+        "low": 280057
+      },
+      "depth": 10
+    }
+  }
+}

@@ -1,68 +1,65 @@
-import { Address, createPublicClient, createWalletClient, custom, formatUnits, getAddress, getContract, Hex, http, parseEther, parseUnits, UnknownTypeError, WalletClient } from 'viem'
+import { createPublicClient, createWalletClient, custom, formatUnits, getAddress, getContract, http, parseUnits } from 'viem'
+import type { Address, Hex, WalletClient } from 'viem'
 import { sepolia } from 'viem/chains'
 import 'viem/window';
-import { getPrivateAccount } from '../src/hashing.js';
-import { SyncedPrivateWallet, UnsyncedPrivateWallet, WormholeToken, RelayerInputs, RelayerInputsHex } from '../src/types.js';
-import { syncPrivateWallet } from '../src/syncing.js';
-import WormholeTokenArtifact from '../artifacts/contracts/WormholeToken.sol/WormholeToken.json' //with {"type":"json"};
-import sepoliaDeployments from "../ignition/deployments/chain-11155111/deployed_addresses.json"
-import { convertRelayerInputsFromHex, convertRelayerInputsToHex, createRelayerInputs, proofAndSelfRelay, relayTx } from '../src/transact.js';
+import { PrivateWallet } from '../src/PrivateWallet.js';
+import type { WormholeToken, SelfRelayInputs } from '../src/types.js';
+import { createRelayerInputs, selfRelayTx } from '../src/transact.js';
 import { getBackend } from '../src/proving.js';
-import { EMPTY_FEE_DATA } from '../src/constants.js';
-// import dotenv from 'dotenv'
-// dotenv.config()
+import WormholeTokenArtifact from '../artifacts/contracts/WormholeToken.sol/WormholeToken.json'  with {"type":"json"};
+import sepoliaDeployments from "../ignition/deployments/chain-11155111/deployed_addresses.json" with {"type":"json"};
+import type { WormholeTokenTest } from '../test/2inRemint.test.ts';
 
+const CIRCUIT_SIZE = 2
 
-const pendingRelayTxsEl = document.getElementById("pendingRelayTxs")
-//TODO clean this mess
 const wormholeTokenAddress = sepoliaDeployments['wormholeToken#WormholeToken'] as Address;
 //@ts-ignore
-window.wormholeTokenAddress
+window.wormholeTokenAddress = wormholeTokenAddress
 console.log({ wormholeTokenAddress })
+
 const logEl = document.getElementById("messages")
 const errorEl = document.getElementById("errors")
 const transferRecipientInputEl = document.getElementById('transferRecipientInput')
 const transferAmountInputEl = document.getElementById('transferAmountInput')
 const privateTransferRecipientInputEl = document.getElementById("privateTransferRecipientInput")
 const privateTransferAmountInputEl = document.getElementById("privateTransferAmountInput")
+const pendingRelayTxsEl = document.getElementById("pendingRelayTxs")
 
-const backend = await getBackend(window.navigator.hardwareConcurrency)
+const backend = await getBackend(CIRCUIT_SIZE,window.navigator.hardwareConcurrency)
 
 const publicClient = createPublicClient({
-  chain: sepolia, // Your target chain
-  transport: http(process.env.ETHEREUM_RPC), // Public RPC URL
+  chain: sepolia,
+  transport: http(process.env.ETHEREUM_RPC),
 })
-console.log(process.env.ETHEREUM_RPC,"AAAAAAAAAAAAAAAAAAAAAAAa")
+
 const wormholeToken = getContract({ abi: WormholeTokenArtifact.abi, address: wormholeTokenAddress, client: { public: publicClient } }) as unknown as WormholeToken
 setNonWalletInfo(wormholeToken)
 
-async function everyClass(className: string, func: Function) {
-  document.querySelectorAll(className).forEach(async (el) => {
-    await func(el)
-  })
-}
+// --- helpers ---
 
 function errorUi(message: string, error: unknown, replace = false) {
   if (replace) {
-    //@ts-ignore
-    errorEl.innerText = ""
+    errorEl!.innerText = ""
   }
-  //@ts-ignore
-  errorEl.innerText += `\n ${message + "\n" + error.toString()}`
+  errorEl!.innerText += `\n ${message + "\n" + (error as Error).toString()}`
   throw new Error(message, { cause: error })
 }
+
 function logUi(message: string, replace = false) {
   if (replace) {
-    //@ts-ignore
-    logEl.innerText = ""
+    logEl!.innerText = ""
   }
-  //@ts-ignore
-  logEl.innerText += `\n ${message}`
+  logEl!.innerText += `\n ${message}`
   console.log(message)
 }
 
+async function everyClass(className: string, func: (el: HTMLElement) => void) {
+  document.querySelectorAll(className).forEach(async (el) => {
+    await func(el as HTMLElement)
+  })
+}
+
 async function txInUi(txHash: Hex) {
-  //TODO make href
   logUi(`tx sent at: https://sepolia.etherscan.io/tx/${txHash}`)
   await publicClient.waitForTransactionReceipt({
     hash: txHash,
@@ -70,69 +67,111 @@ async function txInUi(txHash: Hex) {
   })
 }
 
+// --- localStorage relay queue ---
+
+export function addToLocalStorage(key: string, item: any) {
+  let localStore = JSON.parse(localStorage.getItem(wormholeTokenAddress) || '{}')
+  localStore[key] = item
+  localStorage.setItem(wormholeTokenAddress, JSON.stringify(localStore))
+}
+//@ts-ignore
+window.addToLocalStorage = addToLocalStorage
+
+export function getFromLocalStorage(key: string) {
+  let localStore = JSON.parse(localStorage.getItem(wormholeTokenAddress) || '{}')
+  return localStore[key]
+}
+
+const relayerInputsLocalStoreName = "relayerInputs"
+
+export function addRelayInputsToLocalStorage(relayInputs: SelfRelayInputs) {
+  let allRelayerInputs = getFromLocalStorage(relayerInputsLocalStoreName)
+  allRelayerInputs ??= []
+  allRelayerInputs.push(relayInputs)
+  addToLocalStorage(relayerInputsLocalStoreName, allRelayerInputs)
+}
+
+export async function getRelayInputsFromLocalStorage(): Promise<SelfRelayInputs[]> {
+  const allRelayerInputs:SelfRelayInputs[] = getFromLocalStorage(relayerInputsLocalStoreName)
+  console.log({allRelayerInputs})
+  if (!allRelayerInputs) return []
+  const allRelayerInputClean: SelfRelayInputs[] = []
+  for (const relayerInput of allRelayerInputs) {
+    
+    const blockNumbers = await Promise.all(relayerInput.publicInputs.burn_data_public.map((bData)=>wormholeToken.read.nullifiers([BigInt(bData.account_note_nullifier)])))
+    if (blockNumbers.every((b)=>b===0n)) {
+      allRelayerInputClean.push(relayerInput)
+    }
+  }
+  return allRelayerInputClean
+}
+
+// --- non-wallet info ---
+
 async function setNonWalletInfo(wormholeToken: WormholeToken) {
   const amountFreeTokens = wormholeToken.read.amountFreeTokens()
   const name = wormholeToken.read.name()
   const ticker = wormholeToken.read.symbol()
   const decimals = wormholeToken.read.decimals()
   const formatAmountFreeTokens = formatUnits(await amountFreeTokens, Number(await decimals))
-  everyClass(".amountFreeTokens", async (el: any) => el.innerText = await formatAmountFreeTokens)
-  everyClass(".ticker", async (el: any) => el.innerText = await ticker)
-  everyClass(".tokenName", async (el: any) => el.innerText = await name)
-
+  everyClass(".amountFreeTokens", (el) => { el.innerText = formatAmountFreeTokens })
+  everyClass(".ticker", async (el) => el.innerText = await ticker)
+  everyClass(".tokenName", async (el) => el.innerText = await name)
 }
 
-async function updateWalletInfoUi(wormholeTokenWallet: WormholeToken, publicWallet: WalletClient, publicAddress: Address, privateWallet?: UnsyncedPrivateWallet | SyncedPrivateWallet) {
-  everyClass(".publicAddress", (el: any) => el.innerText = publicAddress)
-  const publicBalance = wormholeTokenWallet.read.balanceOf([publicAddress])
-  const decimals = Number(await wormholeTokenWallet.read.decimals())
+// --- wallet info ui ---
 
-  if (privateWallet) {
-    const syncedPrivateWallet = syncPrivateWallet({ wormholeToken: wormholeTokenWallet, privateWallet: privateWallet })
-    everyClass(".burnAddress", (el: any) => el.innerText = privateWallet.burnAddress)
-    everyClass(".privateBurnedBalance", async (el: any) => el.innerText = formatUnits((await syncedPrivateWallet).totalReceived, decimals))
-    everyClass(".privateSpentBalance", async (el: any) => el.innerText = formatUnits((await syncedPrivateWallet).totalSpent, decimals))
-    everyClass(".privateSpendableBalance", async (el: any) => el.innerText = formatUnits((await syncedPrivateWallet).totalReceived - (await syncedPrivateWallet).totalSpent, decimals))
-    //@ts-ignore 
-    window.privateWallet = (await syncedPrivateWallet)
+async function updateWalletInfoUi(
+  wormholeTokenWallet: WormholeToken,
+  publicAddress: Address,
+  burnAddress?: Address
+) {
+  everyClass(".publicAddress", (el) => el.innerText = publicAddress)
+  const decimals = Number(await wormholeTokenWallet.read.decimals())
+  const publicBalance = await wormholeTokenWallet.read.balanceOf([publicAddress])
+  everyClass(".publicBalance", (el) => el.innerText = formatUnits(publicBalance, decimals))
+
+  if (burnAddress) {
+    everyClass(".burnAddress", (el) => el.innerText = burnAddress)
+    const burnedBalance = await wormholeTokenWallet.read.balanceOf([burnAddress])
+    everyClass(".privateBurnedBalance", (el) => el.innerText = formatUnits(burnedBalance, decimals))
+  }
+}
+
+// --- wallet connection ---
+
+async function connectPublicWallet() {
+  if (!('ethereum' in window)) {
+    throw new Error('No Ethereum wallet detected. Please install MetaMask.')
   }
 
+  const walletClient = createWalletClient({
+    chain: sepolia,
+    transport: custom(window.ethereum!),
+  })
 
-  const formatPubBalance = formatUnits(await publicBalance, Number(await decimals))
-  everyClass(".publicBalance", (el: any) => el.innerText = formatPubBalance)
-}
+  try {
+    await walletClient.switchChain({ id: sepolia.id })
+    const addresses = await walletClient.requestAddresses()
 
-// Function to connect wallet
-async function connectPublicWallet() {
-  // Step 1: Check if injected provider exists (runtime-safe, no TS error)
-  if (!Boolean('ethereum' in window)) {
-    throw new Error('No Ethereum wallet detected. Please install MetaMask.')
-  } else {
-    // Step 2: Create wallet client (now TS knows about window.ethereum)
-    const walletClient = createWalletClient({
-      chain: sepolia, // Change to your chain
-      transport: custom(window.ethereum!), // Non-null assertion since we checked existence
-    })
+    //@ts-ignore
+    window.publicAddress = addresses[0]
+    //@ts-ignore
+    window.publicWallet = walletClient
 
-    try {
-      await walletClient.switchChain({ id: sepolia.id })
-      // Step 3: Request account connection (prompts MetaMask popup)
-      const addresses = await walletClient.requestAddresses()
+    const wormholeTokenWallet = getContract({
+      abi: WormholeTokenArtifact.abi,
+      address: wormholeTokenAddress,
+      client: { wallet: walletClient, public: publicClient }
+    }) as unknown as WormholeToken
 
-
-      //@ts-ignore ts should fuck off let me just dump shit into window thanks
-      window.publicAddress = addresses[0]
-      //@ts-ignore ts should fuck off let me just dump shit into window thanks
-      window.publicWallet = walletClient
-      const wormholeTokenWallet = getContract({ abi: WormholeTokenArtifact.abi, address: wormholeTokenAddress, client: { wallet: walletClient, public: publicClient } }) as unknown as WormholeToken
-      //@ts-ignore 
-      window.wormholeTokenWallet = wormholeTokenWallet
-      await updateWalletInfoUi(wormholeTokenWallet, walletClient, addresses[0])
-      return { address: addresses[0], publicWallet: walletClient }
-    } catch (error) {
-      errorUi("wallet connection failed. try installing metamask?", error)
-      throw error
-    }
+    //@ts-ignore
+    window.wormholeTokenWallet = wormholeTokenWallet
+    await updateWalletInfoUi(wormholeTokenWallet, addresses[0])
+    return { address: addresses[0], publicWallet: walletClient }
+  } catch (error) {
+    errorUi("wallet connection failed. try installing metamask?", error)
+    throw error
   }
 }
 
@@ -142,28 +181,44 @@ async function getPublicWallet() {
     await connectPublicWallet()
   }
   //@ts-ignore
-  const publicWallet = window.publicWallet
+  const publicWallet = window.publicWallet as WalletClient
   //@ts-ignore
   const wormholeTokenWallet = window.wormholeTokenWallet as WormholeToken
   //@ts-ignore
   const publicAddress = window.publicAddress as Address
   return { publicWallet, wormholeTokenWallet, publicAddress }
-
 }
 
 async function connectPrivateWallet() {
   const { publicWallet, publicAddress, wormholeTokenWallet } = await getPublicWallet()
-  // TODO this is something only hardhat clients have and now i just pretend that his is a good idea
-  // @ts-ignore yeah its bad
-  publicWallet.account = { address: publicAddress };
-  logUi("creating private account and doing PoW")
-  const privateWallet = await getPrivateAccount({ wallet: publicWallet })
-  //@ts-ignore ts should fuck off let me just dump shit into window thanks
+
+  //@ts-ignore
+  publicWallet.account = { address: publicAddress }
+
+  const chainId = BigInt(await publicClient.getChainId())
+  const privateWallet = new PrivateWallet(publicWallet, { acceptedChainIds: [chainId] })
+  logUi("creating private wallet...\n please sign the message in your wallet")
+  await privateWallet.getDeterministicViewKeyRoot()
+  const burnAccountPromise = privateWallet.createBurnAccountFromViewKeyIndex({ async: true, viewingKeyIndex:0});
+
+  // Animated PoW loading indicator
+  let dotCount = 0;
+  const powInterval = setInterval(() => {
+    dotCount = (dotCount % 3) + 1;
+    logUi("doing PoW" + ".".repeat(dotCount), true);
+  }, 500);
+
+  const burnAccount = await burnAccountPromise;
+  clearInterval(powInterval);
+  logUi("PoW complete!");
+
+  //@ts-ignore
   window.privateWallet = privateWallet
-  //@ts-ignore shut up
-  window.wormholeTokenWWallet = wormholeTokenWallet
-  await updateWalletInfoUi(wormholeTokenWallet, publicWallet, publicAddress, privateWallet)
-  logUi("done!: created new private wallet")
+  //@ts-ignore
+  window.burnAccount = burnAccount
+
+  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, burnAccount.burnAddress)
+  logUi("done! created new private wallet")
 }
 
 async function getPrivateWallet() {
@@ -173,186 +228,148 @@ async function getPrivateWallet() {
     await connectPrivateWallet()
   }
   //@ts-ignore
-  const privateWallet = window.privateWallet as SyncedPrivateWallet
-  return { publicWallet, wormholeTokenWallet, publicAddress, privateWallet }
+  const privateWallet = window.privateWallet as PrivateWallet
+  //@ts-ignore
+  const burnAccount = window.burnAccount
+  return { publicWallet, wormholeTokenWallet, publicAddress, privateWallet, burnAccount }
 }
 
+// --- handlers ---
+
 async function mintBtnHandler() {
-  const { publicWallet, publicAddress, wormholeTokenWallet } = await getPublicWallet()
-  console.log({ wormholeTokenWallet })
+  const { publicAddress, wormholeTokenWallet } = await getPublicWallet()
   try {
-    const tx = await wormholeTokenWallet.write.getFreeTokens([publicAddress], { account: publicAddress as Address, chain: sepolia })
+    const tx = await wormholeTokenWallet.write.getFreeTokens([publicAddress], { account: publicAddress, chain: sepolia })
     await txInUi(tx)
   } catch (error) {
     errorUi("aaa that didn't work :( did you cancel it?", error)
   }
 
   //@ts-ignore
-  await updateWalletInfoUi(wormholeTokenWallet, publicWallet, publicAddress, window.privateAddress)
+  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount?.burnAddress)
 }
 
 async function setToPrivateAddressBtnHandler(where: HTMLElement) {
-  const { publicWallet, wormholeTokenWallet, publicAddress, privateWallet } = await getPrivateWallet()
-  console.log({ burnAddr: privateWallet.burnAddress })
-  //@ts-ignore
-  where.value = privateWallet.burnAddress
+  const { burnAccount } = await getPrivateWallet()
+  ;(where as HTMLInputElement).value = burnAccount.burnAddress
 }
 
 async function setToPublicAddressBtnHandler(where: HTMLElement) {
-  const { publicWallet, wormholeTokenWallet, publicAddress } = await getPublicWallet()
-  //@ts-ignore
-  where.value = publicAddress
+  const { publicAddress } = await getPublicWallet()
+  ;(where as HTMLInputElement).value = publicAddress
 }
 
 async function transferBtnHandler() {
-  const { publicWallet, wormholeTokenWallet, publicAddress } = await getPublicWallet()
-  const decimals = wormholeToken.read.decimals()
-  //@ts-ignore
-  const amount = parseUnits(transferAmountInputEl.value, Number(await decimals))
-  let to
+  const { wormholeTokenWallet, publicAddress } = await getPublicWallet()
+  const decimals = Number(await wormholeToken.read.decimals())
+  const amount = parseUnits((transferAmountInputEl as HTMLInputElement).value, decimals)
+
+  let to: Address
   try {
-    //@ts-ignore
-    to = getAddress(transferRecipientInputEl.value)
+    to = getAddress((transferRecipientInputEl as HTMLInputElement).value)
   } catch (error) {
     errorUi("this might not be a valid address?", error)
+    return
   }
 
   try {
-    const tx = await wormholeTokenWallet.write.transfer([to as Address, amount], { chain: sepolia, account: publicAddress })
+    const tx = await wormholeTokenWallet.write.transfer([to, amount], { chain: sepolia, account: publicAddress })
     await txInUi(tx)
   } catch (error) {
     errorUi("Something wrong, did you cancel?", error)
   }
 
   //@ts-ignore
-  await updateWalletInfoUi(wormholeTokenWallet, publicWallet, publicAddress, window.privateWallet)
-}
-
-export function addToLocalStorage(key: string, item: any) {
-  //@ts-ignore
-  let localStore = JSON.parse(localStorage.getItem(wormholeTokenAddress))
-  if (!localStore) {
-    localStore = {}
-  }
-  localStore[key] = item
-  localStorage.setItem(wormholeTokenAddress, JSON.stringify(localStore))
-}
-//@ts-ignore
-window.addToLocalStorage = addToLocalStorage
-
-export function getFromLocalStorage(key: string) {
-  //@ts-ignore
-  let localStore = JSON.parse(localStorage.getItem(wormholeTokenAddress))
-  if (!localStore) {
-    localStore = {}
-    localStorage.setItem(wormholeTokenAddress, JSON.stringify(localStore))
-  }
-  return localStore[key]
-}
-//@ts-ignore
-window.addToLocalStorage = addToLocalStorage
-const relayerInputsLocalStoreName = "relayerInputs"
-
-export function addRelayInputsToLocalStorage(relayInputs: RelayerInputs) {
-  const relayerInputsHex = convertRelayerInputsToHex(relayInputs)
-  let allRelayerInputs = getFromLocalStorage(relayerInputsLocalStoreName)
-  allRelayerInputs ??= []
-  allRelayerInputs.push(relayerInputsHex)
-  addToLocalStorage(relayerInputsLocalStoreName, allRelayerInputs)
-}
-
-export async function getRelayInputsToLocalStorage(): Promise<RelayerInputs[]> {
-  const allRelayerInputs = getFromLocalStorage(relayerInputsLocalStoreName)
-  const allRelayerInputClean: RelayerInputs[] = []
-  for (const relayerInputHex of allRelayerInputs) {
-    const relayerInputNormal = convertRelayerInputsFromHex(relayerInputHex)
-    const isNullified = Boolean(await wormholeToken.read.nullifiers([relayerInputNormal.pubInputs.accountNoteNullifier]))
-    if (!isNullified) {
-      allRelayerInputClean.push(relayerInputNormal)
-    }
-  }
-  return allRelayerInputClean
+  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount?.burnAddress)
 }
 
 async function proofPrivateTransferBtnHandler() {
-  const { publicWallet, wormholeTokenWallet, publicAddress, privateWallet } = await getPrivateWallet()
+  const { wormholeTokenWallet, publicAddress, privateWallet, burnAccount } = await getPrivateWallet()
   const decimals = Number(await wormholeToken.read.decimals())
-  let amount
-  let recipient
+
+  let recipient: Address
   try {
-    //@ts-ignore
-    recipient = getAddress(privateTransferRecipientInputEl.value)
+    recipient = getAddress((privateTransferRecipientInputEl as HTMLInputElement).value)
   } catch (error) {
     errorUi("something went wrong, is it a real address?", error)
+    return
+  }
+
+  let amount: bigint
+  try {
+    amount = parseUnits((privateTransferAmountInputEl as HTMLInputElement).value, decimals)
+  } catch (error) {
+    errorUi("something went wrong, is this not a valid number?", error)
+    return
   }
 
   try {
-    //@ts-ignore
-    amount = parseUnits(privateTransferAmountInputEl.value, decimals)
+    logUi("creating proof...")
+    const chainId = BigInt(await publicClient.getChainId())
+    const relayerInputs = await createRelayerInputs({
+      chainId,
+      wormholeToken,
+      privateWallet,
+      burnAddresses: [burnAccount.burnAddress],
+      archiveClient: publicClient,
+      amount,
+      recipient,
+      backend
+    }) as SelfRelayInputs
+    logUi("proof done! saved to pending relay txs")
+    addRelayInputsToLocalStorage(relayerInputs)
   } catch (error) {
-    errorUi("something went wrong, is this not a valid number?", error)
-
+    errorUi("proof creation failed", error)
   }
-  // const tx = await proofAndSelfRelay({
-  //   publicClient:publicClient,
-  //   wormholeToken:wormholeTokenWallet,
-  //   privateWallet:privateWallet,
-  //   amount:amount as bigint,
-  //   recipient:recipient as Address,
-  //   backend:backend
-  // })
 
-  logUi("creating proof")
-  const relayerInputs = await createRelayerInputs({
-    wormholeToken,
-    privateWallet,
-    publicClient,
-    amount: amount as bigint,
-    recipient: recipient as Address,
-    feeData: EMPTY_FEE_DATA,
-    backend
-  })
-  logUi("done")
-  addRelayInputsToLocalStorage(relayerInputs)
-  //await txInUi(tx)
-  updateWalletInfoUi(wormholeTokenWallet, publicWallet, publicAddress, privateWallet)
-  listPendingRelayTxs()
+  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, burnAccount.burnAddress)
+  await listPendingRelayTxs()
 }
 
 async function listPendingRelayTxs() {
-  const relayInputs = await getRelayInputsToLocalStorage()
+  pendingRelayTxsEl!.innerHTML = ""
+  const relayInputs = await getRelayInputsFromLocalStorage()
+  console.log({relayInputs})
   const decimals = Number(await wormholeToken.read.decimals())
   for (const relayInput of relayInputs) {
     const relayFunc = async () => {
       const { publicWallet, publicAddress, wormholeTokenWallet } = await getPublicWallet()
-      publicWallet.account = {address: publicAddress}
-      await relayTx({
-        relayerInputs: relayInput,
-        ethWallet: publicWallet,
-        publicClient: publicClient,
-        wormholeToken: wormholeTokenWallet
+      //@ts-ignore
+      publicWallet.account = { address: publicAddress }
+      try {
+      const tx = await selfRelayTx({
+        selfRelayInputs: relayInput,
+        wallet: publicWallet,
+        wormholeTokenContract: wormholeTokenWallet as WormholeTokenTest
       })
+        await txInUi(tx)
+        await listPendingRelayTxs()
+        //@ts-ignore
+        await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount?.burnAddress)
+      } catch (error) {
+        errorUi("relay failed", error)
+      }
     }
     const relayTxBtn = document.createElement("button")
     relayTxBtn.onclick = relayFunc
-    relayTxBtn.innerText = `relay tx: ${formatUnits(relayInput.pubInputs.amount, Number(decimals))} tokens to ${relayInput.pubInputs.recipientAddress}`
-    pendingRelayTxsEl?.append(relayTxBtn)
+    console.log({relayInput})
+    relayTxBtn.innerText = `relay tx: ${formatUnits(BigInt(relayInput.publicInputs.amount), decimals)} tokens to ${relayInput.signatureInputs.recipient}`
+    const li = document.createElement("li")
+    li.appendChild(relayTxBtn)
+    pendingRelayTxsEl!.appendChild(li)
   }
-
 }
+
+// --- event listeners ---
 
 document.getElementById('connectPublicWalletBtn')?.addEventListener('click', connectPublicWallet)
 document.getElementById('connectPrivateWalletBtn')?.addEventListener('click', connectPrivateWallet)
 document.getElementById('mintBtn')?.addEventListener('click', mintBtnHandler)
-//@ts-ignore
-document.getElementById('setToPrivateWalletBtn')?.addEventListener('click', async () => setToPrivateAddressBtnHandler(transferRecipientInputEl))
-//@ts-ignore
-document.getElementById('setToPublicWalletBtn')?.addEventListener('click', async () => setToPublicAddressBtnHandler(transferRecipientInputEl))
-//@ts-ignore
-document.getElementById('setPrivateTransferToPrivateWalletBtn')?.addEventListener('click', async () => setToPrivateAddressBtnHandler(privateTransferRecipientInputEl))
+document.getElementById('setToPrivateWalletBtn')?.addEventListener('click', () => setToPrivateAddressBtnHandler(transferRecipientInputEl!))
+document.getElementById('setToPublicWalletBtn')?.addEventListener('click', () => setToPublicAddressBtnHandler(transferRecipientInputEl!))
+document.getElementById('setPrivateTransferToPrivateWalletBtn')?.addEventListener('click', () => setToPrivateAddressBtnHandler(privateTransferRecipientInputEl!))
+document.getElementById('setPrivateTransferToPublicWalletBtn')?.addEventListener('click', () => setToPublicAddressBtnHandler(privateTransferRecipientInputEl!))
 document.getElementById('transferBtn')?.addEventListener('click', transferBtnHandler)
-//@ts-ignore
-document.getElementById('setPrivateTransferToPublicWalletBtn')?.addEventListener('click', async () => setToPublicAddressBtnHandler(privateTransferRecipientInputEl))
-
 document.getElementById('proofPrivaterTransferBtn')?.addEventListener('click', proofPrivateTransferBtnHandler)
+
 listPendingRelayTxs()

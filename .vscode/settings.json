@@ -2,14 +2,18 @@
     "cSpell.words": [
         "basefee",
         "Becarefull",
+        "chainid",
         "ciphertext",
+        "FEEDATA",
         "Merkle",
         "nargo",
         "permissionlessly",
         "println",
         "secp",
         "Tornadocash",
+        "TYPEHASH",
         "viem",
-        "zkwormhole"
+        "zkwormhole",
+        "zkwormholes"
     ]
 }

@@ -1,13 +1,15 @@
 {
   "compilerOptions": {
     "lib": ["es2023", "dom"],
-    "module": "node16",
+    "module": "nodenext",
     "target": "es2022",
     "strict": true,
-    "resolveJsonModule":true,
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "moduleResolution": "node16",
+    "moduleResolution": "nodenext",
     "outDir": "dist",
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true
   }
 }
