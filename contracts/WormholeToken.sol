@@ -54,18 +54,18 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     uint256 public amountFreeTokens = 1000000*10**decimals();
     uint256 public decimalsTokenPrice = 8;
 
-    address public privateTransferVerifier1In;
+    address public privateTransferVerifier2In;
     address public privateTransferVerifier100In;
     LeanIMTData public tree;
     
     /**
      * 
      */
-    constructor(address _privateTransferVerifier1In, address _privateTransferVerifier100In)
+    constructor(address _privateTransferVerifier2In, address _privateTransferVerifier100In)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
         EIP712("zkwormholes-token", "1") 
     {
-        privateTransferVerifier1In = _privateTransferVerifier1In;
+        privateTransferVerifier2In = _privateTransferVerifier2In;
         privateTransferVerifier100In = _privateTransferVerifier100In;
     }
 
@@ -338,7 +338,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         // format public inputs and verify proof 
         bytes32[] memory publicInputs = _formatPublicInputs(_root, _amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
         if (_accountNoteNullifiers.length == 2) {
-            if (!IVerifier(privateTransferVerifier1In).verify(_snarkProof, publicInputs)) {
+            if (!IVerifier(privateTransferVerifier2In).verify(_snarkProof, publicInputs)) {
                 revert VerificationFailed();
             }
         } else if (_accountNoteNullifiers.length == 100) {

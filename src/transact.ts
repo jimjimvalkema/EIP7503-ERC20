@@ -156,7 +156,7 @@ export async function createRelayerInputs(
     { chainId, amount, recipient, callData = "0x", callValue = 0n, callCanFail = true, feeData, privateWallet, burnAddresses, wormholeToken, archiveClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
         { chainId: bigint, amount: bigint, recipient: Address, callData?: Hex, callCanFail?: boolean, callValue?: bigint, feeData?: FeeData, privateWallet: PrivateWallet, burnAddresses?: Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number }
 ): Promise<SelfRelayInputs | RelayInputs> {
-    burnAddresses ??= privateWallet.privateData.burnAccounts.map((b)=>b.burnAddress)
+    burnAddresses ??= privateWallet.privateData.burnAccounts.map((b) => b.burnAddress)
     const syncedPrivateWallet = await syncMultipleBurnAccounts({
         wormholeToken: wormholeToken,
         archiveNode: archiveClient,
@@ -177,7 +177,7 @@ export async function createRelayerInputs(
         callCanFail: callCanFail,
         callValue: toHex(callValue),
         encryptedTotalSpends: padWithRandomHex({ arr: encryptedTotalSpends, len: circuitSize, hexSize: encryptedBlobLen, dir: "right" }),
-        feeData:feeData
+        feeData: feeData
     }
 
     // ---- do async stuff concurrently, signing, syncing ----
@@ -274,7 +274,7 @@ export async function createRelayerInputs(
 }
 
 export async function proofAndSelfRelay(
-    { amount, recipient, callData = "0x", callValue = 0n, callCanFail = true, privateWallet, burnAddresses, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
+    { amount, recipient, callData = "0x", callValue = 0n, callCanFail = false, privateWallet, burnAddresses, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
         { amount: bigint, recipient: Address, callData?: Hex, callCanFail?: boolean, callValue?: bigint, privateWallet: PrivateWallet, burnAddresses: Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number }
 ) {
     fullNodeClient ??= archiveClient;
@@ -305,6 +305,13 @@ export async function selfRelayTx({ selfRelayInputs, wallet, wormholeTokenContra
         callValue: BigInt(selfRelayInputs.signatureInputs.callValue)
 
     }
+    console.log(
+        _accountNoteHashes,
+        _accountNoteNullifiers,
+        _root,
+        _snarkProof,
+        _signatureInputs
+    )
     return await wormholeTokenContract.write.privateReMint([
         _accountNoteHashes,
         _accountNoteNullifiers,

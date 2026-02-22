@@ -6,7 +6,7 @@ import { network } from "hardhat";
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 
-import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer1InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName, PrivateTransfer100InVerifierContractName } from "../src/constants.js";
+import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer2InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100in, PrivateTransfer100InVerifierContractName } from "../src/constants.js";
 import { getSyncedMerkleTree } from "../src/syncing.js";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { getBackend } from "../src/proving.js";
@@ -29,7 +29,7 @@ describe("Token", async function () {
     const { viem } = await network.connect();
     const publicClient = await viem.getPublicClient();
     let wormholeToken: ContractReturnType<typeof WormholeTokenContractName>;
-    let PrivateTransferVerifier1In: ContractReturnType<typeof PrivateTransfer1InVerifierContractName>;
+    let PrivateTransferVerifier1In: ContractReturnType<typeof PrivateTransfer2InVerifierContractName>;
     let PrivateTransferVerifier100In: ContractReturnType<typeof PrivateTransfer100InVerifierContractName>;
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
     const circuitBackend = await getBackend(CIRCUIT_SIZE, provingThreads);
@@ -41,8 +41,8 @@ describe("Token", async function () {
         const poseidon2Create2Salt = padHex("0x00", { size: 32 })
         await deployPoseidon2Huff(publicClient, deployer, poseidon2Create2Salt)
         leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [], { libraries: {} });
-        const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName, [], { libraries: {} });
-        PrivateTransferVerifier1In = await viem.deployContract(PrivateTransfer1InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
+        const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName100in, [], { libraries: {} });
+        PrivateTransferVerifier1In = await viem.deployContract(PrivateTransfer2InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
         PrivateTransferVerifier100In = await viem.deployContract(PrivateTransfer100InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
         //PrivateTransferVerifier = await viem.deployContract(PrivateTransferVerifierContractName, [], { client: { wallet: deployer }, libraries: { } });
         wormholeToken = await viem.deployContract(WormholeTokenContractName, [PrivateTransferVerifier1In.address, PrivateTransferVerifier100In.address], { client: { wallet: deployer }, libraries: { leanIMTPoseidon2: leanIMTPoseidon2.address } },);

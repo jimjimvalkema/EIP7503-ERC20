@@ -6,7 +6,6 @@ import type { FeeData, SignatureData, SignatureInputs, SignatureInputsWithFee, u
 import { PrivateWallet } from "./PrivateWallet.ts"
 import { padArray } from "./proving.ts";
 import { encryptTotalSpend } from "./syncing.ts";
-import { Fr } from "@aztec/aztec.js";
 
 /**
  * TODO support browser and more common node environments

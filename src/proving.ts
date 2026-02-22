@@ -1,7 +1,7 @@
 import { hexToBytes, toHex, hexToNumber } from "viem"
 import type { Hex, Address, PublicClient, TypedDataDomain} from "viem"
 import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs } from "./types.js"
-import { CIRCUIT_SIZES, EMPTY_UNFORMATTED_MERKLE_PROOF, MAX_TREE_DEPTH } from "./constants.ts"
+import { CIRCUIT_SIZES, EMPTY_UNFORMATTED_MERKLE_PROOF, FIELD_LIMIT, FIELD_MODULUS, MAX_TREE_DEPTH } from "./constants.ts"
 import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer } from "./hashing.ts"
 import type {LeanIMTMerkleProof} from  "@zk-kit/lean-imt"
 import { LeanIMT } from "@zk-kit/lean-imt"
@@ -14,7 +14,7 @@ import { Noir } from "@noir-lang/noir_js"
 import privateTransfer2InCircuit from '../circuits/privateTransfer2In/target/privateTransfer2In.json' with { type: 'json' };
 import privateTransfer41InCircuit from '../circuits/privateTransfer100In/target/privateTransfer100In.json'  with { type: 'json' };
 
-import { Fr } from "@aztec/aztec.js"
+//import { Fr } from "@aztec/aztec.js"
 import { PrivateWallet } from "./PrivateWallet.ts"
 import { getCircuitSize } from "./transact.ts"
 import { assert } from "node:console"
@@ -98,6 +98,16 @@ export function getSpendableBalanceProof(
     }
 }
 
+
+function randomBN254FieldElement(): bigint {
+  while (true) {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const val = bytes.reduce((acc, b) => (acc << 8n) | BigInt(b), 0n);
+    if (val < FIELD_MODULUS) return val;
+  }
+}
+
 export function getPubInputs(
     { amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize }:
         { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number }) {
@@ -106,8 +116,8 @@ export function getPubInputs(
     circuitSize ??= getCircuitSize(nullifiers.length)
     for (let index = 0; index < circuitSize; index++) {
         // empty values are ignored in the circuit, but it's still better for privacy to set them to something random since these are public
-        const noteHash = noteHashes[index] === undefined ? Fr.random().toBigInt() : noteHashes[index]
-        const nullifier = nullifiers[index] === undefined ? Fr.random().toBigInt() : nullifiers[index]
+        const noteHash = noteHashes[index] === undefined ? randomBN254FieldElement() : noteHashes[index]
+        const nullifier = nullifiers[index] === undefined ? randomBN254FieldElement() : nullifiers[index]
         const publicBurnPoofData: BurnDataPublic = {
             account_note_hash: toHex(noteHash),
             account_note_nullifier: toHex(nullifier),

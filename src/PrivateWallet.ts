@@ -231,7 +231,7 @@ export class PrivateWallet {
         return burnAccounts
     }
 
-    async createBurnAccountFromViewKeyIndex({ viewingKeyIndex, chainId, difficulty = this.powDifficulty, async = false }: { viewingKeyIndex:number, async?: boolean, chainId: bigint, viewingKey?: bigint, difficulty?: bigint }) {
+    async createBurnAccountFromViewKeyIndex({ viewingKeyIndex, chainId, difficulty = this.powDifficulty, async = false }: { viewingKeyIndex:number, async?: boolean, chainId?: bigint, viewingKey?: bigint, difficulty?: bigint }) {
         chainId ??= this.defaultChainId
         const { x: spendingPubKeyX } = await this.getPubKey()
         const viewingKey = poseidon2Hash([
