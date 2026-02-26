@@ -99,9 +99,11 @@ export function hashAddress({ blindedAddressDataHash, powNonce }: { blindedAddre
     return addressHash
 }
 
+
+
 export function getBurnAddressSafe({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty: bigint }) {
     const addressHash = hashAddress({ blindedAddressDataHash, powNonce })
-    const powHash = poseidon2Hash([powNonce, addressHash]);
+    const powHash = hashPow({blindedAddressDataHash,powNonce});
     if (powHash < difficulty === false) {
         throw new Error(`
 Invalid powNonce. 
@@ -119,8 +121,7 @@ export function getBurnAddress({ blindedAddressDataHash, powNonce }: { blindedAd
 }
 
 export function hashPow({ blindedAddressDataHash, powNonce }: { blindedAddressDataHash: bigint, powNonce: bigint }) {
-    const addressHash = hashAddress({ blindedAddressDataHash, powNonce })
-    const powHash = poseidon2Hash([powNonce, addressHash]);
+    const powHash = poseidon2Hash([blindedAddressDataHash, powNonce]);
     return powHash
 }
 

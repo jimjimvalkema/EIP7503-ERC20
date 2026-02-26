@@ -57,11 +57,14 @@ fn hash_blinded_burn_address_data(spending_pub_key_x:Field, chain_id:Field, view
     Poseidon2::hash([spending_pub_key_x, viewing_key, chain_id], 3)
 }
 
-// pow_nonce acts both as a PoW to make finding a hash collision between EOA and BurnAddress harder
-fn hash_burn_address(blinded_address_data_hash: Field, pow_nonce: Field, pow_difficulty: Field ) -> Field {
-    let address_hash: Field = Poseidon2::hash([blinded_address_data_hash, pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
-    let pow_hash: Field = Poseidon2::hash([pow_nonce, address_hash], 2); 
+fn verify_pow(blinded_address_data_hash: Field, pow_nonce: Field, pow_difficulty: Field ) {
+    let pow_hash: Field = Poseidon2::hash([blinded_address_data_hash, pow_nonce], 2); 
     assert_lt(pow_hash, pow_difficulty); //"pow failed: pow_nonce results in hash that is not < pow_difficulty"
+}
+
+// pow_nonce acts both as a PoW to make finding a hash collision between EOA and BurnAddress harder
+fn hash_burn_address(blinded_address_data_hash: Field, pow_nonce: Field) -> Field {
+    let address_hash: Field = Poseidon2::hash([blinded_address_data_hash, pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
 
     // // replace last 12 bytes with zero since a eth address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
     let bytes: [u8; 32] = address_hash.to_be_bytes();
@@ -210,7 +213,8 @@ pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32, let POW_DIFFICULTY: Field>(
 ) {
   
     let blinded_address_data_hash: Field = hash_blinded_burn_address_data(spending_pub_key_x, chain_id, viewing_key );
-    let private_address: Field = hash_burn_address(blinded_address_data_hash, pow_nonce, POW_DIFFICULTY);
+    let private_address: Field = hash_burn_address(blinded_address_data_hash, pow_nonce);
+    verify_pow(blinded_address_data_hash, pow_nonce, POW_DIFFICULTY);
 
     // verify how much is "burned"
     let total_burned_leaf: Field = hash_total_burned_leaf(private_address, total_burned);

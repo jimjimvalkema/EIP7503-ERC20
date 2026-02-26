@@ -16,8 +16,11 @@ export const TOTAL_SPENT_DOMAIN = 0x544f54414c5f5350454e44n; // UTF8("TOTAL_SPEN
 // @TODO double check this field limit. Should be fine but claude gave me a different number
 export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034343698204186575808495616n;
 export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
-export const POW_LEADING_ZEROS = 4n;
-export const POW_DIFFICULTY = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
+//export const POW_LEADING_ZEROS = 4n;
+export const ADDED_BITS_SECURITY = 8n; // 88 bits total, ~2.0s (max ~8s) pow time , $2.6 trillion attack cost ($10b * 2**(16/2)), 
+export const POW_BITS = ADDED_BITS_SECURITY*2n; //  ADDED_BITS_SECURITY*2 because PoW is only added to burn address, so problem only becomes half as hard
+// 2^(intSize-POW_BITS)-1;
+export const POW_DIFFICULTY = 2n**(256n-POW_BITS)-1n//16n ** (64n - POW_LEADING_ZEROS) - 1n;
 
 export const MAX_TREE_DEPTH = 44 as const;
 export const ENCRYPTED_TOTAL_SPENT_PADDING = 256 // leaving some space for other things. Fits about 3 other key value pairs

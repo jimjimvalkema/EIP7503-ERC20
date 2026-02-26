@@ -1,8 +1,8 @@
 import { queryEventInChunks } from "@warptoad/gigabridge-js/viem-utils"
 import type { LeanIMTHashFunction } from "@zk-kit/lean-imt"
-import {LeanIMT } from "@zk-kit/lean-imt"
-import type { Abi, AbiEvent, Address, Hex, PublicClient} from "viem"
-import {bytesToHex, concatHex, hexToBytes, presignMessagePrefix, sliceHex, toBytes, toHex } from "viem"
+import { LeanIMT } from "@zk-kit/lean-imt"
+import type { Abi, AbiEvent, Address, Hex, PublicClient } from "viem"
+import { bytesToHex, concatHex, hexToBytes, presignMessagePrefix, sliceHex, toBytes, toHex } from "viem"
 import type { WormholeTokenTest } from "../test/2inRemint.test.ts"
 import { ENCRYPTED_TOTAL_SPENT_PADDING, WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.ts"
 import type { BurnAccount, PreSyncedTree, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts"
@@ -65,7 +65,7 @@ export async function getSyncedMerkleTree(
     return { tree, lastSyncedBlock, firstSyncedBlock: deploymentBlock } as PreSyncedTree
 }
 
-async function encrypt({ plaintext, viewingKey, padding=ENCRYPTED_TOTAL_SPENT_PADDING }: { plaintext: string, viewingKey: bigint, padding?:number }): Promise<Hex> {
+async function encrypt({ plaintext, viewingKey, padding = ENCRYPTED_TOTAL_SPENT_PADDING }: { plaintext: string, viewingKey: bigint, padding?: number }): Promise<Hex> {
     if (plaintext.length > padding) {
         throw new Error(`Plaintext too long: ${plaintext.length} > ${padding}`)
     }
@@ -118,12 +118,12 @@ async function decrypt({ viewingKey, cipherText }: { viewingKey: bigint, cipherT
     return new TextDecoder().decode(decrypted).replace(/\0+$/, '')
 }
 
-export async function encryptTotalSpend({ viewingKey, amount }: { viewingKey: bigint, amount: bigint }):Promise<Hex> {
-    const json = {totalSpend:toHex(amount, {size:32})}
-    return await encrypt({plaintext:JSON.stringify(json), viewingKey})
+export async function encryptTotalSpend({ viewingKey, amount }: { viewingKey: bigint, amount: bigint }): Promise<Hex> {
+    const json = { totalSpend: toHex(amount, { size: 32 }) }
+    return await encrypt({ plaintext: JSON.stringify(json), viewingKey })
 }
 
-export async function decryptTotalSpend({ viewingKey, totalSpentEncrypted }: { viewingKey: bigint, totalSpentEncrypted: Hex }):Promise<bigint> {
+export async function decryptTotalSpend({ viewingKey, totalSpentEncrypted }: { viewingKey: bigint, totalSpentEncrypted: Hex }): Promise<bigint> {
     const decryptedJson = JSON.parse(await decrypt({ viewingKey: viewingKey, cipherText: totalSpentEncrypted }))
     return BigInt(decryptedJson.totalSpend)
 }
@@ -137,11 +137,13 @@ export async function syncBurnAccount(
         : { wormholeToken: WormholeToken | WormholeTokenTest, burnAccount: BurnAccount, archiveNode: PublicClient }
 ): Promise<SyncedBurnAccount> {
     const viewingKey = BigInt(burnAccount.viewingKey)
-    let accountNonce = BigInt(burnAccount.accountNonce ?? 0n)
+    const initialAccountNonce = BigInt(burnAccount.accountNonce ?? 0n)
+    let accountNonce = initialAccountNonce
+    //accountNonce = accountNonce === 0n ? 0n : accountNonce - 1n
     let totalSpent = BigInt(burnAccount.totalSpent ?? 0n)
     let isNullified = true;
-    let lastSpendBlockNum: bigint = 0n
-    let lastNullifier:bigint = 0n;
+    let lastSpendBlockNum: bigint | null = null
+    let lastNullifier: bigint | null = null;
     while (isNullified) {
         const nullifier = hashNullifier({ accountNonce: accountNonce, viewingKey: viewingKey })
         const nullifiedAtBlock = await wormholeToken.read.nullifiers([nullifier])
@@ -154,20 +156,31 @@ export async function syncBurnAccount(
         lastNullifier = nullifier
     }
 
-    const logs = await archiveNode.getContractEvents({
-        address: wormholeToken.address,
-        abi: wormholeToken.abi,
-        eventName: "Nullified",
-        fromBlock: lastSpendBlockNum,
-        toBlock: lastSpendBlockNum,
-        args: {
-            nullifier: lastNullifier,
-        },
-    })
-    // accountNonce not 0? we have spent before!
-    if (accountNonce !== 0n) {
-        const totalSpentEncrypted = logs[0].args.encryptedTotalSpends as Hex;
-        totalSpent = await decryptTotalSpend({totalSpentEncrypted:totalSpentEncrypted, viewingKey:BigInt(viewingKey)});
+    // console.log({
+    //     lastNullifier,
+    //     lastSpendBlockNum,
+    //     accountNonce
+    // })
+
+    // the above loop will have lastSpendBlockNum and lastNullifier. Set to 0n, if the account is already synced.
+    // so we need to skip getContractEvents since no event is at block 0 and we don't need totalSpentEncrypted, we are already synced
+    if (accountNonce > initialAccountNonce) {
+        if (lastSpendBlockNum === null) {
+            throw new Error("nullifiedAtBlock can't be null")
+        } else {
+            const logs = await archiveNode.getContractEvents({
+                address: wormholeToken.address,
+                abi: wormholeToken.abi,
+                eventName: "Nullified",
+                fromBlock: lastSpendBlockNum,
+                toBlock: lastSpendBlockNum,
+                args: {
+                    nullifier: lastNullifier,
+                },
+            })
+            const totalSpentEncrypted = logs[0].args.encryptedTotalSpends as Hex;
+            totalSpent = await decryptTotalSpend({ totalSpentEncrypted: totalSpentEncrypted, viewingKey: BigInt(viewingKey) });
+        }
     }
 
     const totalReceived = await wormholeToken.read.balanceOf([burnAccount.burnAddress]);

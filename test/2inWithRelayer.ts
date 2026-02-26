@@ -6,7 +6,7 @@ import { network } from "hardhat";
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 
-import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer2InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100in, PrivateTransfer100InVerifierContractName } from "../src/constants.js";
+import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer2InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100in, PrivateTransfer100InVerifierContractName, CIRCUIT_SIZES } from "../src/constants.js";
 import { getSyncedMerkleTree } from "../src/syncing.js";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { getBackend } from "../src/proving.js";
@@ -16,6 +16,7 @@ import { PrivateWallet } from "../src/PrivateWallet.js";
 import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Hash, type Hex } from "viem";
 import type { FeeData, RelayInputs } from "../src/types.ts";
 
+const CIRCUIT_SIZE = 2;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
 
 export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
@@ -31,7 +32,7 @@ describe("Token", async function () {
     let PrivateTransferVerifier1In: ContractReturnType<typeof PrivateTransfer2InVerifierContractName>;
     let PrivateTransferVerifier100In: ContractReturnType<typeof PrivateTransfer100InVerifierContractName>;
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
-    const circuitBackend = await getBackend(2, provingThreads);
+    const circuitBackend = await getBackend(CIRCUIT_SIZE, provingThreads);
     const [deployer, alice, bob, carol, relayer, feeEstimator] = await viem.getWalletClients()
     //let feeEstimatorPrivate: UnsyncedPrivateWallet
 
@@ -107,7 +108,8 @@ describe("Token", async function () {
                 backend: circuitBackend,
                 //deploymentBlock,
                 //blocksPerGetLogsReq,
-                feeData: feeData
+                feeData: feeData,
+                circuitSize:CIRCUIT_SIZE
 
             })
             const reMintTx = await relayTx({ relayInputs: relayerInputs as RelayInputs, wallet: alice, wormholeTokenContract: wormholeTokenAlice })

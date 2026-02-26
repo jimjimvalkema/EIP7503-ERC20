@@ -16,6 +16,7 @@ import { PrivateWallet } from "../src/PrivateWallet.js";
 import { getContract, padHex, parseEventLogs, type Hash, type Hex } from "viem";
 
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
+const CIRCUIT_SIZE = 2;
 
 export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
 
@@ -30,7 +31,7 @@ describe("Token", async function () {
     let PrivateTransferVerifier2In: ContractReturnType<typeof PrivateTransfer2InVerifierContractName>;
     let PrivateTransferVerifier100In: ContractReturnType<typeof PrivateTransfer100InVerifierContractName>;
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
-    const circuitBackend = await getBackend(2, provingThreads);
+    const circuitBackend = await getBackend(CIRCUIT_SIZE, provingThreads);
     const [deployer, alice, bob, carol, relayer, feeEstimator] = await viem.getWalletClients()
     //let feeEstimatorPrivate: UnsyncedPrivateWallet
 
@@ -133,6 +134,7 @@ describe("Token", async function () {
                     backend: circuitBackend,
                     //deploymentBlock,
                     //blocksPerGetLogsReq 
+                    circuitSize:CIRCUIT_SIZE
                 })
                 expectedRecipientBalance += reMintAmount
                 reMintTxs.push(reMintTx)
@@ -203,6 +205,7 @@ describe("Token", async function () {
                     backend: circuitBackend,
                     //deploymentBlock,
                     //blocksPerGetLogsReq 
+                    circuitSize:CIRCUIT_SIZE
                 })
                 expectedRecipientBalance += reMintAmount
                 reMintTxs.push(reMintTx)

@@ -10,11 +10,14 @@ import WormholeTokenArtifact from '../artifacts/contracts/WormholeToken.sol/Worm
 import sepoliaDeployments from "../ignition/deployments/chain-11155111/deployed_addresses.json" with {"type":"json"};
 import type { WormholeTokenTest } from '../test/2inRemint.test.ts';
 
+import * as viem from 'viem'
 const CIRCUIT_SIZE = 2
 
 const wormholeTokenAddress = sepoliaDeployments['wormholeToken#WormholeToken'] as Address;
 //@ts-ignore
 window.wormholeTokenAddress = wormholeTokenAddress
+//@ts-ignore
+window.viem = viem
 console.log({ wormholeTokenAddress })
 
 const logEl = document.getElementById("messages")

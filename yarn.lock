@@ -1087,6 +1087,13 @@
   dependencies:
     "@nomicfoundation/hardhat-utils" "^3.0.1"
 
+"@nomicfoundation/hardhat-errors@^3.0.7":
+  version "3.0.7"
+  resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-errors/-/hardhat-errors-3.0.7.tgz#9c5d45c38adf09f3db481dbc1b8138dbdc67eb04"
+  integrity sha512-l4RrzTfJ/WO0B9Te6i9161+pRbCSFXILanmHmgRfS4Bb4pDOjs+0eQf2I2cQrnqcJ6O/bxLvChPTQuad97dmQw==
+  dependencies:
+    "@nomicfoundation/hardhat-utils" "^4.0.0"
+
 "@nomicfoundation/hardhat-ignition-viem@^3.0.0":
   version "3.0.7"
   resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-ignition-viem/-/hardhat-ignition-viem-3.0.7.tgz#8425a222489c19f64de81838a98228dd87bccebb"
@@ -1170,6 +1177,20 @@
     rfdc "^1.3.1"
     undici "^6.16.1"
 
+"@nomicfoundation/hardhat-utils@^4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-utils/-/hardhat-utils-4.0.0.tgz#3e2fc740f6a38160ee2330c8780f748695b6f92c"
+  integrity sha512-Deu4od7flcM89K+SEAxmOyn7FFWGiEILrGjoxYl/Gus0tctgpLNaK3M4LIjrJ25ci8LBjGVe3i28XZA4+QGQHQ==
+  dependencies:
+    "@streamparser/json-node" "^0.0.22"
+    debug "^4.3.2"
+    env-paths "^2.2.0"
+    ethereum-cryptography "^2.2.1"
+    fast-equals "^5.4.0"
+    json-stream-stringify "^3.1.6"
+    rfdc "^1.3.1"
+    undici "^6.16.1"
+
 "@nomicfoundation/hardhat-verify@^3.0.6":
   version "3.0.10"
   resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-verify/-/hardhat-verify-3.0.10.tgz#ca0f4e7fae5cffaec051d39aa613e1dde531d84d"
@@ -1193,13 +1214,13 @@
     "@nomicfoundation/hardhat-errors" "^3.0.5"
     "@nomicfoundation/hardhat-utils" "^3.0.6"
 
-"@nomicfoundation/hardhat-viem@^3.0.0":
-  version "3.0.2"
-  resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-viem/-/hardhat-viem-3.0.2.tgz#f0526ffd40a5701c47bf0e17a501901dbd0f24b5"
-  integrity sha512-u/2IcKhfpD0toaC/P2Zqu+tMT7lDcs3mgp/RIQk8C+IAG0L3YMaCAjLKGWtMNhJQ/oqCM4rNBfdSe2ltvNCyXQ==
+"@nomicfoundation/hardhat-viem@^3.0.3":
+  version "3.0.3"
+  resolved "https://registry.yarnpkg.com/@nomicfoundation/hardhat-viem/-/hardhat-viem-3.0.3.tgz#38673472bf1433a0a3ef8b22257579238123f429"
+  integrity sha512-UgI4QcEGP0Vy/NT3BzycSX3+rut1Avzym4k7fogki+pUz8jAxyoW0s2SsPY5tY/Cq6bTZXjlDQTt+mY5E52vgg==
   dependencies:
-    "@nomicfoundation/hardhat-errors" "^3.0.0"
-    "@nomicfoundation/hardhat-utils" "^3.0.6"
+    "@nomicfoundation/hardhat-errors" "^3.0.7"
+    "@nomicfoundation/hardhat-utils" "^4.0.0"
 
 "@nomicfoundation/hardhat-zod-utils@^3.0.0", "@nomicfoundation/hardhat-zod-utils@^3.0.1":
   version "3.0.1"
