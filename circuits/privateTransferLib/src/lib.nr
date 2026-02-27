@@ -7,11 +7,9 @@ use dep::std::field::{bytes32_to_field, bn254::{
     gt
 }};
 use binary_merkle_root::binary_merkle_root;
+use constants::{PRIVATE_ADDRESS_TYPE,TOTAL_BURNED_DOMAIN,TOTAL_SPENT_DOMAIN};
 
-// domain separators
-pub global PRIVATE_ADDRESS_TYPE: Field = 0x5a4b574f524d484f4c45; // UTF8("ZKWORMHOLE").toHex() [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('')
-pub global TOTAL_BURNED_DOMAIN: Field = 0x544f54414c5f4255524e4544; // UTF8("TOTAL_BURNED").toHex()
-pub global TOTAL_SPENT_DOMAIN: Field = 0x544f54414c5f5350454e44; // UTF8("TOTAL_SPEND").toHex()
+
 // @TODO find out what number would be secure enough!
 // const POW_LEADING_ZEROS = 4n;
 // const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
@@ -148,11 +146,12 @@ pub struct BurnDataPrivate <let MAX_TREE_DEPTH: u32> {
     total_burned_merkle_data: MerkleData<MAX_TREE_DEPTH>,
 }
 
-pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32, let POW_DIFFICULTY: Field>(
+pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32>(
     //public
     root: Field, 
     chain_id: Field,
     total_amount_to_spent: Field, 
+    pow_difficulty: Field,
     burn_data_public: [BurnDataPublic],
     //private
     burn_data_private: [BurnDataPrivate<MAX_TREE_DEPTH>],
@@ -162,10 +161,11 @@ pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32, let POW_DIFFICULTY: Field
     let mut amount_verified: Field = 0;
     for i in 0..burn_data_private.len() {
         if( i < amount_burn_addresses) {
-            spendFromBurnAddress::<MAX_TREE_DEPTH, POW_DIFFICULTY>(
+            spendFromBurnAddress::<MAX_TREE_DEPTH>(
                 //public
                 root,
                 chain_id,
+                pow_difficulty,
                 burn_data_public[i].account_note_hash,
                 burn_data_public[i].account_note_nullifier,
 
@@ -189,10 +189,11 @@ pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32, let POW_DIFFICULTY: Field
     assert(amount_verified == total_amount_to_spent, "aggregated burn address amounts do not match amount to spend");
 }
 
-pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32, let POW_DIFFICULTY: Field>(
+pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32>(
     // public
     root: Field,
     chain_id: Field,
+    pow_difficulty: Field,
     account_note_hash: Field,
     account_note_nullifier: Field,
 
@@ -214,7 +215,7 @@ pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32, let POW_DIFFICULTY: Field>(
   
     let blinded_address_data_hash: Field = hash_blinded_burn_address_data(spending_pub_key_x, chain_id, viewing_key );
     let private_address: Field = hash_burn_address(blinded_address_data_hash, pow_nonce);
-    verify_pow(blinded_address_data_hash, pow_nonce, POW_DIFFICULTY);
+    verify_pow(blinded_address_data_hash, pow_nonce, pow_difficulty);
 
     // verify how much is "burned"
     let total_burned_leaf: Field = hash_total_burned_leaf(private_address, total_burned);

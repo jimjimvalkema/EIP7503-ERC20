@@ -9,7 +9,7 @@ import { UltraHonkBackend } from "@aztec/bb.js";
 import { getSyncedMerkleTree, getDeploymentBlock, syncMultipleBurnAccounts, encryptTotalSpend } from "./syncing.ts";
 import { getBurnAddress, getBurnAddressSafe, hashBlindedAddressData, hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, padWithRandomHex, signPrivateTransfer, signPrivateTransferWithFee } from "./hashing.ts";
 import { PrivateWallet } from "./PrivateWallet.ts";
-import { CIRCUIT_SIZES, EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, LARGEST_CIRCUIT_SIZE, MAX_TREE_DEPTH, POW_DIFFICULTY } from "./constants.ts";
+import { CIRCUIT_SIZES, EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, LARGEST_CIRCUIT_SIZE, MAX_TREE_DEPTH } from "./constants.ts";
 
 
 export function getHashedInputs(
@@ -73,7 +73,8 @@ export function getCircuitSize(amountBurnAddresses: number) {
  * @param difficulty 
  * @returns 
  */
-export async function safeBurn(burnAccount: NotOwnedBurnAccount | UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint, maxTreeDepth = MAX_TREE_DEPTH, difficulty = POW_DIFFICULTY) {
+export async function safeBurn(burnAccount: NotOwnedBurnAccount | UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint, maxTreeDepth = MAX_TREE_DEPTH, difficulty?:bigint ) {
+    difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
     const burnAddress = getBurnAddressSafe({ blindedAddressDataHash: BigInt(burnAccount.blindedAddressDataHash), powNonce: BigInt(burnAccount.powNonce), difficulty: difficulty })
     const treeSize = await wormholeToken.read.treeSize()
     const safeDistanceFromFullTree = (35_000n / 10n) * 60n * 60n // 35_000 burn tx's for 1 hour.  assumes a 35_000 tps chain and burn txs being 10x expensive
@@ -97,7 +98,8 @@ export async function safeBurn(burnAccount: NotOwnedBurnAccount | UnsyncedBurnAc
  * @param difficulty 
  * @returns 
  */
-export async function superSafeBurn(burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint, maxTreeDepth = MAX_TREE_DEPTH, difficulty = POW_DIFFICULTY) {
+export async function superSafeBurn(burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint, difficulty?:bigint, maxTreeDepth = MAX_TREE_DEPTH) {
+    difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
     const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX: burnAccount.spendingPubKeyX, viewingKey: BigInt(burnAccount.viewingKey), chainId: BigInt(burnAccount.chainId) })
     const burnAddress = getBurnAddressSafe({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(burnAccount.powNonce), difficulty: difficulty })
     const treeSize = await wormholeToken.read.treeSize()
@@ -152,10 +154,11 @@ export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddr
  * @returns 
  */
 export async function createRelayerInputs(
-    { threads, chainId, amount, recipient, callData = "0x", callValue = 0n, callCanFail = true, feeData, privateWallet, burnAddresses, wormholeToken, archiveClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
-        { threads?:number, chainId: bigint, amount: bigint, recipient: Address, callData?: Hex, callCanFail?: boolean, callValue?: bigint, feeData?: FeeData, privateWallet: PrivateWallet, burnAddresses?: Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number }
+    { threads, chainId, amount, recipient, callData = "0x", callValue = 0n, callCanFail = true, feeData, privateWallet, burnAddresses, wormholeToken, archiveClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize,powDifficulty, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
+        { threads?:number, chainId: bigint, amount: bigint, recipient: Address, callData?: Hex, callCanFail?: boolean, callValue?: bigint, feeData?: FeeData, privateWallet: PrivateWallet, burnAddresses?: Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number,powDifficulty?:Hex, maxTreeDepth?: number, encryptedBlobLen?: number }
 ): Promise<SelfRelayInputs | RelayInputs> {
     burnAddresses ??= privateWallet.privateData.burnAccounts.map((b) => b.burnAddress)
+    powDifficulty ??= await wormholeToken.read.POW_DIFFICULTY()
     const syncedPrivateWallet = await syncMultipleBurnAccounts({
         wormholeToken: wormholeToken,
         archiveNode: archiveClient,
@@ -242,7 +245,8 @@ export async function createRelayerInputs(
         signatureHash: signatureHash,
         nullifiers: nullifiers,
         noteHashes: noteHashes,
-        circuitSize: circuitSize
+        circuitSize: circuitSize,
+        powDifficulty: powDifficulty,
     })
     const privateInputs = getPrivInputs({
         burnAccountsProofs: burnAccountProofs,

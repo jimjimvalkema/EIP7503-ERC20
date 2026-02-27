@@ -4,7 +4,7 @@ import type { Address, Hex, WalletClient } from "viem";
 import { hashMessage, hexToBytes, toBytes, toHex } from "viem";
 import type { BurnAccount, noPowBurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
 import { extractPubKeyFromSig, findPoWNonce, findPoWNonceAsync, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.ts";
-import { POW_DIFFICULTY, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
+import { VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 //import { findPoWNonceAsync } from "./hashingAsync.js";
 
@@ -35,8 +35,8 @@ export class PrivateWallet {
      * @param privateWalletData 
      */
     constructor(
-        viemWallet: WalletClient,
-        { privateWalletData, viewKeySigMessage = VIEWING_KEY_SIG_MESSAGE, powDifficulty = POW_DIFFICULTY, acceptedChainIds = [1n], defaultChainId }:
+        viemWallet: WalletClient, powDifficulty: bigint,
+        { privateWalletData, viewKeySigMessage = VIEWING_KEY_SIG_MESSAGE, acceptedChainIds = [1n], defaultChainId }:
             { privateWalletData?: PrivateWalletData, viewKeySigMessage?: string, powDifficulty?: bigint, acceptedChainIds?: bigint[], defaultChainId?: bigint } = {}
     ) {
         this.viemWallet = viemWallet
@@ -182,7 +182,7 @@ export class PrivateWallet {
                 powNonce = findPoWNonce({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty })
             }
         }
-        if (verifyPowNonce({ blindedAddressDataHash, powNonce: BigInt(powNonce) }) === false) { throw new Error("Provided powNonce is not valid") }
+        if (verifyPowNonce({ blindedAddressDataHash, powNonce: BigInt(powNonce), difficulty: difficulty }) === false) { throw new Error("Provided powNonce is not valid") }
 
         const burnAddress = getBurnAddress({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(powNonce) })
         const burnAccount: UnsyncedBurnAccount = {
@@ -192,7 +192,8 @@ export class PrivateWallet {
             burnAddress: burnAddress,
             chainId: toHex(chainId),
             blindedAddressDataHash: toHex(blindedAddressDataHash, { size: 32 }),
-            spendingPubKeyX: spendingPubKeyX
+            spendingPubKeyX: spendingPubKeyX,
+            difficulty: toHex(difficulty, { size: 32 })
         }
 
         this.privateData.burnAccounts.push(burnAccount)
@@ -224,22 +225,22 @@ export class PrivateWallet {
      */
     async createBurnAccounts(amountOfBurnAccounts: number, { chainId, difficulty = this.powDifficulty, async = false }: { async?: boolean, chainId?: bigint, difficulty?: bigint } = {}) {
         chainId ??= this.defaultChainId
-        const burnAccountsPromises = new Array(amountOfBurnAccounts).fill(0).map((v,i)=>this.createBurnAccountFromViewKeyIndex({ viewingKeyIndex:this.detViewKeyCounter+i, chainId:chainId, difficulty:difficulty, async:async}))
+        const burnAccountsPromises = new Array(amountOfBurnAccounts).fill(0).map((v, i) => this.createBurnAccountFromViewKeyIndex({ viewingKeyIndex: this.detViewKeyCounter + i, chainId: chainId, difficulty: difficulty, async: async }))
         const burnAccounts = await Promise.all(burnAccountsPromises)
         this.detViewKeyCounter += amountOfBurnAccounts
         this.privateData.burnAccounts = [...this.privateData.burnAccounts, ...burnAccounts]
         return burnAccounts
     }
 
-    async createBurnAccountFromViewKeyIndex({ viewingKeyIndex, chainId, difficulty = this.powDifficulty, async = false }: { viewingKeyIndex:number, async?: boolean, chainId?: bigint, viewingKey?: bigint, difficulty?: bigint }) {
+    async createBurnAccountFromViewKeyIndex({ viewingKeyIndex, chainId, difficulty = this.powDifficulty, async = false }: { viewingKeyIndex: number, async?: boolean, chainId?: bigint, viewingKey?: bigint, difficulty?: bigint }) {
         chainId ??= this.defaultChainId
         const { x: spendingPubKeyX } = await this.getPubKey()
         const viewingKey = poseidon2Hash([
-                BigInt(await this.getDeterministicViewKeyRoot()),
-                BigInt(viewingKeyIndex)
-            ])
+            BigInt(await this.getDeterministicViewKeyRoot()),
+            BigInt(viewingKeyIndex)
+        ])
         const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX, viewingKey: viewingKey as bigint, chainId: chainId })
-        let powNonce:bigint;
+        let powNonce: bigint;
         if (async) {
             powNonce = await findPoWNonceAsync({ blindedAddressDataHash, startingValue: viewingKey as bigint, difficulty: difficulty }) as bigint
         } else {
@@ -253,7 +254,8 @@ export class PrivateWallet {
             burnAddress: burnAddress,
             chainId: toHex(chainId),
             blindedAddressDataHash: toHex(blindedAddressDataHash, { size: 32 }),
-            spendingPubKeyX: spendingPubKeyX
+            spendingPubKeyX: spendingPubKeyX,
+            difficulty: toHex(difficulty, { size: 32 }),
         }
         return burnAccount
 

@@ -1,7 +1,7 @@
 import type { Hex, Signature, Account, Hash, WalletClient, Address, } from "viem";
 import { recoverPublicKey, hashMessage, hexToBigInt, hexToBytes, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex, hashTypedData } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, POW_DIFFICULTY, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, PRIVATE_RE_MINT_RELAYER_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
+import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, PRIVATE_RE_MINT_RELAYER_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import type { FeeData, SignatureData, SignatureInputs, SignatureInputsWithFee, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.ts";
 import { PrivateWallet } from "./PrivateWallet.ts"
 import { padArray } from "./proving.ts";
@@ -15,7 +15,7 @@ import { encryptTotalSpend } from "./syncing.ts";
 export async function findPoWNonceAsync({
     blindedAddressDataHash,
     startingValue,
-    difficulty = POW_DIFFICULTY,
+    difficulty,
 }: {
     blindedAddressDataHash: bigint;
     startingValue: bigint;
@@ -57,7 +57,7 @@ export async function findPoWNonceAsync({
     }
 }
 
-export function verifyPowNonce({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty?: bigint }) {
+export function verifyPowNonce({ blindedAddressDataHash, powNonce, difficulty }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty: bigint }) {
     const powHash = hashPow({ blindedAddressDataHash, powNonce });
     return powHash < difficulty
 }
@@ -101,7 +101,7 @@ export function hashAddress({ blindedAddressDataHash, powNonce }: { blindedAddre
 
 
 
-export function getBurnAddressSafe({ blindedAddressDataHash, powNonce, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty: bigint }) {
+export function getBurnAddressSafe({ blindedAddressDataHash, powNonce, difficulty }: { blindedAddressDataHash: bigint, powNonce: bigint, difficulty: bigint }) {
     const addressHash = hashAddress({ blindedAddressDataHash, powNonce })
     const powHash = hashPow({blindedAddressDataHash,powNonce});
     if (powHash < difficulty === false) {
@@ -172,7 +172,7 @@ export function padWithRandomHex({ arr, len, hexSize, dir }: { arr: Hex[], len: 
 //     }
 // }
 
-export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty = POW_DIFFICULTY }: { blindedAddressDataHash: bigint, startingValue: bigint, difficulty?: bigint }) {
+export function findPoWNonce({ blindedAddressDataHash, startingValue, difficulty }: { blindedAddressDataHash: bigint, startingValue: bigint, difficulty: bigint }) {
     let powNonce: bigint = startingValue;
     let powHash: bigint = hashPow({ blindedAddressDataHash, powNonce });
     let hashingRounds = 0

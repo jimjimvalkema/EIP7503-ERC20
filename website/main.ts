@@ -199,7 +199,8 @@ async function connectPrivateWallet() {
   publicWallet.account = { address: publicAddress }
 
   const chainId = BigInt(await publicClient.getChainId())
-  const privateWallet = new PrivateWallet(publicWallet, { acceptedChainIds: [chainId] })
+  const POW_DIFFICULTY = BigInt(await wormholeTokenWallet.read.POW_DIFFICULTY())
+  const privateWallet = new PrivateWallet(publicWallet, POW_DIFFICULTY,{ acceptedChainIds: [chainId] })
   logUi("creating private wallet...\n please sign the message in your wallet")
   await privateWallet.getDeterministicViewKeyRoot()
   const burnAccountPromise = privateWallet.createBurnAccountFromViewKeyIndex({ async: true, viewingKeyIndex:0});

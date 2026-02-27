@@ -54,6 +54,10 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     uint256 public amountFreeTokens = 1000000*10**decimals();
     uint256 public decimalsTokenPrice = 8;
 
+
+    bytes32 public POW_DIFFICULTY; // find a nonce that result in a hash that is hash < pow_difficulty
+
+
     address public privateTransferVerifier2In;
     address public privateTransferVerifier100In;
     LeanIMTData public tree;
@@ -61,12 +65,13 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     /**
      * 
      */
-    constructor(address _privateTransferVerifier2In, address _privateTransferVerifier100In)
+    constructor(address _privateTransferVerifier2In, address _privateTransferVerifier100In, bytes32 _powDifficulty)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
         EIP712("zkwormholes-token", "1") 
     {
         privateTransferVerifier2In = _privateTransferVerifier2In;
         privateTransferVerifier100In = _privateTransferVerifier100In;
+        POW_DIFFICULTY = _powDifficulty;
     }
 
     function treeSize() public view  returns (uint256) {
@@ -274,13 +279,14 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         bytes32 _signatureHash,
         uint256[] memory _accountNoteHashes,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
-    ) public pure returns (bytes32[] memory) {
+    ) public view returns (bytes32[] memory) {
         if (_accountNoteHashes.length == 2) {
-            bytes32[] memory publicInputs = new bytes32[](34 + 2*2);
+            bytes32[] memory publicInputs = new bytes32[](3 + 32 + 2*2);
 
             publicInputs[0] = bytes32(_root);
             publicInputs[1] = bytes32(uint256(_amount));
-            uint256 signatureHashOffset = 2;
+            publicInputs[2] = POW_DIFFICULTY;
+            uint256 signatureHashOffset = 3;
             for (uint256 i = 0; i < 32; i++) {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }
@@ -294,11 +300,12 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
             return publicInputs;
 
         } else if (_accountNoteHashes.length == 100) {
-            bytes32[] memory publicInputs = new bytes32[](34 + 100*2);
+            bytes32[] memory publicInputs = new bytes32[](3 + 32 + 100*2);
 
             publicInputs[0] = bytes32(_root);
             publicInputs[1] = bytes32(uint256(_amount));
-            uint256 signatureHashOffset = 2;
+            publicInputs[2] = POW_DIFFICULTY;
+            uint256 signatureHashOffset = 3;
             for (uint256 i = 0; i < 32; i++) {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }

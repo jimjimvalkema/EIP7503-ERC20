@@ -109,8 +109,8 @@ function randomBN254FieldElement(): bigint {
 }
 
 export function getPubInputs(
-    { amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize }:
-        { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number }) {
+    { amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize, powDifficulty }:
+        { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number, powDifficulty:Hex }) {
 
     const burn_data_public: BurnDataPublic[] = []
     circuitSize ??= getCircuitSize(nullifiers.length)
@@ -130,6 +130,7 @@ export function getPubInputs(
         amount: toHex(amountToReMint),
         signature_hash: hexToU8AsHexLen32(signatureHash),
         burn_data_public: burn_data_public,
+        pow_difficulty:powDifficulty
     }
     return pubInputs
 }

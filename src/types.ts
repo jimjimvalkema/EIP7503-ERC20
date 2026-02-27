@@ -88,6 +88,7 @@ export interface PublicProofInputs extends InputMap {
     root: Hex,
     chain_id: Hex, // technically not public since we don't use the cross-chain functionality here, can be revealed does not leak user data
     amount: Hex,
+    pow_difficulty:Hex,
     signature_hash: u8sAsHexArrLen32,
     burn_data_public: BurnDataPublic[],
 }
@@ -119,6 +120,7 @@ export interface NotOwnedBurnAccount {
     readonly powNonce: Hex;
     readonly burnAddress: Address;
     readonly blindedAddressDataHash: Hex;
+    readonly difficulty:Hex;
 }
 
 export interface UnsyncedBurnAccount extends NotOwnedBurnAccount {
