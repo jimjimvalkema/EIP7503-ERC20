@@ -1,23 +1,23 @@
 import type { Address } from "viem";
 import { getAddress, padHex } from "viem"
 import type { LeanIMTMerkleProof } from "@zk-kit/lean-imt";
-//import { convertRelayerInputsToHex } from "./transact.js";
+
+// ---- contract args -------------
+export const ADDED_BITS_SECURITY = 9n; // 89 bits total, ~2.5s (max ~10s) pow time , $5.1 trillion attack cost ($10b * 2**(16/2)), 
+export const POW_BITS = ADDED_BITS_SECURITY*2n; //  ADDED_BITS_SECURITY*2 because PoW is only added to burn address, so problem only becomes half as hard
+export const POW_DIFFICULTY = 2n**(256n-POW_BITS)-1n//16n ** (64n - POW_LEADING_ZEROS) - 1n;
+// i recommend picking a number far below the cost of attack and that is max 1% of total supply.
+// if needed you can periodically and programmatically change this number in the contract instead.
+// How ever do know it's public input. Meaning even the slightest change will invalidate pending tx, so please only update that number infrequently!
+// i chose this number since my token is ony a demo and has a uncapped supply
+export const MAX_TOTAL_RE_MINT_LIMIT = 100_000_000n*10n**18n; 
 
 // ---- circuit constants ---------------------
 export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('') as Hex
 export const TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544n; // UTF8("TOTAL_BURNED").toHex()
 export const TOTAL_SPENT_DOMAIN = 0x544f54414c5f5350454e44n; // UTF8("TOTAL_SPEND").toHex()
 
-// 2^(intSize-POW_BITS)-1;
-//export const POW_DIFFICULTY = 2n**(256n-POW_BITS)-1n//16n ** (64n - POW_LEADING_ZEROS) - 1n;
-
-export const ADDED_BITS_SECURITY = 8n; // 88 bits total, ~2.5s (max ~10s) pow time , $2.6 trillion attack cost ($10b * 2**(16/2)), 
-export const POW_BITS = ADDED_BITS_SECURITY*2n; //  ADDED_BITS_SECURITY*2 because PoW is only added to burn address, so problem only becomes half as hard
-//2^(intSize-POW_BITS)-1;
-export const POW_DIFFICULTY = 2n**(256n-POW_BITS)-1n//16n ** (64n - POW_LEADING_ZEROS) - 1n;
-
 export const MAX_TREE_DEPTH = 44 as const;
-
 
 //---------------- 
 

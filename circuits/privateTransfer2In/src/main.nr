@@ -9,6 +9,7 @@ fn main(
     chain_id: Field, // pub key word is removed since we don't use cross-chain functionality
     amount: pub Field,
     pow_difficulty: pub Field,
+    max_total_spend: pub Field,
     signature_hash: pub [u8;32],
     burn_data_public: pub [BurnDataPublic; BURN_ADDRESSES_LEN],
     // --- private inputs ---
@@ -36,6 +37,7 @@ fn main(
         chain_id,
         amount,
         pow_difficulty,
+        max_total_spend,
         burn_data_public,
         //private
         burn_data_private,

@@ -6,15 +6,15 @@ import { network } from "hardhat";
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 
-import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer2InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100in, PrivateTransfer100InVerifierContractName, CIRCUIT_SIZES, POW_DIFFICULTY } from "../src/constants.js";
-import { getSyncedMerkleTree } from "../src/syncing.js";
+import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer2InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100in, PrivateTransfer100InVerifierContractName, CIRCUIT_SIZES, POW_DIFFICULTY, MAX_TOTAL_RE_MINT_LIMIT } from "../src/constants.js";
+import { getSyncedMerkleTree, syncBurnAccount } from "../src/syncing.js";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { getBackend } from "../src/proving.js";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.js";
 import { PrivateWallet } from "../src/PrivateWallet.js";
 import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Hash, type Hex } from "viem";
-import type { FeeData, RelayInputs } from "../src/types.ts";
+import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccount } from "../src/types.ts";
 
 const CIRCUIT_SIZE = 2;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
@@ -29,7 +29,7 @@ describe("Token", async function () {
     const { viem } = await network.connect();
     const publicClient = await viem.getPublicClient();
     let wormholeToken: ContractReturnType<typeof WormholeTokenContractName>;
-    let PrivateTransferVerifier1In: ContractReturnType<typeof PrivateTransfer2InVerifierContractName>;
+    let PrivateTransferVerifier2In: ContractReturnType<typeof PrivateTransfer2InVerifierContractName>;
     let PrivateTransferVerifier100In: ContractReturnType<typeof PrivateTransfer100InVerifierContractName>;
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
     let powDifficulty = 0n
@@ -43,10 +43,22 @@ describe("Token", async function () {
         await deployPoseidon2Huff(publicClient, deployer, poseidon2Create2Salt)
         leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [], { libraries: {} });
         const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName100in, [], { libraries: {} });
-        PrivateTransferVerifier1In = await viem.deployContract(PrivateTransfer2InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
+        PrivateTransferVerifier2In = await viem.deployContract(PrivateTransfer2InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
         PrivateTransferVerifier100In = await viem.deployContract(PrivateTransfer100InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
         //PrivateTransferVerifier = await viem.deployContract(PrivateTransferVerifierContractName, [], { client: { wallet: deployer }, libraries: { } });
-        wormholeToken = await viem.deployContract(WormholeTokenContractName, [PrivateTransferVerifier1In.address, PrivateTransferVerifier100In.address,  toHex(POW_DIFFICULTY, {size:32})], { client: { wallet: deployer }, libraries: { leanIMTPoseidon2: leanIMTPoseidon2.address } },);
+        wormholeToken = await viem.deployContract(
+            WormholeTokenContractName,
+            [
+                PrivateTransferVerifier2In.address,
+                PrivateTransferVerifier100In.address,
+                toHex(POW_DIFFICULTY, { size: 32 }),
+                MAX_TOTAL_RE_MINT_LIMIT
+            ],
+            {
+                client: { wallet: deployer },
+                libraries: { leanIMTPoseidon2: leanIMTPoseidon2.address }
+            },
+        )
         powDifficulty = BigInt(await wormholeToken.read.POW_DIFFICULTY())
         //feeEstimatorPrivate = await getPrivateAccount({ wallet: feeEstimator, sharedSecret })
         //await wormholeToken.write.getFreeTokens([feeEstimatorPrivate.burnAddress])
@@ -67,7 +79,7 @@ describe("Token", async function () {
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
             const chainId = BigInt(await publicClient.getChainId())
-            const alicePrivate = new PrivateWallet(alice, powDifficulty,{ acceptedChainIds: [chainId] })
+            const alicePrivate = new PrivateWallet(alice, powDifficulty, { acceptedChainIds: [chainId] })
             const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
             const aliceRefundBurnAccount = await alicePrivate.createNewBurnAccount()
             const decimalsToken = await wormholeToken.read.decimals()
@@ -94,40 +106,37 @@ describe("Token", async function () {
                 relayerAddress: relayer.account.address,
             }
 
-            const reMintRecipient = bob.account.address
-            const relayerInputs = await createRelayerInputs({
-                chainId: chainId,
-                amount: reMintAmount,
-                recipient: reMintRecipient,
-                //callData, 
-                privateWallet: alicePrivate,
-                //burnAddresses: [aliceBurnAccount.burnAddress],
-                wormholeToken: wormholeToken,
-                archiveClient: publicClient,
-                //fullNodeClient, 
-                //preSyncedTree, 
-                backend: circuitBackend,
-                //deploymentBlock,
-                //blocksPerGetLogsReq,
-                feeData: feeData,
-                circuitSize:CIRCUIT_SIZE
 
-            })
-            const reMintTx = await relayTx({ relayInputs: relayerInputs as RelayInputs, wallet: alice, wormholeTokenContract: wormholeTokenAlice })
+            const reMintRecipient = bob.account.address
+            const relayerInputs = await createRelayerInputs(
+                reMintRecipient,
+                reMintAmount,
+                alicePrivate,
+                wormholeToken,
+                publicClient,
+                {
+                    chainId: chainId,
+                    //callData, 
+                    //burnAddresses: [aliceBurnAccount.burnAddress],
+                    //fullNodeClient, 
+                    //preSyncedTree, 
+                    backend: circuitBackend,
+                    //deploymentBlock,
+                    //blocksPerGetLogsReq,
+                    feeData: feeData,
+                    circuitSize: CIRCUIT_SIZE
+
+                })
+            const reMintTx = await relayTx(relayerInputs, alice, wormholeTokenAlice)
             const recipientBalance = await wormholeToken.read.balanceOf([bob.account.address])
             const refundAddressBalance = await wormholeToken.read.balanceOf([aliceRefundBurnAccount.burnAddress])
             const relayerBalance = await wormholeToken.read.balanceOf([relayer.account.address])
 
             const txReceipt = await publicClient.getTransactionReceipt({ hash: reMintTx });
-            console.log({ 
-                gasCost: txReceipt.gasUsed, 
-                effectiveGasPrice: txReceipt.effectiveGasPrice, 
-                estimatedPriorityFee, estimatedGasCost 
-            })
             console.log({
-                recipientBalance____: formatUnits(recipientBalance, decimalsToken),
-                refundAddressBalance: formatUnits(refundAddressBalance, decimalsToken),
-                relayerBalance______: formatUnits(relayerBalance, decimalsToken),
+                gasCost: txReceipt.gasUsed,
+                effectiveGasPrice: txReceipt.effectiveGasPrice,
+                estimatedPriorityFee, estimatedGasCost
             })
             const totalReMinted = relayerBalance + refundAddressBalance + recipientBalance
             assert.equal(totalReMinted, reMintAmount, "amount reMinted not matched");

@@ -310,14 +310,15 @@ async function proofPrivateTransferBtnHandler() {
   try {
     logUi("creating proof...")
     const chainId = BigInt(await publicClient.getChainId())
-    const relayerInputs = await createRelayerInputs({
-      chainId,
-      wormholeToken,
-      privateWallet,
-      burnAddresses: [burnAccount.burnAddress],
-      archiveClient: publicClient,
-      amount,
+    const relayerInputs = await createRelayerInputs(
       recipient,
+      amount,
+      privateWallet,
+      wormholeToken,
+      publicClient,
+      {
+      chainId,
+      burnAddresses: [burnAccount.burnAddress],
       backend
     }) as SelfRelayInputs
     logUi("proof done! saved to pending relay txs")
@@ -341,11 +342,11 @@ async function listPendingRelayTxs() {
       //@ts-ignore
       publicWallet.account = { address: publicAddress }
       try {
-      const tx = await selfRelayTx({
-        selfRelayInputs: relayInput,
-        wallet: publicWallet,
-        wormholeTokenContract: wormholeTokenWallet as WormholeTokenTest
-      })
+      const tx = await selfRelayTx(
+        relayInput,
+        publicWallet,
+        wormholeTokenWallet as WormholeTokenTest
+      )
         await txInUi(tx)
         await listPendingRelayTxs()
         //@ts-ignore

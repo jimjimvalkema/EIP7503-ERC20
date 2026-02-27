@@ -98,7 +98,7 @@ export function getSpendableBalanceProof(
     }
 }
 
-
+// get random value until it fits within field limit (rejection sampling)
 function randomBN254FieldElement(): bigint {
   while (true) {
     const bytes = new Uint8Array(32);
@@ -109,8 +109,8 @@ function randomBN254FieldElement(): bigint {
 }
 
 export function getPubInputs(
-    { amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize, powDifficulty }:
-        { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number, powDifficulty:Hex }) {
+    { amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize, powDifficulty, maxTotalReMintLimit }:
+        { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number, powDifficulty:Hex, maxTotalReMintLimit:Hex }) {
 
     const burn_data_public: BurnDataPublic[] = []
     circuitSize ??= getCircuitSize(nullifiers.length)
@@ -130,7 +130,8 @@ export function getPubInputs(
         amount: toHex(amountToReMint),
         signature_hash: hexToU8AsHexLen32(signatureHash),
         burn_data_public: burn_data_public,
-        pow_difficulty:powDifficulty
+        pow_difficulty:powDifficulty,
+        max_total_spend: maxTotalReMintLimit
     }
     return pubInputs
 }
@@ -204,33 +205,6 @@ export function getPrivInputs(
     return privInputs
 }
 
-// export async function getProofInputs(
-//     { wormholeToken, privateWallets, amountsToClaim, publicClient, amountToReMint, recipient, signatureHash, merkleProofs }:
-//         { merkleProofs: SpendableBalanceProof, wormholeToken: WormholeToken | WormholeTokenTest, privateWallets: SyncedPrivateWallet[], amountsToClaim: bigint[], publicClient: PublicClient, recipient: Address, amountToReMint: bigint, signatureHash: bigint }
-// ) {
-//     const publicInputs = getPubInputs({
-//         amountsToClaim: amountsToClaim,
-//         amountToReMint: amountToReMint,
-//         signatureHash: signatureHash,
-//         recipient: recipient,
-//         syncedPrivateWallets: privateWallets,
-//         root: root,
-//     })
-
-//     const privateInputs = getPrivInputs({
-//         signatureData: signatureData,
-//         amountToReMint: amountToReMint,
-//         recipient: recipient,
-//         syncedPrivateWallets: privateWallets,
-//         prevAccountNoteMerkleProofs: totalSpendMerkleProofs,
-//         totalReceivedMerkleProofs: totalReceivedMerkleProofs,
-//         amountsToClaim: amountsToClaim
-//     })
-
-//     const unformattedProofInputs: UnformattedProofInputs = { publicInputs, privateInputs }
-//     return unformattedProofInputs
-// }
-
 export function getAvailableThreads() {
     if (typeof navigator !== undefined && 'hardwareConcurrency' in navigator) {
         return navigator.hardwareConcurrency ?? 1;
@@ -250,7 +224,7 @@ export async function getBackend(circuitSize: number, threads?: number) {
 
 export async function generateProof({ proofInputs, backend, threads }: { threads?:number,proofInputs: ProofInputs1n | ProofInputs4n, backend?: UltraHonkBackend }) {
     const circuitSize = getCircuitSize(proofInputs.burn_data_public.length)
-    console.log("proving with:", {circuitSize, proofSize:proofInputs.burn_data_public.length})
+    console.log("proving with:", {circuitSize, threads})
     backend = backend ?? await getBackend(circuitSize, threads)
 
     const circuitJson = circuitSize === 2 ? privateTransfer2InCircuit : privateTransfer41InCircuit;

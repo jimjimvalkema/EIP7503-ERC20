@@ -1,7 +1,7 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
 import { toHex } from "viem";
 import type { WormholeTokenTest } from "../test/2inRemint.test.ts";
-import type { FeeData, NotOwnedBurnAccount, PreSyncedTree, ProofInputs1n, ProofInputs4n, PublicProofInputs, RelayInputs, SelfRelayInputs, SignatureInputs, SignatureInputsWithFee, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts";
+import type { CreateRelayerInputsOpts, FeeData, NotOwnedBurnAccount, PreSyncedTree, ProofInputs1n, ProofInputs4n, PublicProofInputs, RelayInputs, SelfRelayInputs, SignatureInputs, SignatureInputsWithFee, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts";
 import { generateProof, getSpendableBalanceProof, getPubInputs, getPrivInputs, padArray } from "./proving.ts";
 import type { BurnAccountProof } from "./proving.ts";
 import type { ProofData } from "@aztec/bb.js";
@@ -73,14 +73,21 @@ export function getCircuitSize(amountBurnAddresses: number) {
  * @param difficulty 
  * @returns 
  */
-export async function safeBurn(burnAccount: NotOwnedBurnAccount | UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint, maxTreeDepth = MAX_TREE_DEPTH, difficulty?:bigint ) {
+export async function safeBurn(
+    burnAccount: NotOwnedBurnAccount | UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint,
+    {difficulty, maxTotalReMintLimit, maxTreeDepth=MAX_TREE_DEPTH}:{difficulty?:bigint, maxTotalReMintLimit?:bigint, maxTreeDepth?:number}={}
+) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
+    maxTotalReMintLimit ??= BigInt(await wormholeToken.read.MAX_TOTAL_RE_MINT_LIMIT())
+    const balance = await wormholeToken.read.balanceOf([burnAccount.burnAddress])
+    const newBurnBalance = balance + amount
     const burnAddress = getBurnAddressSafe({ blindedAddressDataHash: BigInt(burnAccount.blindedAddressDataHash), powNonce: BigInt(burnAccount.powNonce), difficulty: difficulty })
     const treeSize = await wormholeToken.read.treeSize()
     const safeDistanceFromFullTree = (35_000n / 10n) * 60n * 60n // 35_000 burn tx's for 1 hour.  assumes a 35_000 tps chain and burn txs being 10x expensive
     const fullTreeSize = 2n ** BigInt(maxTreeDepth)
     if (treeSize >= fullTreeSize) { throw new Error("Tree is FULL this tx WILL RESULT IS LOSS OF ALL FUNDS SEND. DO NOT SEND ANY BURN TRANSACTION!!!") }
     if (treeSize + safeDistanceFromFullTree >= fullTreeSize) { throw new Error("Tree is almost full and the risk is high this burn tx will result in loss of all funds send") }
+    if (newBurnBalance < maxTotalReMintLimit === false) { throw new Error(`This transfer will cause the balance to go over the MAX_TOTAL_RE_MINT_LIMIT. This wil result in LOSS OF ALL FUNDS OVER THE LIMIT!! DO NOT SEND THIS TRANSACTION!!\n new balance: ${newBurnBalance} \n limit:       ${maxTotalReMintLimit}`)}
     return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount])
 }
 
@@ -98,8 +105,14 @@ export async function safeBurn(burnAccount: NotOwnedBurnAccount | UnsyncedBurnAc
  * @param difficulty 
  * @returns 
  */
-export async function superSafeBurn(burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint, difficulty?:bigint, maxTreeDepth = MAX_TREE_DEPTH) {
+export async function superSafeBurn(
+    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint, 
+    {difficulty, maxTotalReMintLimit, maxTreeDepth=MAX_TREE_DEPTH}:{difficulty?:bigint, maxTotalReMintLimit?:bigint, maxTreeDepth?:number}={}
+) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
+    maxTotalReMintLimit ??= BigInt(await wormholeToken.read.MAX_TOTAL_RE_MINT_LIMIT())
+    const balance = await wormholeToken.read.balanceOf([burnAccount.burnAddress])
+    const newBurnBalance = balance + amount
     const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX: burnAccount.spendingPubKeyX, viewingKey: BigInt(burnAccount.viewingKey), chainId: BigInt(burnAccount.chainId) })
     const burnAddress = getBurnAddressSafe({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(burnAccount.powNonce), difficulty: difficulty })
     const treeSize = await wormholeToken.read.treeSize()
@@ -107,6 +120,7 @@ export async function superSafeBurn(burnAccount: UnsyncedBurnAccount | SyncedBur
     const fullTreeSize = 2n ** BigInt(maxTreeDepth)
     if (treeSize >= fullTreeSize) { throw new Error("Tree is FULL this tx WILL RESULT IS LOSS OF ALL FUNDS SEND. DO NOT SEND ANY BURN TRANSACTION!!!") }
     if (treeSize + safeDistanceFromFullTree >= fullTreeSize) { throw new Error("Tree is almost full and the risk is high this burn tx will result in loss of all funds send") }
+    if (newBurnBalance < maxTotalReMintLimit === false) { throw new Error(`This transfer will cause the balance to go over the MAX_TOTAL_RE_MINT_LIMIT. This wil result in LOSS OF ALL FUNDS OVER THE LIMIT!! DO NOT SEND THIS TRANSACTION!!\n new balance: ${newBurnBalance} \n limit:       ${maxTotalReMintLimit}`)}
     return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount])
 }
 
@@ -148,43 +162,120 @@ export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddr
     return { burnAccountsAndAmounts, encryptedTotalSpends }
 }
 
+// Overload 1: feeData provided → RelayInputs
+export async function createRelayerInputs(
+    recipient: Address,
+    amount: bigint,
+    privateWallet: PrivateWallet,
+    wormholeToken: WormholeToken | WormholeTokenTest,
+    archiveClient: PublicClient,
+    opts: CreateRelayerInputsOpts & { feeData: FeeData }
+): Promise<RelayInputs>;
+
+// Overload 2: feeData omitted → SelfRelayInputs
+export async function createRelayerInputs(
+    recipient: Address,
+    amount: bigint,
+    privateWallet: PrivateWallet,
+    wormholeToken: WormholeToken | WormholeTokenTest,
+    archiveClient: PublicClient,
+    opts?: CreateRelayerInputsOpts & { feeData?: undefined }
+): Promise<SelfRelayInputs>;
+
 /**
- * @notice chainId is not actually constrained in the circuit yet and is just here for future use when protocol becomes cross-chain
- * @param param0 
- * @returns 
+ * Creates the inputs needed to relay a private transfer (either self-relay or via a relayer).
+ *
+ * Syncs burn accounts, prepares encrypted spend data, signs the transfer, generates a Merkle
+ * inclusion proof for each burn account, and produces a ZK proof over all inputs.
+ *
+ * Returns `SelfRelayInputs` when no `feeData` is provided, or `RelayInputs` when it is.
+ *
+ * @note chainId is not yet constrained in the circuit — included for future cross-chain support.
+ *
+ * @param amount              - Amount to re-mint (required).
+ * @param recipient           - Address that will receive the re-minted tokens (required).
+ * @param privateWallet       - The caller's private wallet containing burn accounts and signing keys (required).
+ * @param wormholeToken       - Contract instance for the WormholeToken (required).
+ * @param archiveClient       - Archive-node viem PublicClient used for syncing and log queries (required).
+ *
+ * --- Defaults via RPC call if not set ---
+ * @param powDifficulty       - Proof-of-work difficulty. Defaults to on-chain value from `wormholeToken.POW_DIFFICULTY()`.
+ * @param maxTotalReMintLimit - Max cumulative re-mint cap. Defaults to on-chain value from `wormholeToken.MAX_TOTAL_RE_MINT_LIMIT()`.
+ * @param chainId             - (@NOTICE not constrained rn) ChainId for the cross-chain transfer. Defaults to `archiveClient.getChainId()`.
+ *
+ * --- Defaults without RPC call ---
+ * @param feeData             - If provided, produces `RelayInputs` (third-party relay); omit for `SelfRelayInputs`.
+ * @param callData            - Arbitrary calldata forwarded after re-mint. Defaults to `"0x"` (none).
+ * @param callValue           - Native value forwarded with the call. Defaults to `0`.
+ * @param callCanFail         - Whether a revert in the forwarded call is tolerated. Defaults to `true`.
+ * @param burnAddresses       - Subset of burn addresses to spend from. Defaults to every address in `privateWallet`.
+ * @param circuitSize         - Circuit size (number of burn-account slots). Defaults to the minimum size that fits the spend (e.g. 2 or 100).
+ * @param encryptedBlobLen    - Byte length of each encrypted total-spend blob. Defaults to `ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD`. Changing this makes the transaction distinguishable and reduces anonymity.
+ *
+ * --- Performance / caching ---
+ * @param threads             - Number of worker threads for proof generation. Defaults to max available.
+ * @param deploymentBlock     - Block number the contract was deployed at. Defaults to the value in `src/constants.ts`.
+ * @param preSyncedTree       - A previously synced Merkle tree to avoid re-syncing from scratch.
+ * @param blocksPerGetLogsReq - Max block range per `eth_getLogs` request. Defaults to 19 999.
+ * @param backend             - Pre-initialized prover backend; omit to create one internally.
+ *
+ * --- Circuit constants (do not change unless you know what you're doing) ---
+ * @param maxTreeDepth        - Maximum Merkle tree depth. Defaults to `MAX_TREE_DEPTH`. Changing this produces invalid proofs.
  */
 export async function createRelayerInputs(
-    { threads, chainId, amount, recipient, callData = "0x", callValue = 0n, callCanFail = true, feeData, privateWallet, burnAddresses, wormholeToken, archiveClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize,powDifficulty, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
-        { threads?:number, chainId: bigint, amount: bigint, recipient: Address, callData?: Hex, callCanFail?: boolean, callValue?: bigint, feeData?: FeeData, privateWallet: PrivateWallet, burnAddresses?: Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number,powDifficulty?:Hex, maxTreeDepth?: number, encryptedBlobLen?: number }
-): Promise<SelfRelayInputs | RelayInputs> {
+    recipient: Address,
+    amount: bigint,
+    privateWallet: PrivateWallet,
+    wormholeToken: WormholeToken | WormholeTokenTest,
+    archiveClient: PublicClient,
+    { threads, chainId, callData = "0x", callValue = 0n, callCanFail = true, feeData, burnAddresses, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, maxTotalReMintLimit, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
+        CreateRelayerInputsOpts & { feeData?: FeeData } = {}
+):Promise<RelayInputs | SelfRelayInputs> {
+    // set defaults
     burnAddresses ??= privateWallet.privateData.burnAccounts.map((b) => b.burnAddress)
     powDifficulty ??= await wormholeToken.read.POW_DIFFICULTY()
+    maxTotalReMintLimit ??= await wormholeToken.read.MAX_TOTAL_RE_MINT_LIMIT();
+    chainId ??= BigInt(await archiveClient.getChainId())
+
+    // start this asap so we can resolve once we need it
+    const syncedTreePromise = getSyncedMerkleTree({
+        wormholeToken,
+        publicClient: archiveClient,
+        //optional inputs
+        preSyncedTree,
+        deploymentBlock,
+        blocksPerGetLogsReq
+    })
+
+    // sync burn accounts
     const syncedPrivateWallet = await syncMultipleBurnAccounts({
         wormholeToken: wormholeToken,
         archiveNode: archiveClient,
         privateWallet: privateWallet,
         burnAddressesToSync: burnAddresses //@notice, only syncs these addresses!
     })
-
-    // wrap in function
     const burnAccounts = privateWallet.privateData.burnAccounts as SyncedBurnAccount[]
 
+    // select burn accounts for spend. Takes highest balances first
     const { burnAccountsAndAmounts, encryptedTotalSpends } = await prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses: burnAddresses, amount })
     circuitSize ??= getCircuitSize(burnAccountsAndAmounts.length)
 
-    const signatureInputs: SignatureInputs | SignatureInputsWithFee = {
+    // format inputs that wil be signed
+    const signatureInputs: SignatureInputs | SignatureInputsWithFee  = {
         recipient: recipient,
         amountToReMint: toHex(amount),
         callData: callData,
         callCanFail: callCanFail,
         callValue: toHex(callValue),
+        // remember if you do not do padWithRandomHex you reveal how many address you consumed!
         encryptedTotalSpends: padWithRandomHex({ arr: encryptedTotalSpends, len: circuitSize, hexSize: encryptedBlobLen, dir: "right" }),
-        feeData: feeData
+        feeData,
     }
 
-    // ---- do async stuff concurrently, signing, syncing ----
+
+    // as promise so we allow some extra time for syncedTreePromise to resolve
     let allSignatureDataPromise;
-    if (feeData) {
+    if (feeData !== undefined) {
         allSignatureDataPromise = signPrivateTransferWithFee({
             privateWallet: privateWallet,
             signatureInputs: signatureInputs as SignatureInputsWithFee,
@@ -195,24 +286,17 @@ export async function createRelayerInputs(
     } else {
         allSignatureDataPromise = signPrivateTransfer({
             privateWallet: privateWallet,
-            signatureInputs: signatureInputs,
+            signatureInputs: signatureInputs as SignatureInputs,
             chainId: Number(chainId),
             tokenAddress: wormholeToken.address
         })
 
     }
-    const syncedTreePromise = getSyncedMerkleTree({
-        wormholeToken,
-        publicClient: archiveClient,
-        //optional inputs
-        preSyncedTree,
-        deploymentBlock,
-        blocksPerGetLogsReq
-    })
 
     const syncedTree = await syncedTreePromise;
     const { signatureData, signatureHash } = await allSignatureDataPromise;
     privateWallet = syncedPrivateWallet
+    //----------------------------------------------------------------------
 
     // ----- collect proof inputs from the burn accounts -----
     // nullifiers, noteHashes, merkle proofs
@@ -238,6 +322,8 @@ export async function createRelayerInputs(
         nullifiers.push(nullifier)
         noteHashes.push(nextTotalSpendNoteHashLeaf)
     }
+
+    // final formatting proofs so noir can use them!
     const publicInputs = getPubInputs({
         amountToReMint: amount,
         root: syncedTree.tree.root,
@@ -247,6 +333,7 @@ export async function createRelayerInputs(
         noteHashes: noteHashes,
         circuitSize: circuitSize,
         powDifficulty: powDifficulty,
+        maxTotalReMintLimit: maxTotalReMintLimit
     })
     const privateInputs = getPrivInputs({
         burnAccountsProofs: burnAccountProofs,
@@ -254,12 +341,10 @@ export async function createRelayerInputs(
         maxTreeDepth: maxTreeDepth,
         circuitSize: circuitSize
     })
-
     const proofInputs = { ...publicInputs, ...privateInputs } as ProofInputs1n | ProofInputs4n
-    //console.log(JSON.stringify(proofInputs))
-    //console.log({proofInputs})
+
+    // make proof!
     const zkProof = await generateProof({ proofInputs: proofInputs, backend: backend, threads:threads })
-    // TODO make sure all these inputs are Hex so the can be a JSON
     if (feeData) {
         return {
             publicInputs: publicInputs,
@@ -273,27 +358,93 @@ export async function createRelayerInputs(
             signatureInputs: signatureInputs as SignatureInputs,
         } as SelfRelayInputs;
     }
-
 }
-
+/**
+ * Generates a ZK proof and submits a self-relay transaction in one call.
+ *
+ * Wraps {@link createRelayerInputs} (with no `feeData`) and then submits via {@link selfRelayTx}.
+ *
+ * @param amount              - Amount to re-mint (required).
+ * @param recipient           - Address that will receive the re-minted tokens (required).
+ * @param privateWallet       - The caller's private wallet containing burn accounts and signing keys (required).
+ * @param burnAddresses       - Burn addresses to spend from (required).
+ * @param wormholeToken       - Contract instance for the WormholeToken (required).
+ * @param archiveClient       - Archive-node viem PublicClient used for syncing and log queries (required).
+ *
+ * --- Defaults via RPC call if not set ---
+ * @param powDifficulty       - Proof-of-work difficulty. Defaults to on-chain value from `wormholeToken.POW_DIFFICULTY()`.
+ * @param maxTotalReMintLimit - Max cumulative re-mint cap. Defaults to on-chain value from `wormholeToken.MAX_TOTAL_RE_MINT_LIMIT()`.
+ * @param fullNodeClient      - Full-node client for chainId lookup. Defaults to `archiveClient`.
+ *
+ * --- Defaults without RPC call ---
+ * @param callData            - Arbitrary calldata forwarded after re-mint. Defaults to `"0x"` (none).
+ * @param callValue           - Native value forwarded with the call. Defaults to `0`.
+ * @param callCanFail         - Whether a revert in the forwarded call is tolerated. Defaults to `false`.
+ * @param circuitSize         - Circuit size (number of burn-account slots). Defaults to the minimum size that fits the spend.
+ * @param encryptedBlobLen    - Byte length of each encrypted total-spend blob. Defaults to `ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD`.
+ *
+ * --- Performance / caching ---
+ * @param threads             - Number of worker threads for proof generation. Defaults to max available.
+ * @param deploymentBlock     - Block number the contract was deployed at. Defaults to the value in `src/constants.ts`.
+ * @param preSyncedTree       - A previously synced Merkle tree to avoid re-syncing from scratch.
+ * @param blocksPerGetLogsReq - Max block range per `eth_getLogs` request. Defaults to 19 999.
+ * @param backend             - Pre-initialized prover backend; omit to create one internally.
+ *
+ * --- Circuit constants (do not change unless you know what you're doing) ---
+ * @param maxTreeDepth        - Maximum Merkle tree depth. Defaults to `MAX_TREE_DEPTH`. Changing this produces invalid proofs.
+ */
 export async function proofAndSelfRelay(
-    {threads, amount, recipient, callData = "0x", callValue = 0n, callCanFail = false, privateWallet, burnAddresses, wormholeToken, archiveClient, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
-        { threads?:number,amount: bigint, recipient: Address, callData?: Hex, callCanFail?: boolean, callValue?: bigint, privateWallet: PrivateWallet, burnAddresses: Address[], wormholeToken: WormholeToken | WormholeTokenTest, archiveClient: PublicClient, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number }
+    recipient: Address,
+    amount: bigint,
+    privateWallet: PrivateWallet,
+    wormholeToken: WormholeToken | WormholeTokenTest,
+    archiveClient: PublicClient,
+    { burnAddresses, threads, callData = "0x", callValue = 0n, callCanFail = false, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD, powDifficulty, maxTotalReMintLimit }:
+        { burnAddresses?: Address[], threads?: number, callData?: Hex, callCanFail?: boolean, callValue?: bigint, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number, powDifficulty?: Hex, maxTotalReMintLimit?: Hex } = {}
 ) {
     fullNodeClient ??= archiveClient;
     const chainId = BigInt(await fullNodeClient.getChainId())
     deploymentBlock ??= getDeploymentBlock(Number(chainId))
-    burnAddresses ??= privateWallet.privateData.burnAccounts.map((b) => b.burnAddress)
 
-    const selfRelayInputs = await createRelayerInputs({threads, amount, chainId, recipient, callData, callValue, callCanFail, privateWallet, burnAddresses, wormholeToken, archiveClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth, encryptedBlobLen })
-    return await selfRelayTx({
-        selfRelayInputs: selfRelayInputs,
-        wallet: privateWallet.viemWallet,
-        wormholeTokenContract: wormholeToken as WormholeTokenTest
-    })
+    const selfRelayInputs = await createRelayerInputs(
+        recipient,
+        amount,
+        privateWallet,
+        wormholeToken,
+        archiveClient,
+        {
+            powDifficulty,
+            maxTotalReMintLimit,
+            chainId,
+            callData,
+            callValue,
+            callCanFail,
+            burnAddresses,
+            circuitSize,
+            encryptedBlobLen,
+            threads,
+            deploymentBlock,
+            preSyncedTree,
+            blocksPerGetLogsReq,
+            backend,
+            maxTreeDepth,
+        }
+    )
+    return await selfRelayTx(
+        selfRelayInputs,
+        privateWallet.viemWallet,
+        wormholeToken as WormholeTokenTest,
+    )
 }
 
-export async function selfRelayTx({ selfRelayInputs, wallet, wormholeTokenContract }: { selfRelayInputs: SelfRelayInputs, wallet: WalletClient, wormholeTokenContract: WormholeTokenTest }) {
+/**
+ * Submits a self-relay `privateReMint` transaction.
+ *
+ * @param selfRelayInputs       - JSON-serializable relay inputs (all values are Hex strings).
+ * @param wallet                - Viem WalletClient that signs and sends the transaction.
+ * @param wormholeTokenContract - WormholeToken contract instance with write access.
+ */
+export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: WalletClient, wormholeTokenContract: WormholeTokenTest) {
     const _accountNoteHashes = selfRelayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.account_note_hash))
     const _accountNoteNullifiers = selfRelayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.account_note_nullifier))
     const _root = BigInt(selfRelayInputs.publicInputs.root)
@@ -308,13 +459,6 @@ export async function selfRelayTx({ selfRelayInputs, wallet, wormholeTokenContra
         callValue: BigInt(selfRelayInputs.signatureInputs.callValue)
 
     }
-    // console.log({
-    //     _accountNoteHashes: _accountNoteHashes.length,
-    //     _accountNoteNullifiers: _accountNoteNullifiers.length,
-    //     // _root,
-    //     // _snarkProof,
-    //     _signatureInputsEncryptedTotalSpends: _signatureInputs.encryptedTotalSpends.length
-    // })
     return await wormholeTokenContract.write.privateReMint([
         _accountNoteHashes,
         _accountNoteNullifiers,
@@ -324,8 +468,15 @@ export async function selfRelayTx({ selfRelayInputs, wallet, wormholeTokenContra
     ], { account: wallet.account?.address as Address })
 }
 
-
-export async function relayTx({ relayInputs, wallet, wormholeTokenContract }: { relayInputs: RelayInputs, wallet: WalletClient, wormholeTokenContract: WormholeTokenTest }) {
+/**
+ * Submits a relayer-paid `privateReMintRelayer` transaction.
+ * @TODO does not check profitability
+ *
+ * @param relayInputs           - JSON-serializable relay inputs (all values are Hex strings).
+ * @param wallet                - Viem WalletClient that signs and sends the transaction (the relayer).
+ * @param wormholeTokenContract - WormholeToken contract instance with write access.
+ */
+export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, wormholeTokenContract: WormholeTokenTest) {
     const _accountNoteHashes = relayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.account_note_hash))
     const _accountNoteNullifiers = relayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.account_note_nullifier))
     const _root = BigInt(relayInputs.publicInputs.root)
@@ -351,12 +502,6 @@ export async function relayTx({ relayInputs, wallet, wormholeTokenContract }: { 
         relayerAddress: relayInputs.signatureInputs.feeData.relayerAddress,
 
     }
-    console.log({
-        _accountNoteHashes:_accountNoteHashes.length,
-        _accountNoteNullifiers:_accountNoteNullifiers.length,
-        _root,
-        _signatureInputsEncryptedTotalSpends:_signatureInputs.encryptedTotalSpends.length,
-    })
     return await wormholeTokenContract.write.privateReMintRelayer([
         _accountNoteHashes,
         _accountNoteNullifiers,

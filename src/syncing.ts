@@ -92,8 +92,6 @@ async function encrypt({ plaintext, viewingKey, padding = ENCRYPTED_TOTAL_SPENT_
         bytesToHex(new Uint8Array(encrypted))
     ])
 
-    // console.log({encryptedWithViewingKey:BigInt(viewingKey),padded, encryptedBlob})
-    // console.log({padded})
     return encryptedBlob
 }
 
@@ -155,13 +153,6 @@ export async function syncBurnAccount(
         lastSpendBlockNum = nullifiedAtBlock
         lastNullifier = nullifier
     }
-
-    // console.log({
-    //     lastNullifier,
-    //     lastSpendBlockNum,
-    //     accountNonce
-    // })
-
     // the above loop will have lastSpendBlockNum and lastNullifier. Set to 0n, if the account is already synced.
     // so we need to skip getContractEvents since no event is at block 0 and we don't need totalSpentEncrypted, we are already synced
     if (accountNonce > initialAccountNonce) {

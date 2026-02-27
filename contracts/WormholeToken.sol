@@ -56,6 +56,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
 
     bytes32 public POW_DIFFICULTY; // find a nonce that result in a hash that is hash < pow_difficulty
+    bytes32 public MAX_TOTAL_RE_MINT_LIMIT;
 
 
     address public privateTransferVerifier2In;
@@ -65,13 +66,14 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     /**
      * 
      */
-    constructor(address _privateTransferVerifier2In, address _privateTransferVerifier100In, bytes32 _powDifficulty)
+    constructor(address _privateTransferVerifier2In, address _privateTransferVerifier100In, bytes32 _powDifficulty, uint256 _maxTotalReMintLimit)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
         EIP712("zkwormholes-token", "1") 
     {
         privateTransferVerifier2In = _privateTransferVerifier2In;
         privateTransferVerifier100In = _privateTransferVerifier100In;
         POW_DIFFICULTY = _powDifficulty;
+        MAX_TOTAL_RE_MINT_LIMIT = bytes32(_maxTotalReMintLimit);
     }
 
     function treeSize() public view  returns (uint256) {
@@ -281,12 +283,13 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         uint256[] memory _accountNoteNullifiers   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
     ) public view returns (bytes32[] memory) {
         if (_accountNoteHashes.length == 2) {
-            bytes32[] memory publicInputs = new bytes32[](3 + 32 + 2*2);
+            bytes32[] memory publicInputs = new bytes32[](4 + 32 + 2*2);
 
             publicInputs[0] = bytes32(_root);
             publicInputs[1] = bytes32(uint256(_amount));
             publicInputs[2] = POW_DIFFICULTY;
-            uint256 signatureHashOffset = 3;
+            publicInputs[3] = MAX_TOTAL_RE_MINT_LIMIT;
+            uint256 signatureHashOffset = 4;
             for (uint256 i = 0; i < 32; i++) {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }
@@ -300,12 +303,13 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
             return publicInputs;
 
         } else if (_accountNoteHashes.length == 100) {
-            bytes32[] memory publicInputs = new bytes32[](3 + 32 + 100*2);
+            bytes32[] memory publicInputs = new bytes32[](4 + 32 + 100*2);
 
             publicInputs[0] = bytes32(_root);
             publicInputs[1] = bytes32(uint256(_amount));
             publicInputs[2] = POW_DIFFICULTY;
-            uint256 signatureHashOffset = 3;
+            publicInputs[3] = MAX_TOTAL_RE_MINT_LIMIT;
+            uint256 signatureHashOffset = 4;
             for (uint256 i = 0; i < 32; i++) {
                 publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
             }

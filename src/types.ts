@@ -3,7 +3,7 @@ import type  { Address, GetContractReturnType, Hex, PublicClient, WalletClient }
 import type { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/artifacts.js";
 import type { SignMessageReturnType } from "viem/accounts";
 import type { InputMap } from "@noir-lang/noir_js";
-import type { ProofData } from "@aztec/bb.js";
+import type { ProofData, UltraHonkBackend } from "@aztec/bb.js";
 import { LeanIMT } from "@zk-kit/lean-imt";
 
 export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Required<{ public?: PublicClient; wallet?: WalletClient; }>>
@@ -89,6 +89,7 @@ export interface PublicProofInputs extends InputMap {
     chain_id: Hex, // technically not public since we don't use the cross-chain functionality here, can be revealed does not leak user data
     amount: Hex,
     pow_difficulty:Hex,
+    max_total_spend:Hex
     signature_hash: u8sAsHexArrLen32,
     burn_data_public: BurnDataPublic[],
 }
@@ -183,3 +184,23 @@ export interface RelayInputs {
     proof:Hex,
     signatureInputs:SignatureInputsWithFee,
 }
+
+
+//functions
+export type CreateRelayerInputsOpts = {
+    threads?: number;
+    chainId?: bigint;
+    callData?: Hex;
+    callCanFail?: boolean;
+    callValue?: bigint;
+    burnAddresses?: Address[];
+    preSyncedTree?: PreSyncedTree;
+    backend?: UltraHonkBackend;
+    deploymentBlock?: bigint;
+    blocksPerGetLogsReq?: bigint;
+    circuitSize?: number;
+    powDifficulty?: Hex;
+    maxTotalReMintLimit?: Hex;
+    maxTreeDepth?: number;
+    encryptedBlobLen?: number;
+};

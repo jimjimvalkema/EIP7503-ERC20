@@ -152,6 +152,7 @@ pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32>(
     chain_id: Field,
     total_amount_to_spent: Field, 
     pow_difficulty: Field,
+    max_total_spend: Field,
     burn_data_public: [BurnDataPublic],
     //private
     burn_data_private: [BurnDataPrivate<MAX_TREE_DEPTH>],
@@ -166,6 +167,7 @@ pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32>(
                 root,
                 chain_id,
                 pow_difficulty,
+                max_total_spend,
                 burn_data_public[i].account_note_hash,
                 burn_data_public[i].account_note_nullifier,
 
@@ -194,6 +196,7 @@ pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32>(
     root: Field,
     chain_id: Field,
     pow_difficulty: Field,
+    max_total_spend: Field,
     account_note_hash: Field,
     account_note_nullifier: Field,
 
@@ -212,7 +215,6 @@ pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32>(
     prev_account_note_merkle_data: MerkleData<MAX_TREE_DEPTH>,
     total_burned_merkle_data: MerkleData<MAX_TREE_DEPTH>
 ) {
-  
     let blinded_address_data_hash: Field = hash_blinded_burn_address_data(spending_pub_key_x, chain_id, viewing_key );
     let private_address: Field = hash_burn_address(blinded_address_data_hash, pow_nonce);
     verify_pow(blinded_address_data_hash, pow_nonce, pow_difficulty);
@@ -240,6 +242,7 @@ pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32>(
 
     // check amount spent
     let new_total_spent: Field = prev_total_spent + amount_to_spend;
+    assert_lt(new_total_spent, max_total_spend);//, "burn account went over the max_total_spend limit");
     assert(lower_then_or_equal(new_total_spent, total_burned), "spend exceeds total received");
 
     //
