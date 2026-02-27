@@ -1,6 +1,6 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 //@ts-ignore hardhat ignition does not understand file extensions
-import { leanIMTPoseidon2ContractName,ZKTranscriptLibContractName2in, WormholeTokenContractName, PrivateTransfer2InVerifierContractName, PrivateTransfer100InVerifierContractName } from "../../src/constants.ts";
+import { leanIMTPoseidon2ContractName,ZKTranscriptLibContractName2in, WormholeTokenContractName, PrivateTransfer2InVerifierContractName, PrivateTransfer100InVerifierContractName, MAX_TOTAL_RE_MINT_LIMIT, ZKTranscriptLibContractName100in } from "../../src/constants.ts";
 import { POW_DIFFICULTY } from "../../src/constants.ts";
 import { toHex } from "viem";
 
@@ -8,9 +8,10 @@ export default buildModule("wormholeToken", (m) => {
     const leanIMTPoseidon2 = m.contract(leanIMTPoseidon2ContractName, [], { libraries: {} });
     //const ZKTranscriptLib100in = m.contract(ZKTranscriptLibContractName100in, [], { libraries: {} });
     const ZKTranscriptLib2in = m.contract(ZKTranscriptLibContractName2in, [], { libraries: {} });
+    //const ZKTranscriptLib100in = m.contract(ZKTranscriptLibContractName100in, [], { libraries: {} });
     const PrivateTransfer2inVerifier = m.contract(PrivateTransfer2InVerifierContractName, [], { libraries: { ZKTranscriptLib: ZKTranscriptLib2in }  });
     const PrivateTransfer100InVerifier = m.contract(PrivateTransfer100InVerifierContractName, [], { libraries: { ZKTranscriptLib: ZKTranscriptLib2in }  });
-    const wormholeToken = m.contract(WormholeTokenContractName, [PrivateTransfer2inVerifier, PrivateTransfer100InVerifier,  toHex(POW_DIFFICULTY, {size:32})], { libraries: { leanIMTPoseidon2: leanIMTPoseidon2 } });
+    const wormholeToken = m.contract(WormholeTokenContractName, [PrivateTransfer2inVerifier, PrivateTransfer100InVerifier,  toHex(POW_DIFFICULTY, {size:32}), MAX_TOTAL_RE_MINT_LIMIT], { libraries: { leanIMTPoseidon2: leanIMTPoseidon2 } });
 
     return { wormholeToken, PrivateTransferVerifier: PrivateTransfer2inVerifier, ZKTranscriptLib: ZKTranscriptLib2in, leanIMTPoseidon2  };
 });

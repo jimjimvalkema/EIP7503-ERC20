@@ -46,6 +46,13 @@ assert_lt(pow_hash, POW_DIFFICULTY);
 
 ## TODO EXPLAIN MULTISPENDS, TODO MAKE UI ABLE TO DO THAT
 ## TODO PROTOCOL SPEC
+## TODO rename token to not be workHoleToken wormToken. Since it confuses with the worm token live on mainnet
+## TODO rename all inconsistent naming
+privateTransfer -> remintTransaction, privateWallet -> burnWallet, amountSpent -> amountReMinted, amountReceived -> amountBurned  
+Technically nothing is actually burned or reMinted, But that is the original language 7503 used so it is preferred and more clear.  
+Instead docs should just explain that you can treat the accounting like that (spent + received)  
+# TODO rename repo
+Something like, erc20 with native plausible deniability
 
 ## optimizations
 Merkle tree: The balances tracked in the merkle tree update on **every** transfer, even if a user never intends to use any privacy. This is to preserve plausible deniability. However this can optimized by:
