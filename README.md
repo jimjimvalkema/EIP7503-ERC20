@@ -78,9 +78,23 @@ setup secrets:
 `yarn hardhat keystore set ETHERSCAN_API_KEY`  
 
 deploy main contracts:  
+Claudes lil patch to get it to verify.(TODO in week or 2 hardhat will already have fixes this!)
+```shell
+# this patches in changes from: https://github.com/NomicFoundation/hardhat/pull/8014/changes#diff-6fa5a21d2bd3cbb31ebffd817ebf167891f73eb740fabceebfbe60e06f5c2f47
+sed -i 's|contract: `${artifact.sourceName}:${contractName}`,|contract: contractName.includes(":") ? contractName : `${artifact.sourceName}:${contractName}`,|' node_modules/@nomicfoundation/ignition-core/dist/src/verify.js
+
+# 
+sed -i 's|const compilerInput = await compilationJob.get(rootFilePath)?.getSolcInput();|const compilerInput = await compilationJob.values().next().value?.getSolcInput();|' node_modules/@nomicfoundation/hardhat-verify/dist/src/internal/artifacts.js
+```
+
+
 ```shell
 yarn hardhat ignition deploy ignition/modules/wormtoken.ts --verify --network sepolia
 ```  
+<!-- ```shell
+yarn hardhat run scripts/deploy.ts --network sepolia
+``` -->
+
 
 deploy poseidon2 hasher with create2 (if it's not deployed yet)
 ```shell

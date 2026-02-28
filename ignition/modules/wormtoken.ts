@@ -13,5 +13,5 @@ export default buildModule("wormholeToken", (m) => {
     const PrivateTransfer100InVerifier = m.contract(PrivateTransfer100InVerifierContractName, [], { libraries: { ZKTranscriptLib: ZKTranscriptLib2in }  });
     const wormholeToken = m.contract(WormholeTokenContractName, [PrivateTransfer2inVerifier, PrivateTransfer100InVerifier,  toHex(POW_DIFFICULTY, {size:32}), MAX_TOTAL_RE_MINT_LIMIT], { libraries: { leanIMTPoseidon2: leanIMTPoseidon2 } });
 
-    return { wormholeToken, PrivateTransferVerifier: PrivateTransfer2inVerifier, ZKTranscriptLib: ZKTranscriptLib2in, leanIMTPoseidon2  };
+    return { wormholeToken, PrivateTransfer2inVerifier, PrivateTransfer100InVerifier, ZKTranscriptLib: ZKTranscriptLib2in, leanIMTPoseidon2  };
 });
