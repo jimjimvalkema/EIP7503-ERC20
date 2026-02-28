@@ -257,6 +257,7 @@ export class PrivateWallet {
             spendingPubKeyX: spendingPubKeyX,
             difficulty: toHex(difficulty, { size: 32 }),
         }
+        this.privateData.burnAccounts[viewingKeyIndex] = burnAccount
         return burnAccount
 
     }

@@ -3,14 +3,33 @@ import type { Address, Hex, WalletClient } from 'viem'
 import { sepolia } from 'viem/chains'
 import 'viem/window';
 import { PrivateWallet } from '../src/PrivateWallet.js';
-import type { WormholeToken, SelfRelayInputs } from '../src/types.js';
+import type { WormholeToken, SelfRelayInputs, BurnAccount, SyncedBurnAccount } from '../src/types.js';
 import { createRelayerInputs, selfRelayTx } from '../src/transact.js';
 import { getBackend } from '../src/proving.js';
-import WormholeTokenArtifact from '../artifacts/contracts/WormholeToken.sol/WormholeToken.json'  with {"type":"json"};
-import sepoliaDeployments from "../ignition/deployments/chain-11155111/deployed_addresses.json" with {"type":"json"};
+import WormholeTokenArtifact from '../artifacts/contracts/WormholeToken.sol/WormholeToken.json'  with {"type": "json"};
+import sepoliaDeployments from "../ignition/deployments/chain-11155111/deployed_addresses.json" with {"type": "json"};
 import type { WormholeTokenTest } from '../test/2inRemint.test.ts';
 
 import * as viem from 'viem'
+import { ADDED_BITS_SECURITY, POW_BITS } from '../src/constants.ts';
+import { syncBurnAccount } from '../src/syncing.ts';
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const POW_EXPLANATION_MSG = `
+The PoW is to generate a valid burn address, a PoW verification was added to the circuit since eth addresses are only 160 bits (20 bytes) and there for only have 80 bits of security against collision attacks. 
+<br>See <a href="https://github.com/jimjimvalkema/EIP7503-ERC20/tree/f191226b323340f7f1c1b95ab42a68342860acb6?tab=readme-ov-file#burn-address-and-the-10-billion-collision-attack-eip-3607">readme</a> for more info.
+<br>This PoW is ${Number(POW_BITS)} bits and adds ${Number(ADDED_BITS_SECURITY)} bits since it's only applied to one hash (the burn address).
+<br>The original cost of attack was assumed to be $10 billion in EIP-3607. 
+<br>With this PoW the new estimated cost of attack is $10B × 2^(PoW_Bits/2).
+<br>So with this PoW the new attack cost is: $${new Intl.NumberFormat("en-US", { notation: "compact", compactDisplay: "long" }).format(10_000_000_000 * 2 ** (Number(POW_BITS) / 2))}.
+`
+
+const BURN_ACCOUNT_SYNCING_MSG = `
+syncing the burn account by looking for nullifiers with an account nonce that incrementally go up.
+<br> So it looks for <code>nullifier=poseidon2(viewing_key, account_nonce+=1)</code>
+<br> Then it also looks for a encrypted blob that contains the total amount spent of that burn account.
+`
+
 const CIRCUIT_SIZE = 2
 
 const wormholeTokenAddress = sepoliaDeployments['wormholeToken#WormholeToken'] as Address;
@@ -28,7 +47,7 @@ const privateTransferRecipientInputEl = document.getElementById("privateTransfer
 const privateTransferAmountInputEl = document.getElementById("privateTransferAmountInput")
 const pendingRelayTxsEl = document.getElementById("pendingRelayTxs")
 
-const backend = await getBackend(CIRCUIT_SIZE,window.navigator.hardwareConcurrency)
+const backend = await getBackend(CIRCUIT_SIZE, window.navigator.hardwareConcurrency)
 
 const publicClient = createPublicClient({
   chain: sepolia,
@@ -48,11 +67,15 @@ function errorUi(message: string, error: unknown, replace = false) {
   throw new Error(message, { cause: error })
 }
 
-function logUi(message: string, replace = false) {
+function logUi(message: string, replace = false, useHtml = false) {
   if (replace) {
-    logEl!.innerText = ""
+    logEl!.innerHTML = ""
   }
-  logEl!.innerText += `\n ${message}`
+  if (useHtml) {
+    logEl!.innerHTML += `\n ${message}`
+  } else {
+    logEl!.innerText += `\n ${message}`
+  }
   console.log(message)
 }
 
@@ -63,7 +86,7 @@ async function everyClass(className: string, func: (el: HTMLElement) => void) {
 }
 
 async function txInUi(txHash: Hex) {
-  logUi(`tx sent at: https://sepolia.etherscan.io/tx/${txHash}`)
+  logUi(`tx sent at: https://sepolia.etherscan.io/tx/${txHash}`, true)
   await publicClient.waitForTransactionReceipt({
     hash: txHash,
     confirmations: 1
@@ -95,14 +118,14 @@ export function addRelayInputsToLocalStorage(relayInputs: SelfRelayInputs) {
 }
 
 export async function getRelayInputsFromLocalStorage(): Promise<SelfRelayInputs[]> {
-  const allRelayerInputs:SelfRelayInputs[] = getFromLocalStorage(relayerInputsLocalStoreName)
-  console.log({allRelayerInputs})
+  const allRelayerInputs: SelfRelayInputs[] = getFromLocalStorage(relayerInputsLocalStoreName)
+  console.log({ allRelayerInputs })
   if (!allRelayerInputs) return []
   const allRelayerInputClean: SelfRelayInputs[] = []
   for (const relayerInput of allRelayerInputs) {
-    
-    const blockNumbers = await Promise.all(relayerInput.publicInputs.burn_data_public.map((bData)=>wormholeToken.read.nullifiers([BigInt(bData.account_note_nullifier)])))
-    if (blockNumbers.every((b)=>b===0n)) {
+
+    const blockNumbers = await Promise.all(relayerInput.publicInputs.burn_data_public.map((bData) => wormholeToken.read.nullifiers([BigInt(bData.account_note_nullifier)])))
+    if (blockNumbers.every((b) => b === 0n)) {
       allRelayerInputClean.push(relayerInput)
     }
   }
@@ -127,17 +150,33 @@ async function setNonWalletInfo(wormholeToken: WormholeToken) {
 async function updateWalletInfoUi(
   wormholeTokenWallet: WormholeToken,
   publicAddress: Address,
-  burnAddress?: Address
+  burnAccount?: BurnAccount
 ) {
+
   everyClass(".publicAddress", (el) => el.innerText = publicAddress)
   const decimals = Number(await wormholeTokenWallet.read.decimals())
   const publicBalance = await wormholeTokenWallet.read.balanceOf([publicAddress])
   everyClass(".publicBalance", (el) => el.innerText = formatUnits(publicBalance, decimals))
-
-  if (burnAddress) {
-    everyClass(".burnAddress", (el) => el.innerText = burnAddress)
-    const burnedBalance = await wormholeTokenWallet.read.balanceOf([burnAddress])
-    everyClass(".privateBurnedBalance", (el) => el.innerText = formatUnits(burnedBalance, decimals))
+  console.log({ burnAccount })
+  if (burnAccount) {
+    const syncedBurnAccountPromise = syncBurnAccount({ wormholeToken: wormholeTokenWallet, burnAccount: burnAccount, archiveNode: publicClient });
+    let dotCount = 0;
+    const powInterval = setInterval(() => {
+      dotCount = (dotCount % 5) + 1;
+      logUi(
+        POW_EXPLANATION_MSG + `<br><br>` +
+        "----------Syncing burn Account" + ".".repeat(dotCount) + `<br>` +
+        BURN_ACCOUNT_SYNCING_MSG + `<br>` +
+        "----------Syncing burn Account" + ".".repeat(dotCount)
+        , true, true);
+    }, 500);
+    const syncedBurnAccount = await syncedBurnAccountPromise;
+    clearInterval(powInterval);
+    everyClass(".burnAddress", (el) => el.innerText = burnAccount.burnAddress)
+    everyClass(".privateBurnedBalance", (el) => el.innerText = formatUnits(BigInt(syncedBurnAccount.totalBurned), decimals))
+    everyClass(".privateSpentBalance", (el) => el.innerText = formatUnits(BigInt(syncedBurnAccount.totalSpent), decimals))
+    everyClass(".privateSpendableBalance", (el) => el.innerText = formatUnits(BigInt(syncedBurnAccount.spendableBalance), decimals))
+    everyClass(".privateAccountNonce", (el) => el.innerText = Number(syncedBurnAccount.accountNonce).toString())
   }
 }
 
@@ -200,29 +239,33 @@ async function connectPrivateWallet() {
 
   const chainId = BigInt(await publicClient.getChainId())
   const POW_DIFFICULTY = BigInt(await wormholeTokenWallet.read.POW_DIFFICULTY())
-  const privateWallet = new PrivateWallet(publicWallet, POW_DIFFICULTY,{ acceptedChainIds: [chainId] })
-  logUi("creating private wallet...\n please sign the message in your wallet")
+  const privateWallet = new PrivateWallet(publicWallet, POW_DIFFICULTY, { acceptedChainIds: [chainId] })
+  logUi("creating private wallet...\n please sign the message in your wallet", true)
   await privateWallet.getDeterministicViewKeyRoot()
-  const burnAccountPromise = privateWallet.createBurnAccountFromViewKeyIndex({ async: true, viewingKeyIndex:0});
+  const burnAccountPromise = privateWallet.createBurnAccountFromViewKeyIndex({ async: true, viewingKeyIndex: 0 });
 
   // Animated PoW loading indicator
   let dotCount = 0;
   const powInterval = setInterval(() => {
-    dotCount = (dotCount % 3) + 1;
-    logUi("doing PoW" + ".".repeat(dotCount), true);
+    dotCount = (dotCount % 5) + 1;
+    logUi(
+      "----------doing PoW" + ".".repeat(dotCount) + `<br>` +
+      POW_EXPLANATION_MSG + `<br>` +
+      "----------doing PoW" + ".".repeat(dotCount)
+      , true, true);
   }, 500);
 
   const burnAccount = await burnAccountPromise;
   clearInterval(powInterval);
-  logUi("PoW complete!");
+  logUi("<br>PoW complete!", false, true);
 
   //@ts-ignore
   window.privateWallet = privateWallet
   //@ts-ignore
   window.burnAccount = burnAccount
 
-  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, burnAccount.burnAddress)
-  logUi("done! created new private wallet")
+  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, burnAccount)
+  logUi("<br>done! created new private wallet", false, true)
 }
 
 async function getPrivateWallet() {
@@ -250,17 +293,17 @@ async function mintBtnHandler() {
   }
 
   //@ts-ignore
-  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount?.burnAddress)
+  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount)
 }
 
 async function setToPrivateAddressBtnHandler(where: HTMLElement) {
   const { burnAccount } = await getPrivateWallet()
-  ;(where as HTMLInputElement).value = burnAccount.burnAddress
+    ; (where as HTMLInputElement).value = burnAccount.burnAddress
 }
 
 async function setToPublicAddressBtnHandler(where: HTMLElement) {
   const { publicAddress } = await getPublicWallet()
-  ;(where as HTMLInputElement).value = publicAddress
+    ; (where as HTMLInputElement).value = publicAddress
 }
 
 async function transferBtnHandler() {
@@ -284,11 +327,12 @@ async function transferBtnHandler() {
   }
 
   //@ts-ignore
-  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount?.burnAddress)
+  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount)
 }
 
 async function proofPrivateTransferBtnHandler() {
   const { wormholeTokenWallet, publicAddress, privateWallet, burnAccount } = await getPrivateWallet()
+  console.log({ data: privateWallet.privateData })
   const decimals = Number(await wormholeToken.read.decimals())
 
   let recipient: Address
@@ -307,34 +351,50 @@ async function proofPrivateTransferBtnHandler() {
     return
   }
 
+  // Animated PoW loading indicator
+  let dotCount = 0;
+  const powInterval = setInterval(() => {
+    dotCount = (dotCount % 5) + 1;
+    logUi(
+      "creating proof..." + ".".repeat(dotCount)
+      , true, true);
+  }, 500);
   try {
-    logUi("creating proof...")
     const chainId = BigInt(await publicClient.getChainId())
-    const relayerInputs = await createRelayerInputs(
+    const relayInputsPromise = createRelayerInputs(
       recipient,
       amount,
       privateWallet,
       wormholeToken,
       publicClient,
       {
-      chainId,
-      burnAddresses: [burnAccount.burnAddress],
-      backend
-    }) as SelfRelayInputs
-    logUi("proof done! saved to pending relay txs")
+        chainId,
+        burnAddresses: [burnAccount.burnAddress],
+        backend
+      })
+
+    const { relayInputs: relayerInputs, syncedData: { syncedPrivateWallet, syncedTree } } = await relayInputsPromise
     addRelayInputsToLocalStorage(relayerInputs)
+    console.log({burnAccountsSynced:syncedPrivateWallet.privateData.burnAccounts})
+    //@ts-ignore
+    window.burnAccount = syncedPrivateWallet.privateData.burnAccounts[0]
+    //@ts-ignore
+    window.merkleTree = syncedTree
   } catch (error) {
     errorUi("proof creation failed", error)
   }
-
-  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, burnAccount.burnAddress)
+  clearInterval(powInterval);
+  logUi("proof done! saved to pending relay txs")
+  //@ts-ignore
+  const syncedBurnAccount = window.burnAccount as SyncedBurnAccount
+  await updateWalletInfoUi(wormholeTokenWallet, publicAddress, syncedBurnAccount as SyncedBurnAccount)
   await listPendingRelayTxs()
 }
 
 async function listPendingRelayTxs() {
   pendingRelayTxsEl!.innerHTML = ""
   const relayInputs = await getRelayInputsFromLocalStorage()
-  console.log({relayInputs})
+  console.log({ relayInputs })
   const decimals = Number(await wormholeToken.read.decimals())
   for (const relayInput of relayInputs) {
     const relayFunc = async () => {
@@ -342,22 +402,22 @@ async function listPendingRelayTxs() {
       //@ts-ignore
       publicWallet.account = { address: publicAddress }
       try {
-      const tx = await selfRelayTx(
-        relayInput,
-        publicWallet,
-        wormholeTokenWallet as WormholeTokenTest
-      )
+        const tx = await selfRelayTx(
+          relayInput,
+          publicWallet,
+          wormholeTokenWallet as WormholeTokenTest
+        )
         await txInUi(tx)
         await listPendingRelayTxs()
         //@ts-ignore
-        await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount?.burnAddress)
+        await updateWalletInfoUi(wormholeTokenWallet, publicAddress, window.burnAccount)
       } catch (error) {
         errorUi("relay failed", error)
       }
     }
     const relayTxBtn = document.createElement("button")
     relayTxBtn.onclick = relayFunc
-    console.log({relayInput})
+    console.log({ relayInput })
     relayTxBtn.innerText = `relay tx: ${formatUnits(BigInt(relayInput.publicInputs.amount), decimals)} tokens to ${relayInput.signatureInputs.recipient}`
     const li = document.createElement("li")
     li.appendChild(relayTxBtn)
