@@ -1,7 +1,7 @@
 {
-  "wormholeToken#ZKTranscriptLib": "0x3E6b3fb78D8f62889DBb8393f35dcd4f761cA818",
-  "wormholeToken#leanIMTPoseidon2": "0x37504700e4164f24dBDe0517f79CAc75faB03E75",
-  "wormholeToken#privateTransfer100InVerifier": "0x1C68F7bd8668b8C32449Ba07D35a289760A70912",
-  "wormholeToken#privateTransfer2InVerifier": "0x078Fcf39dD0C3d69766f9888e02603AEB1ea9492",
-  "wormholeToken#WormholeToken": "0x042464afE3a603dd43E01f9989872D502Be0384a"
+  "wormholeToken#ZKTranscriptLib": "0xdbdDD0bB208a9FAC6b3A35e0F3eD87D020964643",
+  "wormholeToken#leanIMTPoseidon2": "0xb4ED83470d6B513089C3dd1802123909A698Fa85",
+  "wormholeToken#privateTransfer100InVerifier": "0x60683E94FC3c62C81fC6fc64CF0A6aa7e7Bba4cE",
+  "wormholeToken#privateTransfer2InVerifier": "0x9e75d2ebb3d33E8Db309c9e940Ab10491DFf1F1E",
+  "wormholeToken#WormholeToken": "0x3Ca4a13C6c5B5c0b9742EBA598aD5D0eBD33215A"
 }

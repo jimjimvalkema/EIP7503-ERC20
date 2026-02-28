@@ -45,7 +45,8 @@ export const ZKTranscriptLibContractName2in = "contracts/privateTransfer2InVerif
 export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034343698204186575808495616n;
 export const FIELD_MODULUS = 21888242871839275222246405745257275088548364400416034343698204186575808495617n
 
-
+// estimation is some time so high it goes over the per tx limit on sepolia
+export const GAS_LIMIT_TX = 16000000n
 
 export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
     11155111: 9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a

@@ -1,12 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ERC20-EIP7503</title>
   <style>
     body {
-      font-size: 1.3rem;
+      font-size: 1.4rem;
     }
 
     .outer {
@@ -18,7 +19,7 @@
 
     .inner {
       flex: 1 1 200px;
-      min-width: 25em;
+      min-width: 23em;
       border: 1px solid black;
       padding: 10px;
       word-wrap: break-word;
@@ -37,28 +38,30 @@
 </head>
 
 <body>
-  <span>github: <a href="https://github.com/jimjimvalkema/EIP7503-ERC20">https://github.com/jimjimvalkema/EIP7503-ERC20</a></span>
+  <span>github: <a
+      href="https://github.com/jimjimvalkema/EIP7503-ERC20">https://github.com/jimjimvalkema/EIP7503-ERC20</a></span>
   <div class="outer">
-    <div id="walletUi" class="inner"> 
+    <div id="walletUi" class="inner">
       <h1>Connect Wallet</h1>
-      <h3>public</h3> 
+      <h3>public</h3>
       <button id="connectPublicWalletBtn">connect public wallet</button>
       <br>
-      public address: <span class="publicAddress"></span> 
+      public address: <span class="publicAddress"></span>
       <br>
       balance: <span class="publicBalance"></span>
-      <h3>private</h3>  
-      <button id="connectPrivateWalletBtn">connect private wallet</button>
+      <h3>private</h3>
+      <button id="connectPrivateWalletBtn">generate root viewing key</button>
       <br>
-      burn address: <span class="burnAddress"></span>
+      <strong>spendable from selection: <span id="totalSelectedSpendable">0</span></strong>
       <br>
-      burned balance: <span class="privateBurnedBalance"></span>
+      Burn Accounts: <span id="burnPageLabel"></span>
+      <ul id="burnAccountsList">
+        <li>connect private wallet first</li>
+      </ul>
+      <button id="prevBurnAccountsPage">prev</button>
+      <button id="nexBurnAccountsPage">next</button>
+      <button id="selectAllRemintBtn">select all</button>
       <br>
-      private spent balance: <span class="privateSpentBalance"></span>
-      <br>
-      spendable balance: <span class="privateSpendableBalance"></span>
-      <br>
-      account nonce (txs made): <span class="privateAccountNonce"></span>
     </div>
     <div id="faucetUi" class="inner">
       <h1><span class="tokenName">tokenName</span> Faucet</h1>
@@ -71,9 +74,14 @@
     </div>
     <div id="transferUi" class="inner">
       <h1>Transfer</h1>
+      Blindly sends tokens to an address. Can also be used for burning. See safe burn for a safer method for burning.
+      <br>
+      <br>
       <label for="transferRecipientInput">address</label>
       <input placeholder="0x..." type="text" name="transferRecipientInput" id="transferRecipientInput" />
-      <button id="setToPrivateWalletBtn">set to burn address</button>
+      <select id="transferBurnAddressSelect">
+        <option value="" disabled selected>set to burn address</option>
+      </select>
       <button id="setToPublicWalletBtn">set to public address</button>
       <br>
       <label for="transferAmountInput">set amount</label>
@@ -81,25 +89,51 @@
       <button id="transferBtn">transfer</button>
     </div>
 
+    <div id="burnUi" class="inner">
+      <h1>safe Burn</h1>
+      Uses superSafeBurn to make sure that:
+      <br>
+      Pow is valid, preImage is correct, merkle tree is not full,
+      <br>
+      burn does not exceed MAX_TOTAL_RE_MINT_LIMIT.
+      <br>
+      <br>
+      <label for="burnRecipientSelect">burn address</label>
+      <select name="burnRecipientSelect" id="burnRecipientSelect">
+        <option value="" disabled selected>connect private wallet first</option>
+      </select>
+      <br>
+      <label for="burnAmountInput">set amount</label>
+      <input value="420" type="number" name="burnAmount" id="burnAmountInput" required />
+      <button id="burnBtn">burn</button>
+    </div>
+
     <div id="privateRemintUi" class="inner">
       <h1>Make Private (Remint)Transfer </h1>
       <label for="privateTransferRecipientInput">address</label>
       <input placeholder="0x..." type="text" name="privateTransferRecipientInput" id="privateTransferRecipientInput" />
-      <button id="setPrivateTransferToPrivateWalletBtn">set to burn address</button>
+      <select id="remintBurnAddressSelect">
+        <option value="" disabled selected>set to burn address</option>
+      </select>
       <button id="setPrivateTransferToPublicWalletBtn">set to public address</button>
       <br>
       <label for="privateTransferAmountInput">set amount</label>
       <input value="420" type="number" name="privateTransferAmountInput" id="privateTransferAmountInput" required />
+      <br>
+      <br>
       <button id="proofPrivaterTransferBtn">proof</button>
       <ul id="pendingRelayTxs">
 
       </ul>
     </div>
+    <div class="inner">
+      <div id="errors"></div>
+      <div id="messages"></div>
+    </div>
   </div>
 
-  <div id="errors"></div>
-  <div id="messages"></div>
 
   <script crossorigin type="module" src="./main.ts"></script>
 </body>
+
 </html>

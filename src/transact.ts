@@ -9,7 +9,7 @@ import { UltraHonkBackend } from "@aztec/bb.js";
 import { getSyncedMerkleTree, getDeploymentBlock, syncMultipleBurnAccounts, encryptTotalSpend } from "./syncing.ts";
 import { getBurnAddress, getBurnAddressSafe, hashBlindedAddressData, hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, padWithRandomHex, signPrivateTransfer, signPrivateTransferWithFee } from "./hashing.ts";
 import { PrivateWallet } from "./PrivateWallet.ts";
-import { CIRCUIT_SIZES, EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, LARGEST_CIRCUIT_SIZE, MAX_TREE_DEPTH } from "./constants.ts";
+import { CIRCUIT_SIZES, EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, GAS_LIMIT_TX, LARGEST_CIRCUIT_SIZE, MAX_TREE_DEPTH } from "./constants.ts";
 
 
 export function getHashedInputs(
@@ -106,7 +106,7 @@ export async function safeBurn(
  * @returns 
  */
 export async function superSafeBurn(
-    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, wormholeToken: WormholeToken | WormholeTokenTest, amount: bigint,
+    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint,wormholeToken:WormholeTokenTest, account:Address,
     { difficulty, maxTotalReMintLimit, maxTreeDepth = MAX_TREE_DEPTH }: { difficulty?: bigint, maxTotalReMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
@@ -121,7 +121,7 @@ export async function superSafeBurn(
     if (treeSize >= fullTreeSize) { throw new Error("Tree is FULL this tx WILL RESULT IS LOSS OF ALL FUNDS SEND. DO NOT SEND ANY BURN TRANSACTION!!!") }
     if (treeSize + safeDistanceFromFullTree >= fullTreeSize) { throw new Error("Tree is almost full and the risk is high this burn tx will result in loss of all funds send") }
     if (newBurnBalance < maxTotalReMintLimit === false) { throw new Error(`This transfer will cause the balance to go over the MAX_TOTAL_RE_MINT_LIMIT. This wil result in LOSS OF ALL FUNDS OVER THE LIMIT!! DO NOT SEND THIS TRANSACTION!!\n new balance: ${newBurnBalance} \n limit:       ${maxTotalReMintLimit}`) }
-    return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount])
+    return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount],{account:account})
 }
 
 export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses, amount }: { burnAccounts: SyncedBurnAccount[], selectBurnAddresses: Address[], amount: bigint }) {
@@ -479,7 +479,9 @@ export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: Wall
         _root,
         _snarkProof,
         _signatureInputs
-    ], { account: wallet.account?.address as Address })
+        // estimation is some time so high it goes over the per tx limit on sepolia
+        // to not scare users. we wont set the gas limit super high when the amount of _accountNoteHashes is only 2 (circuit size)
+    ], { account: wallet.account?.address as Address, gas: _accountNoteHashes.length > 2 ? GAS_LIMIT_TX : undefined })
 }
 
 /**
@@ -523,7 +525,9 @@ export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, wo
         _snarkProof,
         _signatureInputs,
         feeData
-    ], { account: wallet.account?.address as Address })
+        // estimation is some time so high it goes over the per tx limit on sepolia
+        // to not scare users. we wont set the gas limit super high when the amount of _accountNoteHashes is only 2 (circuit size)
+    ], { account: wallet.account?.address as Address, gas: _accountNoteHashes.length > 2 ? GAS_LIMIT_TX : undefined })
 }
 export async function getFreshBurnAccount(privateWallet: PrivateWallet, wormholeToken: WormholeTokenTest | WormholeToken) {
     const neverUsedBurnAccounts = privateWallet.privateData.burnAccounts.filter(async (b) => await wormholeToken.read.balanceOf([b.burnAddress]) === 0n)
