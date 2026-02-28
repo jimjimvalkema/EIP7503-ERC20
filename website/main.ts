@@ -27,7 +27,7 @@ The PoW is to generate a valid burn address, a PoW verification was added to the
 const BURN_ACCOUNT_SYNCING_MSG = `
 syncing the burn account by looking for nullifiers with an account nonce that incrementally go up.
 <br> So it looks for <code>nullifier=poseidon2(viewing_key, account_nonce+=1)</code>
-<br> Then it also looks for a encrypted blob that contains the total amount spent of that burn account.
+<br> Then it also looks the event of that nullifier which contains a encrypted blob that contains the total amount spent of that burn account.
 `
 
 const CIRCUIT_SIZE = 2
@@ -171,6 +171,7 @@ async function updateWalletInfoUi(
         , true, true);
     }, 500);
     const syncedBurnAccount = await syncedBurnAccountPromise;
+    await sleep(500)
     clearInterval(powInterval);
     everyClass(".burnAddress", (el) => el.innerText = burnAccount.burnAddress)
     everyClass(".privateBurnedBalance", (el) => el.innerText = formatUnits(BigInt(syncedBurnAccount.totalBurned), decimals))

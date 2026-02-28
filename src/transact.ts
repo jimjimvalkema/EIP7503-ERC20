@@ -228,7 +228,7 @@ export async function createRelayerInputs(
     privateWallet: PrivateWallet,
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
-    { threads, chainId, callData = "0x", callValue = 0n, callCanFail = true, feeData, burnAddresses, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, maxTotalReMintLimit, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
+    { threads, chainId, callData = "0x", callValue = 0n, callCanFail = false, feeData, burnAddresses, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, maxTotalReMintLimit, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
         CreateRelayerInputsOpts & { feeData?: FeeData } = {}
 ): Promise<{ relayInputs:RelayInputs, syncedData:{syncedTree:PreSyncedTree, syncedPrivateWallet:PrivateWallet } } | { relayInputs:SelfRelayInputs,  syncedData:{syncedTree:PreSyncedTree, syncedPrivateWallet:PrivateWallet } }> {
     // set defaults
