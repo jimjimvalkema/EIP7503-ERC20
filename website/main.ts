@@ -29,6 +29,12 @@ syncing the burn account by looking for nullifiers with an account nonce that in
 <br> Then it also looks the event of that nullifier which contains a encrypted blob that contains the total amount spent of that burn account.
 `
 
+const CREATING_PROOF_MSG = `The circuit verifies a signature which is a signed hash containing eip712 structured data. 
+<br>The contract then reconstructs this hash, and uses the inputs from the pre-image (recipient,amount,fee,etc). 
+<br>This allows for better security and hardware wallet support since the circuit does not require private keys for spending.
+<br>Only the viewing key can be compromised not the users funds, if the ui is compromised. (or even machine in case of hardware wallets).
+`
+
 const wormholeTokenAddress = sepoliaDeployments['wormholeToken#WormholeToken'] as Address;
 //@ts-ignore
 window.wormholeTokenAddress = wormholeTokenAddress
@@ -127,7 +133,6 @@ export function addRelayInputsToLocalStorage(relayInputs: SelfRelayInputs) {
 
 export async function getRelayInputsFromLocalStorage(): Promise<SelfRelayInputs[]> {
   const allRelayerInputs: SelfRelayInputs[] = getFromLocalStorage(relayerInputsLocalStoreName)
-  console.log({ allRelayerInputs })
   if (!allRelayerInputs) return []
   const allRelayerInputClean: SelfRelayInputs[] = []
   for (const relayerInput of allRelayerInputs) {
@@ -159,14 +164,13 @@ async function updateWalletInfoUi(
   wormholeTokenWallet: WormholeToken,
   publicAddress: Address,
   burnAccount?: BurnAccount,
-  showBurnMsg=false
+  showBurnMsg = false
 ) {
 
   everyClass(".publicAddress", (el) => el.innerText = publicAddress)
   const decimals = Number(await wormholeTokenWallet.read.decimals())
   const publicBalance = await wormholeTokenWallet.read.balanceOf([publicAddress])
   everyClass(".publicBalance", (el) => el.innerText = formatUnits(publicBalance, decimals))
-  console.log({ burnAccount })
   //@ts-ignore
   const privateWallet = window.privateWallet as PrivateWallet | undefined
   if (privateWallet && privateWallet.privateData.burnAccounts.length > 0) {
@@ -403,7 +407,7 @@ async function getPublicWallet() {
  * Creates all missing accounts in parallel with async PoW.
  * Progressively updates the UI as each account finishes.
  */
-async function ensurePageAccounts(page: number, privateWallet: PrivateWallet, wormholeTokenWallet: WormholeToken, clearMsg=true) {
+async function ensurePageAccounts(page: number, privateWallet: PrivateWallet, wormholeTokenWallet: WormholeToken, clearMsg = true) {
   const startIndex = page * BURN_ACCOUNTS_PER_PAGE
   const endIndex = startIndex + BURN_ACCOUNTS_PER_PAGE
   const decimals = Number(await wormholeToken.read.decimals())
@@ -421,8 +425,8 @@ async function ensurePageAccounts(page: number, privateWallet: PrivateWallet, wo
 
   // generate + sync each account, re-render as each one completes
   logUi(
-    `<br><br>`+POW_EXPLANATION_MSG+`<br><br>`
-    ,clearMsg, true)
+    `<br><br>` + POW_EXPLANATION_MSG + `<br><br>`
+    , clearMsg, true)
   const perAccountPromises = indicesToGenerate.map((i) =>
     privateWallet.createBurnAccountFromViewKeyIndex({ async: true, viewingKeyIndex: i })
       .then((ba) =>
@@ -590,7 +594,7 @@ async function burnBtnHandler() {
   // Verify the recipient matches a known burn account
   const targetBurnAccount = privateWallet.privateData.burnAccounts.find((b) => b.burnAddress === to)
   if (!targetBurnAccount) {
-    errorUi("address is not a known burn account in your private wallet. Use the regular transfer for non-burn addresses.", new Error("unknown burn address"))
+    logUi("WARNING not a ")
     return
   }
 
@@ -608,7 +612,6 @@ async function burnBtnHandler() {
 
 async function proofPrivateTransferBtnHandler() {
   const { wormholeTokenWallet, publicAddress, privateWallet, burnAccount } = await getPrivateWallet()
-  console.log({ data: privateWallet.privateData })
   const decimals = Number(await wormholeToken.read.decimals())
 
   let recipient: Address
@@ -632,16 +635,12 @@ async function proofPrivateTransferBtnHandler() {
   const powInterval = setInterval(() => {
     dotCount = (dotCount % 5) + 1;
     logUi(
-      "creating proof..." + ".".repeat(dotCount) + "<br><br>"+
-      `The circuit verifies a signature which is a signed hash containing eip712 structured data. 
-      <br>The contract then reconstructs this hash, and uses the inputs from the pre-image (recipient,amount,fee,etc). 
-      <br>This allows for better security and hardware wallet support since the circuit does not require private keys for spending.
-      <br>Only the viewing key can be compromised not the users funds, if the ui is compromised. (or even machine in case of hardware wallets).
-      `
+      "creating proof..." + ".".repeat(dotCount) + "<br><br>" +
+      CREATING_PROOF_MSG
       , true, true);
   }, 500);
   try {
-  // get selected burn addresses from checkboxes
+    // get selected burn addresses from checkboxes
     const selectedBurnAddresses = getSelectedRemintBurnAddresses()
     if (selectedBurnAddresses.length === 0) {
       clearInterval(powInterval)
@@ -663,7 +662,6 @@ async function proofPrivateTransferBtnHandler() {
 
     const { relayInputs: relayerInputs, syncedData: { syncedPrivateWallet, syncedTree } } = await relayInputsPromise
     addRelayInputsToLocalStorage(relayerInputs)
-    console.log({burnAccountsSynced:syncedPrivateWallet.privateData.burnAccounts})
     //@ts-ignore
     window.burnAccount = syncedPrivateWallet.privateData.burnAccounts[0]
     //@ts-ignore
@@ -682,7 +680,6 @@ async function proofPrivateTransferBtnHandler() {
 async function listPendingRelayTxs() {
   pendingRelayTxsEl!.innerHTML = ""
   const relayInputs = await getRelayInputsFromLocalStorage()
-  console.log({ relayInputs })
   const decimals = Number(await wormholeToken.read.decimals())
   for (const relayInput of relayInputs) {
     const relayFunc = async () => {
@@ -705,7 +702,6 @@ async function listPendingRelayTxs() {
     }
     const relayTxBtn = document.createElement("button")
     relayTxBtn.onclick = relayFunc
-    console.log({ relayInput })
     relayTxBtn.innerText = `relay tx: ${formatUnits(BigInt(relayInput.publicInputs.amount), decimals)} tokens to ${relayInput.signatureInputs.recipient}`
     const li = document.createElement("li")
     li.appendChild(relayTxBtn)
