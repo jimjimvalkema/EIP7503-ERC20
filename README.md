@@ -44,7 +44,7 @@ assert_lt(pow_hash, POW_DIFFICULTY);
 
 `address_hash` then has the first 12 bytes set to 0, so it the same length as ethereum address *(this is also the cause of that collision attack vector 😬).*
 
-## TODO EXPLAIN MULTISPENDS, TODO MAKE UI ABLE TO DO THAT
+## TODO EXPLAIN MULTISPENDS
 ## TODO PROTOCOL SPEC
 ## TODO rename token to not be workHoleToken wormToken. Since it confuses with the worm token live on mainnet
 ## TODO rename all inconsistent naming

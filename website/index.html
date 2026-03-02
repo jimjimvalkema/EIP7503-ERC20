@@ -40,6 +40,12 @@
 <body>
   <span>github: <a
       href="https://github.com/jimjimvalkema/EIP7503-ERC20">https://github.com/jimjimvalkema/EIP7503-ERC20</a></span>
+  <div style="margin: 0.5em 0; padding: 0.5em; border: 1px solid #888;">
+    <label for="tokenAddressInput"><strong>token contract:</strong></label>
+    <input type="text" id="tokenAddressInput" placeholder="0x..." style="width: 26em; font-size: 80%;" />
+    <button id="loadTokenBtn" style="font-size: 80%;">load</button>
+    <span id="tokenLoadStatus"></span>
+  </div>
   <div class="outer">
     <div id="walletUi" class="inner">
       <h1>Connect Wallet</h1>
@@ -91,11 +97,11 @@
 
     <div id="burnUi" class="inner">
       <h1>safe Burn</h1>
-      Uses superSafeBurn to make sure that:
+      Runs superSafeBurn() on the client to make sure that:
       <br>
       Pow is valid, preImage is correct, merkle tree is not full,
       <br>
-      burn does not exceed RE_MINT_LIMIT.
+      burn does not exceed RE_MINT_LIMIT. Then call the regular transfer() function on the contract.
       <br>
       <br>
       <label for="burnRecipientSelect">burn address</label>

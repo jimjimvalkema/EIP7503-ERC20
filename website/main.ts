@@ -14,6 +14,7 @@ import { ADDED_BITS_SECURITY, POW_BITS } from '../src/constants.ts';
 import { syncBurnAccount } from '../src/syncing.ts';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// @TODO update when ever a new contract is used
 const POW_EXPLANATION_MSG = `
 The PoW is to generate a valid burn address, a PoW verification was added to the circuit since eth addresses are only 160 bits (20 bytes) and there for only have 80 bits of security against collision attacks. 
 <br>See <a href="https://github.com/jimjimvalkema/EIP7503-ERC20/tree/f191226b323340f7f1c1b95ab42a68342860acb6?tab=readme-ov-file#burn-address-and-the-10-billion-collision-attack-eip-3607">readme</a> for more info.
@@ -35,7 +36,29 @@ const CREATING_PROOF_MSG = `The circuit verifies a signature which is a signed h
 <br>Only the viewing key can be compromised not the users funds, if the ui is compromised. (or even machine in case of hardware wallets).
 `
 
-const wormholeTokenAddress = sepoliaDeployments['wormholeToken#WormholeToken'] as Address;
+const defaultWormholeTokenAddress = sepoliaDeployments['wormholeToken#WormholeToken'] as Address;
+
+// read token address from URL ?token=0x... or fall back to deployed default
+function getTokenAddressFromUrl(): Address {
+  const params = new URLSearchParams(window.location.search)
+  const tokenParam = params.get('token')
+  if (tokenParam) {
+    try {
+      return getAddress(tokenParam)
+    } catch { /* invalid address, ignore */ }
+  }
+  return defaultWormholeTokenAddress
+}
+
+function setTokenAddressInUrl(address: Address) {
+  const url = new URL(window.location.href)
+  url.searchParams.set('token', address)
+  window.history.replaceState({}, '', url.toString())
+}
+
+let wormholeTokenAddress = getTokenAddressFromUrl()
+setTokenAddressInUrl(wormholeTokenAddress)
+
 //@ts-ignore
 window.wormholeTokenAddress = wormholeTokenAddress
 //@ts-ignore
@@ -44,6 +67,8 @@ console.log({ wormholeTokenAddress })
 
 const logEl = document.getElementById("messages")
 const errorEl = document.getElementById("errors")
+const tokenAddressInputEl = document.getElementById('tokenAddressInput') as HTMLInputElement
+const tokenLoadStatusEl = document.getElementById('tokenLoadStatus')
 const transferRecipientInputEl = document.getElementById('transferRecipientInput')
 const transferBurnAddressSelectEl = document.getElementById('transferBurnAddressSelect') as HTMLSelectElement
 const transferAmountInputEl = document.getElementById('transferAmountInput')
@@ -68,7 +93,8 @@ const publicClient = createPublicClient({
     transport: http(process.env.ETHEREUM_RPC),
 })
 
-const wormholeToken = getContract({ abi: WormholeTokenArtifact.abi, address: wormholeTokenAddress, client: { public: publicClient } }) as unknown as WormholeToken
+let wormholeToken = getContract({ abi: WormholeTokenArtifact.abi, address: wormholeTokenAddress, client: { public: publicClient } }) as unknown as WormholeToken
+tokenAddressInputEl.value = wormholeTokenAddress
 setNonWalletInfo(wormholeToken)
 
 // --- helpers ---
@@ -711,6 +737,72 @@ async function listPendingRelayTxs() {
 
 // --- event listeners ---
 
+async function loadTokenHandler() {
+  const input = tokenAddressInputEl.value.trim()
+  let newAddress: Address
+  try {
+    newAddress = getAddress(input)
+  } catch {
+    tokenLoadStatusEl!.textContent = "invalid address"
+    return
+  }
+
+  tokenLoadStatusEl!.textContent = "loading..."
+
+  // update globals
+  wormholeTokenAddress = newAddress
+  //@ts-ignore
+  window.wormholeTokenAddress = wormholeTokenAddress
+  setTokenAddressInUrl(wormholeTokenAddress)
+
+  // recreate read-only contract
+  wormholeToken = getContract({ abi: WormholeTokenArtifact.abi, address: wormholeTokenAddress, client: { public: publicClient } }) as unknown as WormholeToken
+
+  // reset private wallet state
+  //@ts-ignore
+  window.privateWallet = undefined
+  //@ts-ignore
+  window.burnAccount = undefined
+  selectedRemintAddresses.clear()
+  selectionInitialized = false
+  currentBurnPage = 0
+  burnAccountsListEl!.innerHTML = "<li>connect private wallet first</li>"
+  burnPageLabelEl!.textContent = ""
+  totalSelectedSpendableEl!.textContent = "0"
+
+  // if public wallet connected, recreate the wallet-bound contract
+  //@ts-ignore
+  if (window.publicWallet) {
+    //@ts-ignore
+    const walletClient = window.publicWallet as WalletClient
+    const wormholeTokenWallet = getContract({
+      abi: WormholeTokenArtifact.abi,
+      address: wormholeTokenAddress,
+      client: { wallet: walletClient, public: publicClient }
+    }) as unknown as WormholeToken
+    //@ts-ignore
+    window.wormholeTokenWallet = wormholeTokenWallet
+    //@ts-ignore
+    await updateWalletInfoUi(wormholeTokenWallet, window.publicAddress)
+  }
+
+  try {
+    await setNonWalletInfo(wormholeToken)
+    tokenLoadStatusEl!.textContent = "loaded!"
+    setTimeout(() => { tokenLoadStatusEl!.textContent = "" }, 2000)
+  } catch (error) {
+    tokenLoadStatusEl!.textContent = "failed - is this a valid WormholeToken?"
+    console.error(error)
+  }
+
+  await listPendingRelayTxs()
+}
+
+document.getElementById('loadTokenBtn')?.addEventListener('click', loadTokenHandler)
+// also load on Enter in the input
+tokenAddressInputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') loadTokenHandler()
+})
 document.getElementById('connectPublicWalletBtn')?.addEventListener('click', connectPublicWallet)
 document.getElementById('connectPrivateWalletBtn')?.addEventListener('click', connectPrivateWallet)
 document.getElementById('mintBtn')?.addEventListener('click', mintBtnHandler)
