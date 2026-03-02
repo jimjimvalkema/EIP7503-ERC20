@@ -69,8 +69,8 @@ export interface SpendableBalanceProof {
 }
 
 export interface BurnDataPublic extends InputMap {
-    account_note_hash: Hex,
-    account_note_nullifier: Hex,
+    total_spent_leaf: Hex,
+    nullifier: Hex,
 }
 
 export interface BurnDataPrivate extends InputMap {
@@ -89,7 +89,7 @@ export interface PublicProofInputs extends InputMap {
     chain_id: Hex, // technically not public since we don't use the cross-chain functionality here, can be revealed does not leak user data
     amount: Hex,
     pow_difficulty:Hex,
-    max_total_spend:Hex
+    re_mint_limit:Hex
     signature_hash: u8sAsHexArrLen32,
     burn_data_public: BurnDataPublic[],
 }
@@ -200,7 +200,8 @@ export type CreateRelayerInputsOpts = {
     blocksPerGetLogsReq?: bigint;
     circuitSize?: number;
     powDifficulty?: Hex;
-    maxTotalReMintLimit?: Hex;
+    reMintLimit?: Hex;
     maxTreeDepth?: number;
     encryptedBlobLen?: number;
+    circuitSizes?: number[];
 };

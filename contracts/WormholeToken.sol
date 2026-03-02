@@ -9,7 +9,7 @@ import {ERC20WithWormHoleMerkleTree} from "./ERC20WithWormHoleMerkleTree.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {LeanIMTData, Hasher} from "zk-kit-lean-imt-custom-hash/InternalLeanIMT.sol";
 import {leanIMTPoseidon2} from "./leanIMTPoseidon2.sol";
-import {IVerifier} from "./privateTransfer2InVerifier.sol";
+import {IVerifier} from "./reMint2Verifier.sol";
 
 struct FeeData {
     uint256 tokensPerEthPrice;
@@ -39,6 +39,11 @@ event Nullified(uint256 indexed nullifier, bytes encryptedTotalSpends);
 event StorageRootAdded(uint256 blockNumber);
 event NewLeaf(uint256 leaf);
 
+struct Verifier {
+    address contractAddress;
+    uint8 size;
+}
+
 contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     // this is so leafs from received balance and spent balance wont get mixed up
     uint256 constant public TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544; //  UTF8("TOTAL_BURNED").toHex()
@@ -56,24 +61,35 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
 
     bytes32 public POW_DIFFICULTY; // find a nonce that result in a hash that is hash < pow_difficulty
-    bytes32 public MAX_TOTAL_RE_MINT_LIMIT;
+    bytes32 public RE_MINT_LIMIT;
 
-
-    address public privateTransferVerifier2In;
-    address public privateTransferVerifier100In;
     LeanIMTData public tree;
-    
+
+    mapping (uint8 => address) public verifierPerSize;
+    uint8[] public verifierSizes;
+    uint8 public amountOfVerifiers;    
     /**
      * 
+     * @param _verifiers needs to be sorted smallest to lowest.
+     * @param _powDifficulty a number where the PoW in the circuit asserts pow_hash < _powDifficulty
+     * @param _reMintLimit a maximum total amount one burn address can reMint
      */
-    constructor(address _privateTransferVerifier2In, address _privateTransferVerifier100In, bytes32 _powDifficulty, uint256 _maxTotalReMintLimit)
+    constructor(Verifier[] memory _verifiers, bytes32 _powDifficulty, uint256 _reMintLimit)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
         EIP712("zkwormholes-token", "1") 
     {
-        privateTransferVerifier2In = _privateTransferVerifier2In;
-        privateTransferVerifier100In = _privateTransferVerifier100In;
+        amountOfVerifiers = uint8(_verifiers.length);
+        uint8 _lastSize = 0;
+        for (uint i = 0; i < _verifiers.length; i++) {
+            Verifier memory _verifier = _verifiers[i];
+            require(_lastSize < _verifier.size, "_verifiers needs to be sorted from smallest to largest size");
+            _lastSize = _verifier.size;
+            verifierPerSize[_verifier.size] = _verifier.contractAddress;
+            verifierSizes.push(_verifier.size);
+        }
+
         POW_DIFFICULTY = _powDifficulty;
-        MAX_TOTAL_RE_MINT_LIMIT = bytes32(_maxTotalReMintLimit);
+        RE_MINT_LIMIT = bytes32(_reMintLimit);
     }
 
     function treeSize() public view  returns (uint256) {
@@ -82,12 +98,12 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
     bytes32 private constant _RE_MINT_TYPEHASH =
         keccak256(
-            "privateReMint(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends)"
+            "reMint(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends)"
         );
 
     bytes32 private constant _RE_MINT_RELAYER_TYPEHASH =
         keccak256(
-            "privateReMintRelayer(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends,FeeData _feeData)FeeData(uint256 tokensPerEthPrice,uint256 maxFee,uint256 amountForRecipient,uint256 relayerBonus,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
+            "reMintRelayer(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends,FeeData _feeData)FeeData(uint256 tokensPerEthPrice,uint256 maxFee,uint256 amountForRecipient,uint256 relayerBonus,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
         );
 
     bytes32 private constant _FEEDATA_TYPEHASH = keccak256(
@@ -282,49 +298,25 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         uint256[] memory _accountNoteHashes,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
     ) public view returns (bytes32[] memory) {
-        if (_accountNoteHashes.length == 2) {
-            bytes32[] memory publicInputs = new bytes32[](4 + 32 + 2*2);
+        uint256 verifierSize = _accountNoteNullifiers.length;
+        bytes32[] memory publicInputs = new bytes32[](4 + 32 + verifierSize*2);
 
-            publicInputs[0] = bytes32(_root);
-            publicInputs[1] = bytes32(uint256(_amount));
-            publicInputs[2] = POW_DIFFICULTY;
-            publicInputs[3] = MAX_TOTAL_RE_MINT_LIMIT;
-            uint256 signatureHashOffset = 4;
-            for (uint256 i = 0; i < 32; i++) {
-                publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
-            }
-
-            uint256 noteHashesOffSet = 32 + signatureHashOffset;
-            for (uint256 i = 0; i < _accountNoteHashes.length ; i++) {
-                publicInputs[2 * i + noteHashesOffSet] = bytes32(_accountNoteHashes[i]);
-                publicInputs[2 * i + noteHashesOffSet + 1] = bytes32(_accountNoteNullifiers[i]);
-            }
-
-            return publicInputs;
-
-        } else if (_accountNoteHashes.length == 100) {
-            bytes32[] memory publicInputs = new bytes32[](4 + 32 + 100*2);
-
-            publicInputs[0] = bytes32(_root);
-            publicInputs[1] = bytes32(uint256(_amount));
-            publicInputs[2] = POW_DIFFICULTY;
-            publicInputs[3] = MAX_TOTAL_RE_MINT_LIMIT;
-            uint256 signatureHashOffset = 4;
-            for (uint256 i = 0; i < 32; i++) {
-                publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
-            }
-
-            uint256 noteHashesOffSet = 32 + signatureHashOffset;
-            for (uint256 i = 0; i < _accountNoteHashes.length ; i++) {
-                publicInputs[2 * i + noteHashesOffSet] = bytes32(_accountNoteHashes[i]);
-                publicInputs[2 * i + noteHashesOffSet + 1] = bytes32(_accountNoteNullifiers[i]);
-            }
-
-            return publicInputs;
-        } else {
-            revert("amount of note hashes not supported");
+        publicInputs[0] = bytes32(_root);
+        publicInputs[1] = bytes32(uint256(_amount));
+        publicInputs[2] = POW_DIFFICULTY;
+        publicInputs[3] = RE_MINT_LIMIT;
+        uint256 signatureHashOffset = 4;
+        for (uint256 i = 0; i < 32; i++) {
+            publicInputs[i + signatureHashOffset] = bytes32(uint256(uint8(_signatureHash[i])));
         }
 
+        uint256 noteHashesOffSet = 32 + signatureHashOffset;
+        for (uint256 i = 0; i < _accountNoteHashes.length ; i++) {
+            publicInputs[2 * i + noteHashesOffSet] = bytes32(_accountNoteHashes[i]);
+            publicInputs[2 * i + noteHashesOffSet + 1] = bytes32(_accountNoteNullifiers[i]);
+        }
+
+        return publicInputs;
     }
 
 
@@ -348,20 +340,15 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
         // format public inputs and verify proof 
         bytes32[] memory publicInputs = _formatPublicInputs(_root, _amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
-        if (_accountNoteNullifiers.length == 2) {
-            if (!IVerifier(privateTransferVerifier2In).verify(_snarkProof, publicInputs)) {
-                revert VerificationFailed();
-            }
-        } else if (_accountNoteNullifiers.length == 100) {
-            if (!IVerifier(privateTransferVerifier100In).verify(_snarkProof, publicInputs)) {
-                revert VerificationFailed();
-            }
-        } else {
-            revert("amount of note hashes not supported");
+        uint8 verifierSize = uint8(_accountNoteNullifiers.length);
+        address verifierAddress = verifierPerSize[verifierSize];
+        require(verifierAddress != address(0), "amount of note hashes not supported");
+        if (!IVerifier(verifierAddress).verify(_snarkProof, publicInputs)) {
+            revert VerificationFailed();
         }
     }
 
-    function privateReMint(
+    function reMint(
         uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root,
@@ -386,7 +373,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         return (_fee, _refundAmount);
     }
 
-    function privateReMintRelayer(
+    function reMintRelayer(
         uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
         uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root,

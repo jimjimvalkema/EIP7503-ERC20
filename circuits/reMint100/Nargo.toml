@@ -1,0 +1,8 @@
+[package]
+name = "reMint100"
+type = "bin"
+authors = ["Jim Jim Valkema"]
+
+[dependencies]
+reMintLib = { path = "../reMintLib" }
+constants = { path = "../constants" }

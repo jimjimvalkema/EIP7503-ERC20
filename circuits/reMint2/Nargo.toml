@@ -1,8 +1,8 @@
 [package]
-name = "privateTransfer100In"
+name = "reMint2"
 type = "bin"
 authors = [""]
 
 [dependencies]
-privateTransferLib = { path = "../privateTransferLib" }
+reMintLib = { path = "../reMintLib" }
 constants = { path = "../constants" }

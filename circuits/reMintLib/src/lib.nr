@@ -1,3 +1,6 @@
+mod domain_separators;
+use domain_separators::{BURN_ADDRESS_TYPE,TOTAL_BURNED_DOMAIN,TOTAL_SPENT_DOMAIN};
+
 use dep::poseidon::poseidon2::Poseidon2;
 //use dep::poseidon::{poseidon};
 
@@ -7,28 +10,7 @@ use dep::std::field::{bytes32_to_field, bn254::{
     gt
 }};
 use binary_merkle_root::binary_merkle_root;
-use constants::{PRIVATE_ADDRESS_TYPE,TOTAL_BURNED_DOMAIN,TOTAL_SPENT_DOMAIN};
 
-
-// @TODO find out what number would be secure enough!
-// const POW_LEADING_ZEROS = 4n;
-// const POW_DIFFICULTY    = 16n ** (64n - POW_LEADING_ZEROS) - 1n;
-// pub global POW_DIFFICULTY: Field =  0x0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;//0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff // find a nonce that result in a hash that is hash < pow_difficulty
-
-// ---------- why max tree depth 42 --------------------
-// const erc20Tps = 35_000;
-// const zkwormholeTps = erc20Tps / 10;
-// const bulkMerkleInserts = 1; // becomes relevant once large reMints emitting multiple commitments are more gas efficient then simple burns. 
-// const insertsPerYear = bulkMerkleInserts * zkwormholeTps * 60*60*24*365;
-// const treeDepth = 42;
-// (2**treeDepth) / insertsPerYear
-
-// depth 42 allows for 40 years on a 35_000 tps chain (megaEth recent stress test) if every tx is a burn tx
-// after that, any tokens burned will be actually be burned for real and you will never get them back!
-// any tokens before that are fine. That leaf will always exist and the contract always stores that root.
-// you can burn tokens before the tree is at a depth above 42, and reMint them a 100 years later those will always be there.
-// the ui can warn you, but contract cant prevent it because the contract can't know if your address is a burn address or a normal address!
-// ----------------------------------------------------------
 
 fn merkle_hasher(leaves: [Field; 2]) -> Field {
     Poseidon2::hash(leaves, 2)
@@ -47,12 +29,11 @@ fn merkle_hash_root<let MAX_TREE_DEPTH: u32>(
     )
 }
 
-
 // @notice chain_id is not used in this repo but can be used to make this cross-chain like warptoad
 // viewing_key is there so it is committed in the burn address, 
 // to prevent spenders from using a different key and pretend they never spent before when ever the create the nullifier at account_nonce=0
-fn hash_blinded_burn_address_data(spending_pub_key_x:Field, chain_id:Field, viewing_key:Field) -> Field {
-    Poseidon2::hash([spending_pub_key_x, viewing_key, chain_id], 3)
+fn hash_blinded_burn_address_data(spending_pub_key:Field, chain_id:Field, viewing_key:Field) -> Field {
+    Poseidon2::hash([spending_pub_key, viewing_key, chain_id], 3)
 }
 
 fn verify_pow(blinded_address_data_hash: Field, pow_nonce: Field, pow_difficulty: Field ) {
@@ -62,7 +43,7 @@ fn verify_pow(blinded_address_data_hash: Field, pow_nonce: Field, pow_difficulty
 
 // pow_nonce acts both as a PoW to make finding a hash collision between EOA and BurnAddress harder
 fn hash_burn_address(blinded_address_data_hash: Field, pow_nonce: Field) -> Field {
-    let address_hash: Field = Poseidon2::hash([blinded_address_data_hash, pow_nonce, PRIVATE_ADDRESS_TYPE], 3);
+    let address_hash: Field = Poseidon2::hash([blinded_address_data_hash, pow_nonce, BURN_ADDRESS_TYPE], 3);
 
     // // replace last 12 bytes with zero since a eth address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
     let bytes: [u8; 32] = address_hash.to_be_bytes();
@@ -71,28 +52,17 @@ fn hash_burn_address(blinded_address_data_hash: Field, pow_nonce: Field) -> Fiel
         eth_address = eth_address * 256 + bytes[i] as Field;
     }
     eth_address
-
-
-    // this way of doing it makes the ram requirement super large? idk there was something that made it super hard to go beyond 4 burnaddress and this might be it?
-    // replace last 12 bytes with zero since address is only 20 bytes (noir doesn't support a nicer method hence whacky for loop)
-    // let mut address_bytes: [u8;32] = address_hash.to_be_bytes();
-    // for index in 0..12 {
-    //     address_bytes[index] = 0;
-    // }
-    
-    // let eth_address: Field = bytes32_to_field(address_bytes);
-    // eth_address
 }
 
-fn hash_total_burned_leaf(private_address: Field, total_burned: Field) -> Field {
+fn hash_total_burned_leaf(burn_address: Field, total_burned: Field) -> Field {
     Poseidon2::hash(
-        [private_address, total_burned, TOTAL_BURNED_DOMAIN],
+        [burn_address, total_burned, TOTAL_BURNED_DOMAIN],
         3,
     )
 }
 
 /*
-total_spent: total_spend for that specific burn address
+total_spent: total_spent for that specific burn address
 blinded_address_data_hash: this ties this commitment to the chain_id which is crucial for cross-chain warptoad like use cases, also ties it to the rest of the data in that hash
 viewing_key: is already inside blinded_address_data_hash, but is used again here so blinded_address_data_hash is sharable so sender can create burn addresses on the recipients behave
 */
@@ -126,8 +96,8 @@ pub struct MerkleData<let MAX_TREE_DEPTH: u32> {
 
 
 pub struct BurnDataPublic {
-    account_note_hash: Field,       
-    account_note_nullifier: Field,                   
+    total_spent_leaf: Field,       
+    nullifier: Field,                   
 }
 
 pub struct BurnDataPrivate <let MAX_TREE_DEPTH: u32> {                
@@ -146,33 +116,33 @@ pub struct BurnDataPrivate <let MAX_TREE_DEPTH: u32> {
     total_burned_merkle_data: MerkleData<MAX_TREE_DEPTH>,
 }
 
-pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32>(
+pub fn bulkReMint<let MAX_TREE_DEPTH: u32>(
     //public
     root: Field, 
     chain_id: Field,
     total_amount_to_spent: Field, 
     pow_difficulty: Field,
-    max_total_spend: Field,
+    re_mint_limit: Field,
     burn_data_public: [BurnDataPublic],
     //private
     burn_data_private: [BurnDataPrivate<MAX_TREE_DEPTH>],
-    spending_pub_key_x: Field,    
+    spending_pub_key: Field,    
     amount_burn_addresses: u32
 ) {
     let mut amount_verified: Field = 0;
     for i in 0..burn_data_private.len() {
         if( i < amount_burn_addresses) {
-            spendFromBurnAddress::<MAX_TREE_DEPTH>(
+            reMint::<MAX_TREE_DEPTH>(
                 //public
                 root,
                 chain_id,
                 pow_difficulty,
-                max_total_spend,
-                burn_data_public[i].account_note_hash,
-                burn_data_public[i].account_note_nullifier,
+                re_mint_limit,
+                burn_data_public[i].total_spent_leaf,
+                burn_data_public[i].nullifier,
 
                 //private
-                spending_pub_key_x,
+                spending_pub_key,
                 burn_data_private[i].viewing_key,
                 burn_data_private[i].pow_nonce,
                 burn_data_private[i].amount_to_spend,
@@ -191,17 +161,17 @@ pub fn spendFromBurnAddresses<let MAX_TREE_DEPTH: u32>(
     assert(amount_verified == total_amount_to_spent, "aggregated burn address amounts do not match amount to spend");
 }
 
-pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32>(
+pub fn reMint<let MAX_TREE_DEPTH: u32>(
     // public
     root: Field,
     chain_id: Field,
     pow_difficulty: Field,
-    max_total_spend: Field,
-    account_note_hash: Field,
-    account_note_nullifier: Field,
+    re_mint_limit: Field,
+    total_spent_leaf: Field,
+    nullifier: Field,
 
     // private, keys
-    spending_pub_key_x: Field,
+    spending_pub_key: Field,
     viewing_key: Field,
     pow_nonce: Field,
 
@@ -215,20 +185,20 @@ pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32>(
     prev_account_note_merkle_data: MerkleData<MAX_TREE_DEPTH>,
     total_burned_merkle_data: MerkleData<MAX_TREE_DEPTH>
 ) {
-    let blinded_address_data_hash: Field = hash_blinded_burn_address_data(spending_pub_key_x, chain_id, viewing_key );
-    let private_address: Field = hash_burn_address(blinded_address_data_hash, pow_nonce);
+    let blinded_address_data_hash: Field = hash_blinded_burn_address_data(spending_pub_key, chain_id, viewing_key );
+    let burn_address: Field = hash_burn_address(blinded_address_data_hash, pow_nonce);
     verify_pow(blinded_address_data_hash, pow_nonce, pow_difficulty);
 
     // verify how much is "burned"
-    let total_burned_leaf: Field = hash_total_burned_leaf(private_address, total_burned);
-    let root_total_burned: Field = merkle_hash_root::<MAX_TREE_DEPTH>(total_burned_leaf, total_burned_merkle_data);
-    assert(root_total_burned == root, "total_burned merkle proof invalid");
+    let total_burned_leaf: Field = hash_total_burned_leaf(burn_address, total_burned);
+    let root_total_burned_root: Field = merkle_hash_root::<MAX_TREE_DEPTH>(total_burned_leaf, total_burned_merkle_data);
+    assert(root_total_burned_root == root, "total_burned merkle proof invalid");
 
     if prev_account_nonce != 0 {
         // verify how much was spent in total before this tx: verify prev_total_spent
-        let prev_account_note_hash: Field = hash_total_spent_leaf(prev_total_spent, prev_account_nonce,blinded_address_data_hash, viewing_key);
-        let computed_prev_root: Field = merkle_hash_root::<MAX_TREE_DEPTH>(prev_account_note_hash, prev_account_note_merkle_data);
-        assert(computed_prev_root == root, "prev account note merkle proof invalid");
+        let prev_total_spent_leaf: Field = hash_total_spent_leaf(prev_total_spent, prev_account_nonce,blinded_address_data_hash, viewing_key);
+        let prev_total_spend_root: Field = merkle_hash_root::<MAX_TREE_DEPTH>(prev_total_spent_leaf, prev_account_note_merkle_data);
+        assert(prev_total_spend_root == root, "prev account note merkle proof invalid");
     } else {
         // we have to skip merkle proofs since a previous spent balance does not exist
 
@@ -236,18 +206,18 @@ pub fn spendFromBurnAddress<let MAX_TREE_DEPTH: u32>(
         assert(prev_total_spent == 0, "prev_account_nonce = 0 but prev_total_spent is not 0.");
     }
 
-    // nullify the prev_total_spent, which is inside prev_account_note_hash and tied to prev_account_nonce + viewing_key
-    let computed_nullifier: Field = hash_nullifier(prev_account_nonce, viewing_key);
-    assert(computed_nullifier == account_note_nullifier, "nullifier mismatch");
+    // nullify the prev_total_spent, which is inside prev_total_spent_leaf and tied to prev_account_nonce + viewing_key
+    let new_nullifier: Field = hash_nullifier(prev_account_nonce, viewing_key);
+    assert(new_nullifier == nullifier, "nullifier mismatch");
 
     // check amount spent
     let new_total_spent: Field = prev_total_spent + amount_to_spend;
-    assert_lt(new_total_spent, max_total_spend);//, "burn account went over the max_total_spend limit");
+    assert_lt(new_total_spent, re_mint_limit);//, "burn account went over the re_mint_limit limit");
     assert(lower_then_or_equal(new_total_spent, total_burned), "spend exceeds total received");
 
     //
     let current_account_nonce: Field = prev_account_nonce + 1;
-    let computed_account_note_hash: Field = hash_total_spent_leaf(new_total_spent, current_account_nonce,blinded_address_data_hash, viewing_key);
-    assert(computed_account_note_hash == account_note_hash, "account note hash mismatch");
+    let new_total_spent_leaf: Field = hash_total_spent_leaf(new_total_spent, current_account_nonce,blinded_address_data_hash, viewing_key);
+    assert(new_total_spent_leaf == total_spent_leaf, "account note hash mismatch");
 
 }

@@ -3,7 +3,7 @@ import { recoverPublicKey, hashMessage, hexToBigInt, hexToBytes, toHex, getAddre
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, PRIVATE_RE_MINT_RELAYER_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import type { FeeData, SignatureData, SignatureInputs, SignatureInputsWithFee, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.ts";
-import { PrivateWallet } from "./PrivateWallet.ts"
+import { BurnWallet } from "./BurnWallet.ts"
 import { padArray } from "./proving.ts";
 import { encryptTotalSpend } from "./syncing.ts";
 
@@ -197,7 +197,7 @@ It took ${Date.now() - start}ms`)
     return powNonce
 }
 
-export async function signPrivateTransfer({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: PrivateWallet, signatureInputs: SignatureInputs, chainId: number, tokenAddress: Address }):
+export async function signPrivateTransfer({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: BurnWallet, signatureInputs: SignatureInputs, chainId: number, tokenAddress: Address }):
     Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }> {
     chainId ??= await privateWallet.viemWallet.getChainId()
 
@@ -215,7 +215,7 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
     const hash = hashTypedData({
         domain: domain,
         types: PRIVATE_RE_MINT_712_TYPES,
-        primaryType: "privateReMint",
+        primaryType: "reMint",
         message,
     });
 
@@ -224,7 +224,7 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
         account: privateWallet.privateData.ethAccount,
         domain: domain,
         types: PRIVATE_RE_MINT_712_TYPES,
-        primaryType: "privateReMint",
+        primaryType: "reMint",
         message,
     });
 
@@ -239,7 +239,7 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
         signatureHash: hash,
     }
 }
-export async function signPrivateTransferWithFee({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: PrivateWallet, signatureInputs: SignatureInputsWithFee, chainId: number, tokenAddress: Address }):
+export async function signPrivateTransferWithFee({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: BurnWallet, signatureInputs: SignatureInputsWithFee, chainId: number, tokenAddress: Address }):
     Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }> {
     chainId ??= await privateWallet.viemWallet.getChainId()
 
@@ -266,7 +266,7 @@ export async function signPrivateTransferWithFee({ privateWallet, signatureInput
     const hash = hashTypedData({
         domain: domain,
         types: PRIVATE_RE_MINT_RELAYER_712_TYPES,
-        primaryType: "privateReMintRelayer",
+        primaryType: "reMintRelayer",
         message,
     });
 
@@ -274,7 +274,7 @@ export async function signPrivateTransferWithFee({ privateWallet, signatureInput
         account: privateWallet.privateData.ethAccount,
         domain: domain,
         types: PRIVATE_RE_MINT_RELAYER_712_TYPES,
-        primaryType: "privateReMintRelayer",
+        primaryType: "reMintRelayer",
         message,
     });
 

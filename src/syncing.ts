@@ -3,12 +3,12 @@ import type { LeanIMTHashFunction } from "@zk-kit/lean-imt"
 import { LeanIMT } from "@zk-kit/lean-imt"
 import type { Abi, AbiEvent, Address, Hex, PublicClient } from "viem"
 import { bytesToHex, concatHex, hexToBytes, presignMessagePrefix, sliceHex, toBytes, toHex } from "viem"
-import type { WormholeTokenTest } from "../test/2inRemint.test.ts"
+import type { WormholeTokenTest } from "../test/remint2.test.ts"
 import { ENCRYPTED_TOTAL_SPENT_PADDING, WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.ts"
 import type { BurnAccount, PreSyncedTree, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts"
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { hashNullifier } from "./hashing.ts"
-import { PrivateWallet } from "./PrivateWallet.ts"
+import { BurnWallet } from "./BurnWallet.ts"
 
 export function getDeploymentBlock(chainId: number) {
     if (Number(chainId) in WORMHOLE_TOKEN_DEPLOYMENT_BLOCK) {
@@ -190,8 +190,9 @@ export async function syncBurnAccount(
  * @param param0 
  * @returns 
  */
-export async function syncMultipleBurnAccounts({ wormholeToken, archiveNode, privateWallet, burnAddressesToSync }: { archiveNode: PublicClient, wormholeToken: WormholeToken, privateWallet: PrivateWallet, burnAddressesToSync?: Address[] }) {
+export async function syncMultipleBurnAccounts({ wormholeToken, archiveNode, privateWallet, burnAddressesToSync }: { archiveNode: PublicClient, wormholeToken: WormholeToken, privateWallet: BurnWallet, burnAddressesToSync?: Address[] }) {
     burnAddressesToSync ??= privateWallet.privateData.burnAccounts.map((v) => v.burnAddress)
+
     const syncedBurnAccounts = await Promise.all(privateWallet.privateData.burnAccounts.map((burnAccount) => {
         if (burnAddressesToSync.includes(burnAccount.burnAddress)) {
             return syncBurnAccount({ burnAccount, wormholeToken, archiveNode })

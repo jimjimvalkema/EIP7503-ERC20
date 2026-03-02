@@ -6,17 +6,17 @@ import { network } from "hardhat";
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 
-import { FIELD_LIMIT, WormholeTokenContractName, PrivateTransfer2InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100in, PrivateTransfer100InVerifierContractName, CIRCUIT_SIZES, POW_DIFFICULTY, MAX_TOTAL_RE_MINT_LIMIT } from "../src/constants.js";
-import { getSyncedMerkleTree, syncBurnAccount } from "../src/syncing.js";
+import { FIELD_LIMIT, WormholeTokenContractName, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100, POW_DIFFICULTY, RE_MINT_LIMIT } from "../src/constants.ts";
+import { getSyncedMerkleTree, syncBurnAccount } from "../src/syncing.ts";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
-import { getBackend } from "../src/proving.js";
+import { getBackend } from "../src/proving.ts";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
-import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.js";
-import { PrivateWallet } from "../src/PrivateWallet.js";
-import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Hash, type Hex } from "viem";
+import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
+import { BurnWallet } from "../src/BurnWallet.ts";
+import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Address, type Hash, type Hex } from "viem";
 import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccount } from "../src/types.ts";
 
-const CIRCUIT_SIZE = 2;
+const CIRCUIT_SIZE = 100;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
 
 export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
@@ -29,8 +29,9 @@ describe("Token", async function () {
     const { viem } = await network.connect();
     const publicClient = await viem.getPublicClient();
     let wormholeToken: ContractReturnType<typeof WormholeTokenContractName>;
-    let PrivateTransferVerifier2In: ContractReturnType<typeof PrivateTransfer2InVerifierContractName>;
-    let PrivateTransferVerifier100In: ContractReturnType<typeof PrivateTransfer100InVerifierContractName>;
+    let reMintVerifier2: ContractReturnType<typeof reMint2InVerifierContractName>;
+    let reMintVerifier32: ContractReturnType<typeof reMint32InVerifierContractName>;
+    let reMintVerifier100: ContractReturnType<typeof reMint100InVerifierContractName>;
     let leanIMTPoseidon2: ContractReturnType<typeof leanIMTPoseidon2ContractName>;
     let powDifficulty = 0n
     const circuitBackend = await getBackend(CIRCUIT_SIZE, provingThreads);
@@ -42,17 +43,21 @@ describe("Token", async function () {
         const poseidon2Create2Salt = padHex("0x00", { size: 32 })
         await deployPoseidon2Huff(publicClient, deployer, poseidon2Create2Salt)
         leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [], { libraries: {} });
-        const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName100in, [], { libraries: {} });
-        PrivateTransferVerifier2In = await viem.deployContract(PrivateTransfer2InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
-        PrivateTransferVerifier100In = await viem.deployContract(PrivateTransfer100InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
+        const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName100, [], { libraries: {} });
+        reMintVerifier2 = await viem.deployContract(reMint2InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
+        reMintVerifier32 = await viem.deployContract(reMint32InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
+        reMintVerifier100 = await viem.deployContract(reMint100InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
         //PrivateTransferVerifier = await viem.deployContract(PrivateTransferVerifierContractName, [], { client: { wallet: deployer }, libraries: { } });
         wormholeToken = await viem.deployContract(
             WormholeTokenContractName,
             [
-                PrivateTransferVerifier2In.address,
-                PrivateTransferVerifier100In.address,
+                [
+                    {contractAddress: reMintVerifier2.address, size: 2},
+                    {contractAddress: reMintVerifier32.address, size: 32},
+                    {contractAddress: reMintVerifier100.address, size: 100}
+                ],
                 toHex(POW_DIFFICULTY, { size: 32 }),
-                MAX_TOTAL_RE_MINT_LIMIT
+                RE_MINT_LIMIT
             ],
             {
                 client: { wallet: deployer },
@@ -79,12 +84,12 @@ describe("Token", async function () {
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
             const chainId = BigInt(await publicClient.getChainId())
-            const alicePrivate = new PrivateWallet(alice, powDifficulty, { acceptedChainIds: [chainId] })
+            const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [chainId] })
             const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
             const aliceRefundBurnAccount = await alicePrivate.createNewBurnAccount()
             const decimalsToken = await wormholeToken.read.decimals()
             const amountToBurn = parseUnits("42069", decimalsToken);
-            await safeBurn(aliceBurnAccount, wormholeTokenAlice, amountToBurn)
+            await safeBurn(aliceBurnAccount, amountToBurn, wormholeTokenAlice, alice.account.address)
 
             const decimalsTokenPrice = 8;
             // 1 eth will give you 69 token. the eth price of token is 0.0144 eth (1/69)
@@ -108,7 +113,7 @@ describe("Token", async function () {
 
 
             const reMintRecipient = bob.account.address
-            const relayerInputs = await createRelayerInputs(
+            const {relayInputs:relayerInputs} = await createRelayerInputs(
                 reMintRecipient,
                 reMintAmount,
                 alicePrivate,

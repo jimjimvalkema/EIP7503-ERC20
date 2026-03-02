@@ -11,7 +11,7 @@ import hre from "hardhat";
 import { verifyContract } from "@nomicfoundation/hardhat-verify/verify";
 import { toHex } from "viem";
 import wormholeTokenModule from "../ignition/modules/wormtoken.ts";
-import { POW_DIFFICULTY, MAX_TOTAL_RE_MINT_LIMIT } from "../src/constants.ts";
+import { POW_DIFFICULTY, RE_MINT_LIMIT } from "../src/constants.ts";
 
 const WAIT_MS = 30_000; // wait for Etherscan indexing
 
@@ -52,7 +52,7 @@ async function main() {
         {
             name: "ZKTranscriptLib",
             address: addresses.ZKTranscriptLib,
-            contract: "contracts/privateTransfer2InVerifier.sol:ZKTranscriptLib",
+            contract: "contracts/reMint2Verifier.sol:ZKTranscriptLib",
         },
         {
             name: "leanIMTPoseidon2",
@@ -63,13 +63,13 @@ async function main() {
         {
             name: "PrivateTransfer2inVerifier",
             address: addresses.PrivateTransfer2inVerifier,
-            contract: "contracts/privateTransfer2InVerifier.sol:privateTransfer2InVerifier",
+            contract: "contracts/reMint2Verifier.sol:reMint2Verifier",
             libraries: { ZKTranscriptLib: addresses.ZKTranscriptLib },
         },
         {
             name: "PrivateTransfer100InVerifier",
             address: addresses.PrivateTransfer100InVerifier,
-            contract: "contracts/privateTransfer100InVerifier.sol:privateTransfer100InVerifier",
+            contract: "contracts/reMint100Verifier.sol:reMint100Verifier",
             libraries: { ZKTranscriptLib: addresses.ZKTranscriptLib },
         },
         // WormholeToken depends on leanIMTPoseidon2
@@ -81,7 +81,7 @@ async function main() {
                 addresses.PrivateTransfer2inVerifier,
                 addresses.PrivateTransfer100InVerifier,
                 toHex(POW_DIFFICULTY, { size: 32 }),
-                MAX_TOTAL_RE_MINT_LIMIT,
+                RE_MINT_LIMIT,
             ],
             libraries: { leanIMTPoseidon2: addresses.leanIMTPoseidon2 },
         },

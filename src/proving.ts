@@ -1,21 +1,21 @@
 import { hexToBytes, toHex, hexToNumber } from "viem"
 import type { Hex, Address, PublicClient, TypedDataDomain} from "viem"
 import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs } from "./types.js"
-import { CIRCUIT_SIZES, EMPTY_UNFORMATTED_MERKLE_PROOF, FIELD_LIMIT, FIELD_MODULUS, MAX_TREE_DEPTH } from "./constants.ts"
+import { EMPTY_UNFORMATTED_MERKLE_PROOF, FIELD_LIMIT, FIELD_MODULUS, MAX_TREE_DEPTH } from "./constants.ts"
 import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer } from "./hashing.ts"
 import type {LeanIMTMerkleProof} from  "@zk-kit/lean-imt"
 import { LeanIMT } from "@zk-kit/lean-imt"
-import type { WormholeTokenTest } from "../test/2inRemint.test.ts"
+import type { WormholeTokenTest } from "../test/remint2.test.ts"
 import { getSyncedMerkleTree } from "./syncing.ts"
 import type { ProofData } from '@aztec/bb.js';
 import { UltraHonkBackend } from '@aztec/bb.js';
 import type { CompiledCircuit, InputMap } from "@noir-lang/noir_js"
 import { Noir } from "@noir-lang/noir_js"
-import privateTransfer2InCircuit from '../circuits/privateTransfer2In/target/privateTransfer2In.json' with { type: 'json' };
-import privateTransfer41InCircuit from '../circuits/privateTransfer100In/target/privateTransfer100In.json'  with { type: 'json' };
+import reMint2Circuit from '../circuits/reMint2/target/reMint2.json' with { type: 'json' };
+import privateTransfer41InCircuit from '../circuits/reMint100/target/reMint100.json'  with { type: 'json' };
 
 //import { Fr } from "@aztec/aztec.js"
-import { PrivateWallet } from "./PrivateWallet.ts"
+import { BurnWallet } from "./BurnWallet.ts"
 import { getCircuitSize } from "./transact.ts"
 import { assert } from "node:console"
 
@@ -109,18 +109,18 @@ function randomBN254FieldElement(): bigint {
 }
 
 export function getPubInputs(
-    { amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize, powDifficulty, maxTotalReMintLimit }:
-        { amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number, powDifficulty:Hex, maxTotalReMintLimit:Hex }) {
+    {circuitSizes, amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize, powDifficulty, reMintLimit }:
+        {circuitSizes:number[], amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number, powDifficulty:Hex, reMintLimit:Hex }) {
 
     const burn_data_public: BurnDataPublic[] = []
-    circuitSize ??= getCircuitSize(nullifiers.length)
+    circuitSize ??= getCircuitSize(nullifiers.length, circuitSizes)
     for (let index = 0; index < circuitSize; index++) {
         // empty values are ignored in the circuit, but it's still better for privacy to set them to something random since these are public
         const noteHash = noteHashes[index] === undefined ? randomBN254FieldElement() : noteHashes[index]
         const nullifier = nullifiers[index] === undefined ? randomBN254FieldElement() : nullifiers[index]
         const publicBurnPoofData: BurnDataPublic = {
-            account_note_hash: toHex(noteHash),
-            account_note_nullifier: toHex(nullifier),
+            total_spent_leaf: toHex(noteHash),
+            nullifier: toHex(nullifier),
         }
         burn_data_public.push(publicBurnPoofData)
     }
@@ -131,7 +131,7 @@ export function getPubInputs(
         signature_hash: hexToU8AsHexLen32(signatureHash),
         burn_data_public: burn_data_public,
         pow_difficulty:powDifficulty,
-        max_total_spend: maxTotalReMintLimit
+        re_mint_limit: reMintLimit
     }
     return pubInputs
 }
@@ -149,11 +149,11 @@ export interface BurnAccountProof {
  * @returns 
  */
 export function getPrivInputs(
-    { signatureData, burnAccountsProofs, circuitSize, maxTreeDepth }:
-        { signatureData: SignatureData, burnAccountsProofs: BurnAccountProof[], circuitSize?: number, maxTreeDepth?:number }) {
+    {circuitSizes, signatureData, burnAccountsProofs, circuitSize, maxTreeDepth }:
+        {circuitSizes:number[], signatureData: SignatureData, burnAccountsProofs: BurnAccountProof[], circuitSize?: number, maxTreeDepth?:number }) {
 
     const burn_address_private_proof_data: BurnDataPrivate[] = [];
-    circuitSize ??= getCircuitSize(burnAccountsProofs.length)
+    circuitSize ??= getCircuitSize(burnAccountsProofs.length, circuitSizes)
     for (let index = 0; index < circuitSize; index++) {
         const burnAccountProof = burnAccountsProofs[index];
         if (burnAccountProof === undefined) {
@@ -218,16 +218,16 @@ export async function getBackend(circuitSize: number, threads?: number) {
     console.log("initializing backend with circuit")
     threads = threads ?? getAvailableThreads()
     console.log({ threads })
-    const byteCode = circuitSize === 2 ? privateTransfer2InCircuit.bytecode : privateTransfer41InCircuit.bytecode
+    const byteCode = circuitSize === 2 ? reMint2Circuit.bytecode : privateTransfer41InCircuit.bytecode
     return new UltraHonkBackend(byteCode, { threads: threads }, { recursive: false });
 }
 
-export async function generateProof({ proofInputs, backend, threads }: { threads?:number,proofInputs: ProofInputs1n | ProofInputs4n, backend?: UltraHonkBackend }) {
-    const circuitSize = getCircuitSize(proofInputs.burn_data_public.length)
+export async function generateProof({ proofInputs, backend, threads, circuitSizes }: {circuitSizes:number[], threads?:number,proofInputs: ProofInputs1n | ProofInputs4n, backend?: UltraHonkBackend }) {
+    const circuitSize = getCircuitSize(proofInputs.burn_data_public.length, circuitSizes)
     console.log("proving with:", {circuitSize, threads})
     backend = backend ?? await getBackend(circuitSize, threads)
 
-    const circuitJson = circuitSize === 2 ? privateTransfer2InCircuit : privateTransfer41InCircuit;
+    const circuitJson = circuitSize === 2 ? reMint2Circuit : privateTransfer41InCircuit;
     const noir = new Noir(circuitJson as CompiledCircuit);
     const { witness } = await noir.execute(proofInputs as InputMap);
     console.log("generating proof")

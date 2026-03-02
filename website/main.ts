@@ -2,12 +2,12 @@ import { createPublicClient, createWalletClient, custom, formatUnits, getAddress
 import type { Address, Hex, WalletClient } from 'viem'
 import { sepolia } from 'viem/chains'
 import 'viem/window';
-import { PrivateWallet } from '../src/PrivateWallet.js';
+import { BurnWallet } from '../src/BurnWallet.ts';
 import type { WormholeToken, SelfRelayInputs, BurnAccount, SyncedBurnAccount } from '../src/types.js';
 import { createRelayerInputs, selfRelayTx, superSafeBurn } from '../src/transact.js';
 import WormholeTokenArtifact from '../artifacts/contracts/WormholeToken.sol/WormholeToken.json'  with {"type": "json"};
 import sepoliaDeployments from "../ignition/deployments/chain-11155111/deployed_addresses.json" with {"type": "json"};
-import type { WormholeTokenTest } from '../test/2inRemint.test.ts';
+import type { WormholeTokenTest } from '../test/remint2.test.ts';
 
 import * as viem from 'viem'
 import { ADDED_BITS_SECURITY, POW_BITS } from '../src/constants.ts';
@@ -137,7 +137,7 @@ export async function getRelayInputsFromLocalStorage(): Promise<SelfRelayInputs[
   const allRelayerInputClean: SelfRelayInputs[] = []
   for (const relayerInput of allRelayerInputs) {
 
-    const blockNumbers = await Promise.all(relayerInput.publicInputs.burn_data_public.map((bData) => wormholeToken.read.nullifiers([BigInt(bData.account_note_nullifier)])))
+    const blockNumbers = await Promise.all(relayerInput.publicInputs.burn_data_public.map((bData) => wormholeToken.read.nullifiers([BigInt(bData.nullifier)])))
     if (blockNumbers.every((b) => b === 0n)) {
       allRelayerInputClean.push(relayerInput)
     }
@@ -172,7 +172,7 @@ async function updateWalletInfoUi(
   const publicBalance = await wormholeTokenWallet.read.balanceOf([publicAddress])
   everyClass(".publicBalance", (el) => el.innerText = formatUnits(publicBalance, decimals))
   //@ts-ignore
-  const privateWallet = window.privateWallet as PrivateWallet | undefined
+  const privateWallet = window.privateWallet as BurnWallet | undefined
   if (privateWallet && privateWallet.privateData.burnAccounts.length > 0) {
     let dotCount = 0;
     const burnMsg = showBurnMsg ? POW_EXPLANATION_MSG : "" + `<br><br>`
@@ -203,7 +203,7 @@ let powDotInterval: ReturnType<typeof setInterval> | null = null
 
 function updateTotalSelectedSpendable() {
   //@ts-ignore
-  const privateWallet = window.privateWallet as PrivateWallet | undefined
+  const privateWallet = window.privateWallet as BurnWallet | undefined
   if (!privateWallet) { totalSelectedSpendableEl!.textContent = "0"; return }
 
   let total = 0n
@@ -407,7 +407,7 @@ async function getPublicWallet() {
  * Creates all missing accounts in parallel with async PoW.
  * Progressively updates the UI as each account finishes.
  */
-async function ensurePageAccounts(page: number, privateWallet: PrivateWallet, wormholeTokenWallet: WormholeToken, clearMsg = true) {
+async function ensurePageAccounts(page: number, privateWallet: BurnWallet, wormholeTokenWallet: WormholeToken, clearMsg = true) {
   const startIndex = page * BURN_ACCOUNTS_PER_PAGE
   const endIndex = startIndex + BURN_ACCOUNTS_PER_PAGE
   const decimals = Number(await wormholeToken.read.decimals())
@@ -452,7 +452,7 @@ async function connectPrivateWallet() {
 
   const chainId = BigInt(await publicClient.getChainId())
   const POW_DIFFICULTY = BigInt(await wormholeTokenWallet.read.POW_DIFFICULTY())
-  const privateWallet = new PrivateWallet(publicWallet, POW_DIFFICULTY, { acceptedChainIds: [chainId] })
+  const privateWallet = new BurnWallet(publicWallet, POW_DIFFICULTY, { acceptedChainIds: [chainId] })
   logUi("creating private wallet...\n please sign the message in your wallet", true)
   await privateWallet.getDeterministicViewKeyRoot()
 
@@ -477,7 +477,7 @@ async function getPrivateWallet() {
     await connectPrivateWallet()
   }
   //@ts-ignore
-  const privateWallet = window.privateWallet as PrivateWallet
+  const privateWallet = window.privateWallet as BurnWallet
   //@ts-ignore
   const burnAccount = window.burnAccount
   return { publicWallet, wormholeTokenWallet, publicAddress, privateWallet, burnAccount }
@@ -502,7 +502,7 @@ async function prevBurnAccountsPageHandler() {
   if (currentBurnPage <= 0) return
   currentBurnPage -= 1
   //@ts-ignore
-  const privateWallet = window.privateWallet as PrivateWallet | undefined
+  const privateWallet = window.privateWallet as BurnWallet | undefined
   if (!privateWallet) return
   const decimals = Number(await wormholeToken.read.decimals())
   updateBurnAccountsListUi(privateWallet.privateData.burnAccounts, decimals)
@@ -525,7 +525,7 @@ async function nextBurnAccountsPageHandler() {
 
 function selectAllRemintHandler() {
   //@ts-ignore
-  const privateWallet = window.privateWallet as PrivateWallet | undefined
+  const privateWallet = window.privateWallet as BurnWallet | undefined
   if (!privateWallet) return
 
   const checkboxes = Array.from(burnAccountsListEl!.querySelectorAll<HTMLInputElement>('input[name="remintBurnAddresses"]'))

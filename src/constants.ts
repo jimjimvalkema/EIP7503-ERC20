@@ -10,7 +10,7 @@ export const POW_DIFFICULTY = 2n**(256n-POW_BITS)-1n//16n ** (64n - POW_LEADING_
 // if needed you can periodically and programmatically change this number in the contract instead.
 // How ever do know it's public input. Meaning even the slightest change will invalidate pending tx, so please only update that number infrequently!
 // i chose this number since my token is ony a demo and has a uncapped supply
-export const MAX_TOTAL_RE_MINT_LIMIT = 100_000_000n*10n**18n; 
+export const RE_MINT_LIMIT = 100_000_000n*10n**18n; 
 
 // ---- circuit constants ---------------------
 export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('') as Hex
@@ -24,9 +24,6 @@ export const MAX_TREE_DEPTH = 44 as const;
 export const ENCRYPTED_TOTAL_SPENT_PADDING = 256 // leaving some space for other things. Fits about 3 other key value pairs
 export const EAS_BYTE_LEN_OVERHEAD = 28
 
-// should always be sorted
-export const CIRCUIT_SIZES = [2,100];
-export const LARGEST_CIRCUIT_SIZE = CIRCUIT_SIZES[CIRCUIT_SIZES.length-1]
 export const VIEWING_KEY_SIG_MESSAGE = `
 You are about to create your viewing key for your zkwormhole account! \n
 Signing this on compromised site will result in leaking all private data. But *not* loss of funds.
@@ -36,10 +33,13 @@ So please double check the url!
 //------------
 export const WormholeTokenContractName = "WormholeToken"
 export const leanIMTPoseidon2ContractName = "leanIMTPoseidon2"
-export const PrivateTransfer2InVerifierContractName = "privateTransfer2InVerifier"
-export const PrivateTransfer100InVerifierContractName = "privateTransfer100InVerifier"
-export const ZKTranscriptLibContractName100in = "contracts/privateTransfer100InVerifier.sol:ZKTranscriptLib"
-export const ZKTranscriptLibContractName2in = "contracts/privateTransfer2InVerifier.sol:ZKTranscriptLib"
+export const reMint2InVerifierContractName = "reMint2Verifier"
+export const reMint32InVerifierContractName = "reMint32Verifier"
+export const reMint100InVerifierContractName = "reMint100Verifier"
+export const ZKTranscriptLibContractName2 = "contracts/reMint2Verifier.sol:ZKTranscriptLib"
+export const ZKTranscriptLibContractName32 = "contracts/reMint32Verifier.sol:ZKTranscriptLib"
+export const ZKTranscriptLibContractName100 = "contracts/reMint100Verifier.sol:ZKTranscriptLib"
+
 
 // @TODO double check this field limit. Should be fine but claude gave me a different number
 export const FIELD_LIMIT = 21888242871839275222246405745257275088548364400416034343698204186575808495616n;
@@ -78,7 +78,7 @@ export function getPrivateReMintDomain(chainId:number, verifyingContract:Address
 }
 
 export const PRIVATE_RE_MINT_712_TYPES = {
-    privateReMint: [
+    reMint: [
         { name: "_recipient", type: "address" },
         { name: "_amount", type: "uint256" },
         { name: "_callData", type: "bytes" },
@@ -89,7 +89,7 @@ export const PRIVATE_RE_MINT_712_TYPES = {
 } as const;
 
 export const PRIVATE_RE_MINT_RELAYER_712_TYPES = {
-    privateReMintRelayer: [
+    reMintRelayer: [
         { name: "_recipient", type: "address" },
         { name: "_amount", type: "uint256" },
         { name: "_callData", type: "bytes" },

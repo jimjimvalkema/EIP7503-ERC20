@@ -18,7 +18,7 @@ import { poseidon2Hash } from "@zkpassport/poseidon2"
  * @TODO is that a good decision?
  * Pros: can change circuit and contract and keep PrivateWallet same
  */
-export class PrivateWallet {
+export class BurnWallet {
     readonly viemWallet: WalletClient
     readonly privateData: PrivateWalletData;
     readonly powDifficulty: bigint;
@@ -228,7 +228,6 @@ export class PrivateWallet {
         const burnAccountsPromises = new Array(amountOfBurnAccounts).fill(0).map((v, i) => this.createBurnAccountFromViewKeyIndex({ viewingKeyIndex: this.detViewKeyCounter + i, chainId: chainId, difficulty: difficulty, async: async }))
         const burnAccounts = await Promise.all(burnAccountsPromises)
         this.detViewKeyCounter += amountOfBurnAccounts
-        this.privateData.burnAccounts = [...this.privateData.burnAccounts, ...burnAccounts]
         return burnAccounts
     }
 

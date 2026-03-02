@@ -5,7 +5,7 @@ You can clone the repo and try-out the ui or try it on sepolia here: https://eip
 
 ## The original EIP7503 
 * Base layer of ethereum
-* No re-usable addresses: `nullifier=hash(0x01,secret)` and the `address=hash(secret)` which means you cannot re-use that address
+* No re-usable addresses: `nullifier=hash(0x01,secret)` and the `address=hash(secret)` which means you cannot re-use that burn address
 * No Hardware wallet support: because `address=hash(secret)` and the secret is a private input for the circuit, the hardware wallet would need to make the zk-proof on device which is not possible on the ledger, trezor, etc
 * Uses the state-trie for inclusion proof (a hexanary tree with keccak), this is slow to proof and requires ton of ram.
 
@@ -108,12 +108,13 @@ yarn hardhat run scripts/deployPoseidon2.ts --network sepolia
 
 ## deployed addresses TODO UPDATE THESE
 ### sepolia  
-WormholeToken - [0x762028F34CA53EaF88B86bDac9977216c824e1DB](https://sepolia.etherscan.io/address/0x762028F34CA53EaF88B86bDac9977216c824e1DB)  
+WormholeToken - [0x3Ca4a13C6c5B5c0b9742EBA598aD5D0eBD33215A](https://sepolia.etherscan.io/address/0x3Ca4a13C6c5B5c0b9742EBA598aD5D0eBD33215A)  
 
 
-PrivateTransferVerifier - [0x288c97Ae097eDe51d4ed8DF56812B8603207169B](https://sepolia.etherscan.io/address/0x288c97Ae097eDe51d4ed8DF56812B8603207169B)  
-ZKTranscriptLib - [0xD5917825cEac16dF6B12cCa7C8C1C016B921161e](https://sepolia.etherscan.io/address/0xD5917825cEac16dF6B12cCa7C8C1C016B921161e)  
-leanIMTPoseidon2 - [0x7810C9AE22BcFF547CC4494A61ecB882a6048d6b](https://sepolia.etherscan.io/address/0x7810C9AE22BcFF547CC4494A61ecB882a6048d6b)  
+Verifier100n - [0x60683E94FC3c62C81fC6fc64CF0A6aa7e7Bba4cE](https://sepolia.etherscan.io/address/0x60683E94FC3c62C81fC6fc64CF0A6aa7e7Bba4cE)
+verifier2in - [0x9e75d2ebb3d33E8Db309c9e940Ab10491DFf1F1E](https://sepolia.etherscan.io/address/0x9e75d2ebb3d33E8Db309c9e940Ab10491DFf1F1E)  
+ZKTranscriptLib - [0xdbdDD0bB208a9FAC6b3A35e0F3eD87D020964643](https://sepolia.etherscan.io/address/0xdbdDD0bB208a9FAC6b3A35e0F3eD87D020964643)  
+leanIMTPoseidon2 - [0xb4ED83470d6B513089C3dd1802123909A698Fa85](https://sepolia.etherscan.io/address/0xb4ED83470d6B513089C3dd1802123909A698Fa85)  
 
 
 ## install

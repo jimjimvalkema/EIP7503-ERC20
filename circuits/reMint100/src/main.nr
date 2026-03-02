@@ -1,15 +1,14 @@
-use privateTransferLib::{spendFromBurnAddresses, BurnDataPublic, BurnDataPrivate, SignatureData};
+use reMintLib::{bulkReMint, BurnDataPublic, BurnDataPrivate, SignatureData};
 use constants::{MAX_TREE_DEPTH};
 
-// should not go smaller then 2 because then the fact that someone is consolidating balances leaks
-global BURN_ADDRESSES_LEN: u32 = 2; 
+global BURN_ADDRESSES_LEN: u32 = 100; 
 fn main(
     //----- public inputs
     root: pub Field,
     chain_id: Field, // pub key word is removed since we don't use cross-chain functionality
     amount: pub Field,
     pow_difficulty: pub Field,
-    max_total_spend: pub Field,
+    re_mint_limit: pub Field,
     signature_hash: pub [u8;32],
     burn_data_public: pub [BurnDataPublic; BURN_ADDRESSES_LEN],
     // --- private inputs ---
@@ -32,12 +31,12 @@ fn main(
     small_pub_key_x[0] = 0;
     let pub_key_x_field: Field = Field::from_be_bytes(small_pub_key_x);
 
-    spendFromBurnAddresses::<MAX_TREE_DEPTH>(
+    bulkReMint::<MAX_TREE_DEPTH>(
         root,
         chain_id,
         amount,
         pow_difficulty,
-        max_total_spend,
+        re_mint_limit,
         burn_data_public,
         //private
         burn_data_private,

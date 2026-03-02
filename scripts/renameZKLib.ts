@@ -15,7 +15,7 @@ function getLines(name: string) {
 
 const parser = new ArgumentParser({
     description: 'quick lil script to replace 3 lines',
-    usage: `yarn tsx scripts/renameZKLib.ts --file contracts/privateTransfer100InVerifier.sol --newName ZKTranscriptLib100In`
+    usage: `yarn tsx scripts/renameZKLib.ts --file contracts/reMint100Verifier.sol --newName ZKTranscriptLib100In`
 });
 parser.add_argument('-f', '--file', { help: 'file to read', required: true, type: 'str' });
 parser.add_argument('-r', '--newName', { help: 'specify what new name the verifier needs', required: true, type: 'str' });
