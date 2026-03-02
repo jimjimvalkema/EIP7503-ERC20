@@ -9,12 +9,12 @@ import { UltraHonkBackend } from "@aztec/bb.js";
 import { getSyncedMerkleTree, getDeploymentBlock, syncMultipleBurnAccounts, encryptTotalSpend } from "./syncing.ts";
 import { getBurnAddress, getBurnAddressSafe, hashBlindedAddressData, hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, padWithRandomHex, signPrivateTransfer, signPrivateTransferWithFee } from "./hashing.ts";
 import { BurnWallet } from "./BurnWallet.ts";
-import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, GAS_LIMIT_TX, MAX_TREE_DEPTH } from "./constants.ts";
+import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, GAS_LIMIT_TX } from "./constants.ts";
 
 
 export function getHashedInputs(
-    { burnAccount, claimAmount, syncedTree, maxTreeDepth = MAX_TREE_DEPTH }:
-        { burnAccount: SyncedBurnAccount, claimAmount: bigint, syncedTree: PreSyncedTree, maxTreeDepth?: number }) {
+    { burnAccount, claimAmount, syncedTree, maxTreeDepth }:
+        { burnAccount: SyncedBurnAccount, claimAmount: bigint, syncedTree: PreSyncedTree, maxTreeDepth: number }) {
 
     // --- inclusion proof ---
     // hash leafs
@@ -73,10 +73,11 @@ export function getCircuitSize(amountBurnAddresses: number, circuitSizes:number[
  */
 export async function burn(
     burnAddress: Address, amount: bigint,wormholeToken:WormholeTokenTest, account:Address, fullNode:PublicClient,
-    { difficulty, reMintLimit, maxTreeDepth = MAX_TREE_DEPTH }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
+    { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
     reMintLimit ??= BigInt(await wormholeToken.read.RE_MINT_LIMIT())
+    maxTreeDepth ??= await wormholeToken.read.MAX_TREE_DEPTH()
     // nvm this wont result in anything dangerous
     // const nonce = await fullNode.getTransactionCount({address: burnAddress})
     // if (nonce !== 0) { throw new Error("This address has an account nonce that is not 0. This is a EOA. Please do a regular transfer instead")}
@@ -106,10 +107,11 @@ export async function burn(
  */
 export async function safeBurn(
     burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint,wormholeToken:WormholeTokenTest, account:Address,
-    { difficulty, reMintLimit, maxTreeDepth = MAX_TREE_DEPTH }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
+    { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
     reMintLimit ??= BigInt(await wormholeToken.read.RE_MINT_LIMIT())
+    maxTreeDepth ??= await wormholeToken.read.MAX_TREE_DEPTH()
     const burnAddress = getBurnAddressSafe({ blindedAddressDataHash: BigInt(burnAccount.blindedAddressDataHash), powNonce: BigInt(burnAccount.powNonce), difficulty: difficulty })
     const balance = await wormholeToken.read.balanceOf([burnAddress])
     const newBurnBalance = balance + amount
@@ -138,10 +140,11 @@ export async function safeBurn(
  */
 export async function superSafeBurn(
     burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint,wormholeToken:WormholeTokenTest, account:Address,
-    { difficulty, reMintLimit, maxTreeDepth = MAX_TREE_DEPTH }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
+    { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
     reMintLimit ??= BigInt(await wormholeToken.read.RE_MINT_LIMIT())
+    maxTreeDepth ??= await wormholeToken.read.MAX_TREE_DEPTH()
     const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX: burnAccount.spendingPubKeyX, viewingKey: BigInt(burnAccount.viewingKey), chainId: BigInt(burnAccount.chainId) })
     const burnAddress = getBurnAddressSafe({ blindedAddressDataHash: blindedAddressDataHash, powNonce: BigInt(burnAccount.powNonce), difficulty: difficulty })
     const balance = await wormholeToken.read.balanceOf([burnAddress])
@@ -194,8 +197,8 @@ export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddr
 }
 
 export async function getCircuitSizesFromContract(wormholeToken:WormholeToken | WormholeTokenTest) {
-    const amountOfVerifiers = await wormholeToken.read.amountOfVerifiers()
-    const sizes = await Promise.all(new Array(amountOfVerifiers).fill(0).map((v,index)=>wormholeToken.read.verifierSizes([BigInt(index)])))
+    const AMOUNT_OF_VERIFIERS = await wormholeToken.read.AMOUNT_OF_VERIFIERS()
+    const sizes = await Promise.all(new Array(AMOUNT_OF_VERIFIERS).fill(0).map((v,index)=>wormholeToken.read.VERIFIER_SIZES([BigInt(index)])))
     return sizes
 }
 
@@ -240,6 +243,7 @@ export async function createRelayerInputs(
  * @param reMintLimit - Max cumulative re-mint cap. Defaults to on-chain value from `wormholeToken.RE_MINT_LIMIT()`.
  * @param chainId             - (@NOTICE not constrained rn) ChainId for the cross-chain transfer. Defaults to `archiveClient.getChainId()`.
  * @param circuitSizes         - sorted array of available circuit sizes. Sorted from smallest to highest.
+ * @param maxTreeDepth        - Maximum Merkle tree depth. Defaults to `MAX_TREE_DEPTH`. Changing this produces invalid proofs.
  * 
  * --- Defaults without RPC call ---
  * @param feeData             - If provided, produces `RelayInputs` (third-party relay); omit for `SelfRelayInputs`.
@@ -258,7 +262,6 @@ export async function createRelayerInputs(
  * @param backend             - Pre-initialized prover backend; omit to create one internally.
  *
  * --- Circuit constants (do not change unless you know what you're doing) ---
- * @param maxTreeDepth        - Maximum Merkle tree depth. Defaults to `MAX_TREE_DEPTH`. Changing this produces invalid proofs.
  */
 export async function createRelayerInputs(
     recipient: Address,
@@ -266,7 +269,7 @@ export async function createRelayerInputs(
     privateWallet: BurnWallet,
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
-    { circuitSizes, threads, chainId, callData = "0x", callValue = 0n, callCanFail = false, feeData, burnAddresses, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, reMintLimit, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
+    { circuitSizes, threads, chainId, callData = "0x", callValue = 0n, callCanFail = false, feeData, burnAddresses, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, reMintLimit, maxTreeDepth, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
         CreateRelayerInputsOpts & { feeData?: FeeData } = {}
 ): Promise<{ relayInputs:RelayInputs, syncedData:{syncedTree:PreSyncedTree, syncedPrivateWallet:BurnWallet } } | { relayInputs:SelfRelayInputs,  syncedData:{syncedTree:PreSyncedTree, syncedPrivateWallet:BurnWallet } }> {
     // set defaults
@@ -275,6 +278,7 @@ export async function createRelayerInputs(
     reMintLimit ??= await wormholeToken.read.RE_MINT_LIMIT();
     circuitSizes ??= await getCircuitSizesFromContract(wormholeToken);
     chainId ??= BigInt(await archiveClient.getChainId());
+    maxTreeDepth ??= await wormholeToken.read.MAX_TREE_DEPTH()
     const largestCircuitSize = circuitSizes[circuitSizes.length-1]
 
     // start this asap so we can resolve once we need it
@@ -454,11 +458,10 @@ export async function proofAndSelfRelay(
     privateWallet: BurnWallet,
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
-    { burnAddresses, threads, callData = "0x", callValue = 0n, callCanFail = false, fullNodeClient, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth = MAX_TREE_DEPTH, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD, powDifficulty, reMintLimit }:
-        { burnAddresses?: Address[], threads?: number, callData?: Hex, callCanFail?: boolean, callValue?: bigint, fullNodeClient?: PublicClient, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number, powDifficulty?: Hex, reMintLimit?: Hex } = {}
+    { burnAddresses, threads, callData = "0x", callValue = 0n, callCanFail = false, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD, powDifficulty, reMintLimit }:
+        { burnAddresses?: Address[], threads?: number, callData?: Hex, callCanFail?: boolean, callValue?: bigint, preSyncedTree?: PreSyncedTree, backend?: UltraHonkBackend, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number, powDifficulty?: Hex, reMintLimit?: Hex } = {}
 ) {
-    fullNodeClient ??= archiveClient;
-    const chainId = BigInt(await fullNodeClient.getChainId())
+    const chainId = BigInt(await archiveClient.getChainId())
     deploymentBlock ??= getDeploymentBlock(Number(chainId))
 
     const {relayInputs:selfRelayInputs} = await createRelayerInputs(

@@ -59,37 +59,42 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     uint256 public amountFreeTokens = 1000000*10**decimals();
     uint256 public decimalsTokenPrice = 8;
 
-
-    bytes32 public POW_DIFFICULTY; // find a nonce that result in a hash that is hash < pow_difficulty
-    bytes32 public RE_MINT_LIMIT;
-
     LeanIMTData public tree;
 
     mapping (uint8 => address) public verifierPerSize;
-    uint8[] public verifierSizes;
-    uint8 public amountOfVerifiers;    
+    
+    // configurable circuit constants
+    // an issuer might change these values depending on their needs
+    uint8[] public VERIFIER_SIZES;
+    uint8 public AMOUNT_OF_VERIFIERS;    
+    bytes32 public POW_DIFFICULTY; // find a nonce that result in a hash that is hash < pow_difficulty
+    bytes32 public RE_MINT_LIMIT;
+    // this one is the only that is not used by the contract, 
+    // but is just here so a ui interfacing with this token knows the tree depth that circuit uses
+    uint16 public MAX_TREE_DEPTH;
     /**
      * 
      * @param _verifiers needs to be sorted smallest to lowest.
      * @param _powDifficulty a number where the PoW in the circuit asserts pow_hash < _powDifficulty
      * @param _reMintLimit a maximum total amount one burn address can reMint
      */
-    constructor(Verifier[] memory _verifiers, bytes32 _powDifficulty, uint256 _reMintLimit)
+    constructor(Verifier[] memory _verifiers, bytes32 _powDifficulty, uint256 _reMintLimit, uint16 _maxTreeDepth)
         ERC20WithWormHoleMerkleTree("zkwormholes-token", "WRMHL")
         EIP712("zkwormholes-token", "1") 
     {
-        amountOfVerifiers = uint8(_verifiers.length);
+        AMOUNT_OF_VERIFIERS = uint8(_verifiers.length);
         uint8 _lastSize = 0;
         for (uint i = 0; i < _verifiers.length; i++) {
             Verifier memory _verifier = _verifiers[i];
             require(_lastSize < _verifier.size, "_verifiers needs to be sorted from smallest to largest size");
             _lastSize = _verifier.size;
             verifierPerSize[_verifier.size] = _verifier.contractAddress;
-            verifierSizes.push(_verifier.size);
+            VERIFIER_SIZES.push(_verifier.size);
         }
 
         POW_DIFFICULTY = _powDifficulty;
         RE_MINT_LIMIT = bytes32(_reMintLimit);
+        MAX_TREE_DEPTH = _maxTreeDepth;
     }
 
     function treeSize() public view  returns (uint256) {

@@ -1,7 +1,7 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 //@ts-ignore hardhat ignition does not understand file extensions
-import { leanIMTPoseidon2ContractName, ZKTranscriptLibContractName2, WormholeTokenContractName, RE_MINT_LIMIT, ZKTranscriptLibContractName100, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName } from "../../src/constants.ts";
-import { POW_DIFFICULTY } from "../../src/constants.ts";
+import { leanIMTPoseidon2ContractName, ZKTranscriptLibContractName2, WormholeTokenContractName, ZKTranscriptLibContractName100, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName } from "../../src/constants.ts";
+import { POW_DIFFICULTY,RE_MINT_LIMIT,MAX_TREE_DEPTH } from "../../src/constants.ts";
 import { toHex } from "viem";
 
 export default buildModule("wormholeToken", (m) => {
@@ -22,7 +22,8 @@ export default buildModule("wormholeToken", (m) => {
             ]
             ,
             toHex(POW_DIFFICULTY, { size: 32 }), 
-            RE_MINT_LIMIT
+            RE_MINT_LIMIT,
+            MAX_TREE_DEPTH
         ],
         { libraries: { leanIMTPoseidon2: leanIMTPoseidon2 } }
     );

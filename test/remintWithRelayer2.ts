@@ -6,7 +6,7 @@ import { network } from "hardhat";
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 
-import { FIELD_LIMIT, WormholeTokenContractName, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100, POW_DIFFICULTY, RE_MINT_LIMIT } from "../src/constants.ts";
+import {MAX_TREE_DEPTH, FIELD_LIMIT, WormholeTokenContractName, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100, POW_DIFFICULTY, RE_MINT_LIMIT } from "../src/constants.ts";
 import { getSyncedMerkleTree, syncBurnAccount } from "../src/syncing.ts";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { getBackend } from "../src/proving.ts";
@@ -57,7 +57,8 @@ describe("Token", async function () {
                     {contractAddress: reMintVerifier100.address, size: 100}
                 ],
                 toHex(POW_DIFFICULTY, { size: 32 }),
-                RE_MINT_LIMIT
+                RE_MINT_LIMIT,
+                MAX_TREE_DEPTH
             ],
             {
                 client: { wallet: deployer },

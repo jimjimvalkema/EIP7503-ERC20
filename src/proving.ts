@@ -1,7 +1,7 @@
 import { hexToBytes, toHex, hexToNumber } from "viem"
 import type { Hex, Address, PublicClient, TypedDataDomain} from "viem"
 import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs } from "./types.js"
-import { EMPTY_UNFORMATTED_MERKLE_PROOF, FIELD_LIMIT, FIELD_MODULUS, MAX_TREE_DEPTH } from "./constants.ts"
+import { EMPTY_UNFORMATTED_MERKLE_PROOF, FIELD_LIMIT, FIELD_MODULUS } from "./constants.ts"
 import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer } from "./hashing.ts"
 import type {LeanIMTMerkleProof} from  "@zk-kit/lean-imt"
 import { LeanIMT } from "@zk-kit/lean-imt"
@@ -36,7 +36,7 @@ export function padArray<T>({ arr, size, value, dir }: { arr: T[], size: number,
     return dir === "left" ? [...padding, ...arr] : [...arr, ...padding]
 }
 
-export function formatMerkleProof(merkleProof: LeanIMTMerkleProof<bigint>, maxTreeDepth: number = MAX_TREE_DEPTH): MerkleData {
+export function formatMerkleProof(merkleProof: LeanIMTMerkleProof<bigint>, maxTreeDepth: number): MerkleData {
     const depth = toHex(merkleProof.siblings.length)
     const indices = BigInt(merkleProof.index).toString(2).split('').reverse().map((v) => toHex(Number(v)))
     const siblings = merkleProof.siblings.map((v) => toHex(v))
@@ -54,8 +54,8 @@ export function formatMerkleProof(merkleProof: LeanIMTMerkleProof<bigint>, maxTr
  * @returns 
  */
 export function getAccountNoteMerkle(
-    { totalSpendNoteHashLeaf, tree, maxTreeDepth = MAX_TREE_DEPTH }:
-        { totalSpendNoteHashLeaf: bigint, tree: LeanIMT<bigint>, maxTreeDepth?: number }
+    { totalSpendNoteHashLeaf, tree, maxTreeDepth }:
+        { totalSpendNoteHashLeaf: bigint, tree: LeanIMT<bigint>, maxTreeDepth: number }
 ): MerkleData {
     if (totalSpendNoteHashLeaf === 0n) {
         const merkleProof = formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF, maxTreeDepth)
@@ -70,8 +70,8 @@ export function getAccountNoteMerkle(
 
 
 export function getBurnedMerkle(
-    { totalBurnedLeaf, tree, maxTreeDepth = MAX_TREE_DEPTH }:
-        { tree: LeanIMT<bigint>, totalBurnedLeaf: bigint, maxTreeDepth?: number }
+    { totalBurnedLeaf, tree, maxTreeDepth }:
+        { tree: LeanIMT<bigint>, totalBurnedLeaf: bigint, maxTreeDepth: number }
 ): MerkleData {
     const totalReceivedIndex = tree.indexOf(totalBurnedLeaf)
     const unformattedMerkleProof = tree.generateProof(totalReceivedIndex)
@@ -85,8 +85,8 @@ export function getBurnedMerkle(
  * @returns 
  */
 export function getSpendableBalanceProof(
-    { totalSpendNoteHashLeaf, totalBurnedLeaf, tree, maxTreeDepth = MAX_TREE_DEPTH }:
-        { totalSpendNoteHashLeaf: bigint, totalBurnedLeaf: bigint, tree: LeanIMT<bigint>, maxTreeDepth?: number }
+    { totalSpendNoteHashLeaf, totalBurnedLeaf, tree, maxTreeDepth }:
+        { totalSpendNoteHashLeaf: bigint, totalBurnedLeaf: bigint, tree: LeanIMT<bigint>, maxTreeDepth: number }
 ): SpendableBalanceProof {
     const totalSpendMerkleProofs = getAccountNoteMerkle({ totalSpendNoteHashLeaf, tree, maxTreeDepth })
     const totalBurnedMerkleProofs = getBurnedMerkle({ totalBurnedLeaf, tree, maxTreeDepth })
@@ -150,7 +150,7 @@ export interface BurnAccountProof {
  */
 export function getPrivInputs(
     {circuitSizes, signatureData, burnAccountsProofs, circuitSize, maxTreeDepth }:
-        {circuitSizes:number[], signatureData: SignatureData, burnAccountsProofs: BurnAccountProof[], circuitSize?: number, maxTreeDepth?:number }) {
+        {circuitSizes:number[], signatureData: SignatureData, burnAccountsProofs: BurnAccountProof[], circuitSize?: number, maxTreeDepth:number }) {
 
     const burn_address_private_proof_data: BurnDataPrivate[] = [];
     circuitSize ??= getCircuitSize(burnAccountsProofs.length, circuitSizes)
