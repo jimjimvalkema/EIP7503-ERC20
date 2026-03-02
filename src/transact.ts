@@ -526,7 +526,7 @@ export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: Wall
         _signatureInputs
         // estimation is some time so high it goes over the per tx limit on sepolia
         // to not scare users. we wont set the gas limit super high when the amount of _accountNoteHashes is only 2 (circuit size)
-    ], { account: wallet.account?.address as Address, gas: _accountNoteHashes.length > 2 ? GAS_LIMIT_TX : undefined })
+    ], { account: wallet.account?.address as Address, gas: _accountNoteHashes.length > 32 ? GAS_LIMIT_TX : undefined })
 }
 
 /**
@@ -572,7 +572,7 @@ export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, wo
         feeData
         // estimation is some time so high it goes over the per tx limit on sepolia
         // to not scare users. we wont set the gas limit super high when the amount of _accountNoteHashes is only 2 (circuit size)
-    ], { account: wallet.account?.address as Address, gas: _accountNoteHashes.length > 2 ? GAS_LIMIT_TX : undefined })
+    ], { account: wallet.account?.address as Address, gas: _accountNoteHashes.length > 32 ? GAS_LIMIT_TX : undefined })
 }
 export async function getFreshBurnAccount(privateWallet: BurnWallet, wormholeToken: WormholeTokenTest | WormholeToken) {
     const neverUsedBurnAccounts = privateWallet.privateData.burnAccounts.filter(async (b) => await wormholeToken.read.balanceOf([b.burnAddress]) === 0n)

@@ -12,7 +12,13 @@ import { UltraHonkBackend } from '@aztec/bb.js';
 import type { CompiledCircuit, InputMap } from "@noir-lang/noir_js"
 import { Noir } from "@noir-lang/noir_js"
 import reMint2Circuit from '../circuits/reMint2/target/reMint2.json' with { type: 'json' };
-import privateTransfer41InCircuit from '../circuits/reMint100/target/reMint100.json'  with { type: 'json' };
+import reMint32Circuit from '../circuits/reMint32/target/reMint32.json' with { type: 'json' };
+import reMint100Circuit from '../circuits/reMint100/target/reMint100.json'  with { type: 'json' };
+const circuits:{[k:number]:any} = {
+    2:reMint2Circuit,
+    32:reMint32Circuit,
+    100:reMint100Circuit
+}
 
 //import { Fr } from "@aztec/aztec.js"
 import { BurnWallet } from "./BurnWallet.ts"
@@ -218,7 +224,7 @@ export async function getBackend(circuitSize: number, threads?: number) {
     console.log("initializing backend with circuit")
     threads = threads ?? getAvailableThreads()
     console.log({ threads })
-    const byteCode = circuitSize === 2 ? reMint2Circuit.bytecode : privateTransfer41InCircuit.bytecode
+    const byteCode = circuits[circuitSize].bytecode
     return new UltraHonkBackend(byteCode, { threads: threads }, { recursive: false });
 }
 
@@ -227,7 +233,7 @@ export async function generateProof({ proofInputs, backend, threads, circuitSize
     console.log("proving with:", {circuitSize, threads})
     backend = backend ?? await getBackend(circuitSize, threads)
 
-    const circuitJson = circuitSize === 2 ? reMint2Circuit : privateTransfer41InCircuit;
+    const circuitJson = circuits[circuitSize];
     const noir = new Noir(circuitJson as CompiledCircuit);
     const { witness } = await noir.execute(proofInputs as InputMap);
     console.log("generating proof")

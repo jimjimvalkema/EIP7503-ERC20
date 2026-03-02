@@ -107,7 +107,7 @@ function errorUi(message: string, error: unknown, replace = false) {
     throw new Error(message, { cause: error })
 }
 
-function logUi(message: string, replace = false, useHtml = false) {
+function logUi(message: string, replace = false, useHtml = false, logConsole=true) {
     if (replace) {
         logEl!.innerHTML = ""
     }
@@ -116,7 +116,9 @@ function logUi(message: string, replace = false, useHtml = false) {
     } else {
         logEl!.innerText += `\n ${message}`
     }
-    console.log(message)
+    if (logConsole) {
+        console.log(message)
+    }
 }
 
 async function everyClass(className: string, func: (el: HTMLElement) => void) {
@@ -209,7 +211,7 @@ async function updateWalletInfoUi(
                 "----------Syncing burn Accounts" + ".".repeat(dotCount) + `<br>` +
                 BURN_ACCOUNT_SYNCING_MSG + `<br>` +
                 "----------Syncing burn Accounts" + ".".repeat(dotCount)
-                , true, true);
+                , true, true,false);
         }, 500);
         const syncPromises = privateWallet.privateData.burnAccounts.map((ba, i) =>
             syncBurnAccount({ wormholeToken: wormholeTokenWallet, burnAccount: ba, archiveNode: publicClient })
@@ -663,7 +665,7 @@ async function proofPrivateTransferBtnHandler() {
         logUi(
             "creating proof..." + ".".repeat(dotCount) + "<br><br>" +
             CREATING_PROOF_MSG
-            , true, true);
+            , true, true, false);
     }, 500);
     try {
         // get selected burn addresses from checkboxes
