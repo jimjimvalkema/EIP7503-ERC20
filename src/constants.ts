@@ -49,7 +49,7 @@ export const FIELD_MODULUS = 218882428718392752222464057452572750885483644004160
 export const GAS_LIMIT_TX = 16000000n
 
 export const WORMHOLE_TOKEN_DEPLOYMENT_BLOCK: { [chainId: number]: bigint; } = {
-    11155111: 9580647n // https://sepolia.etherscan.io/tx/0xa44da9f1f6f627b0cb470386a7fc08c01b06dd28b665c7f6e133895c17d1343a
+    11155111: 10369210n // https://sepolia.etherscan.io/tx/0xcaba5105591843eae94db3dea983086a23c01af20f45460f415e4ff238122ffd
 }
 
 
