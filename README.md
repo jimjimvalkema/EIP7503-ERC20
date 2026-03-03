@@ -108,14 +108,14 @@ yarn hardhat run scripts/deployPoseidon2.ts --network sepolia
 
 ## deployed addresses TODO UPDATE THESE
 ### sepolia  
-WormholeToken - [0xE1e321bD03FA371508bFDab7f90e7e80f73dC07f](https://sepolia.etherscan.io/address/0xE1e321bD03FA371508bFDab7f90e7e80f73dC07f)  
+WormholeToken - [0x6B1474930d4e956A32c72074efe5e1cD279CB5b8](https://sepolia.etherscan.io/address/0x6B1474930d4e956A32c72074efe5e1cD279CB5b8)  
 
 
-reMint2Verifier - [0x9cEc912eA41d2eDF2282161287Eeb237f694e4C7](https://sepolia.etherscan.io/address/0x9cEc912eA41d2eDF2282161287Eeb237f694e4C7)
-reMint32Verifier - [0x395CEF441b3554d16Dff518318A5C10Fb12bF9eC](https://sepolia.etherscan.io/address/0x395CEF441b3554d16Dff518318A5C10Fb12bF9eC)   
-reMint100Verifier - [0x019035f1c3E68FC6B50DdD79385e6FA51FA8893b](https://sepolia.etherscan.io/address/0x019035f1c3E68FC6B50DdD79385e6FA51FA8893b)  
-ZKTranscriptLib - [0xE190c14Ba6bc2aA48488D8BebF5C54AFBA5c5954](https://sepolia.etherscan.io/address/0xE190c14Ba6bc2aA48488D8BebF5C54AFBA5c5954)  
-leanIMTPoseidon2 - [0x3C37fA0fd9C369c8B3256cD55C5d6040aEBf206C](https://sepolia.etherscan.io/address/0x3C37fA0fd9C369c8B3256cD55C5d6040aEBf206C)  
+reMint2Verifier - [0x0b85504e9D0A6A4A8BB079156F66f8e5C47caF1B](https://sepolia.etherscan.io/address/0x0b85504e9D0A6A4A8BB079156F66f8e5C47caF1B)
+reMint32Verifier - [0x80B904340a5005FC4B4AAefBb9357d54009B2889](https://sepolia.etherscan.io/address/0x80B904340a5005FC4B4AAefBb9357d54009B2889)   
+reMint100Verifier - [0xa3124d86e06C718EcDD1AdD52613726f04BD665d](https://sepolia.etherscan.io/address/0xa3124d86e06C718EcDD1AdD52613726f04BD665d)  
+ZKTranscriptLib - [0x6Ed252215c01A25A3389332E08F2C79157884c9C](https://sepolia.etherscan.io/address/0x6Ed252215c01A25A3389332E08F2C79157884c9C)  
+leanIMTPoseidon2 - [0xb999F48C77cEe08CDc6d264C79DAfCaB129068BA](https://sepolia.etherscan.io/address/0xb999F48C77cEe08CDc6d264C79DAfCaB129068BA)  
 
 
 ## install
