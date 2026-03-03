@@ -28,14 +28,14 @@ struct SignatureInputs {
     bytes callData;
     bool callCanFail;
     uint256 callValue;
-    bytes[] encryptedTotalSpends;
+    bytes[] encryptedTotalMinted;
 }
 
 
 error VerificationFailed();
-// accountNoteNullifier is indexed so users can search for it and find out the total amount spend, which is needed to make the next spend the next spent
+// nullifier is indexed so users can search for it and find out the total amount spend, which is needed to make the next spend the next spent
 // the nullifiers mapping contains the blockNumber it was nullified at. This can be used for a faster syncing strategy
-event Nullified(uint256 indexed nullifier, bytes encryptedTotalSpends);
+event Nullified(uint256 indexed nullifier, bytes encryptedTotalMinted);
 event StorageRootAdded(uint256 blockNumber);
 event NewLeaf(uint256 leaf);
 
@@ -49,9 +49,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     uint256 constant public TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544; //  UTF8("TOTAL_BURNED").toHex()
     address internal constant POSEIDON2_ADDRESS = 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C; // yul-recompile-200: 0xb41072641808e6186eF5246fE1990e46EB45B65A gas: 62572, huff: 0x382ABeF9789C1B5FeE54C72Bd9aaf7983726841C gas:39 627, yul-lib: 0x925e05cfb89f619BE3187Bf13D355A6D1864D24D,
 
-    // @notice accountNoteNullifier = poseidon(nonce, viewingKey)
+    // @notice nullifier = poseidon(nonce, viewingKey)
     // @notice accountNoteHash = poseidon(totalAmountSpent, nonce, viewingKey)
-    mapping (uint256 => uint256) public nullifiers; // accountNoteNullifier -> blockNumber
+    mapping (uint256 => uint256) public nullifiers; // nullifier -> blockNumber
     mapping (uint256 => bool) public roots;
 
     uint40 currentLeafIndex;
@@ -103,12 +103,12 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
     bytes32 private constant _RE_MINT_TYPEHASH =
         keccak256(
-            "reMint(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends)"
+            "reMint(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalMinted)"
         );
 
     bytes32 private constant _RE_MINT_RELAYER_TYPEHASH =
         keccak256(
-            "reMintRelayer(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalSpends,FeeData _feeData)FeeData(uint256 tokensPerEthPrice,uint256 maxFee,uint256 amountForRecipient,uint256 relayerBonus,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
+            "reMintRelayer(address _recipient,uint256 _amount,bytes _callData,bool _callCanFail,uint256 _callValue,bytes[] _encryptedTotalMinted,FeeData _feeData)FeeData(uint256 tokensPerEthPrice,uint256 maxFee,uint256 amountForRecipient,uint256 relayerBonus,uint256 estimatedGasCost,uint256 estimatedPriorityFee,address refundAddress,address relayerAddress)"
         );
 
     bytes32 private constant _FEEDATA_TYPEHASH = keccak256(
@@ -148,7 +148,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
                 keccak256(_signatureInputs.callData),
                 _signatureInputs.callCanFail,
                 _signatureInputs.callValue,
-                _hashBytesArray(_signatureInputs.encryptedTotalSpends)
+                _hashBytesArray(_signatureInputs.encryptedTotalMinted)
             )
         );
         return _hashTypedDataV4(structHash);
@@ -166,7 +166,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
                 keccak256(_signatureInputs.callData),
                 _signatureInputs.callCanFail,
                 _signatureInputs.callValue,
-                _hashBytesArray(_signatureInputs.encryptedTotalSpends),
+                _hashBytesArray(_signatureInputs.encryptedTotalMinted),
                 _hashFeeData(_feeData)
             )
         );
@@ -230,35 +230,35 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         }
     }
 
-    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _accountNoteHashes) override internal {        
+    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _totalMintedLeafs) override internal {        
         // check if account == tx.origin since in that case it's not a private address.
         // and we only need to insert _accountNoteHash
         // tx.origin is always a EOA
         if (tx.origin == _to ) {
-            _insertManyInMerkleTree(_accountNoteHashes);
+            _insertManyInMerkleTree(_totalMintedLeafs);
         } else {
             uint256 accountBalanceLeaf = hashBalanceLeaf(_to, _newBalance);
 
             if (leanIMTPoseidon2.has(tree,accountBalanceLeaf)) {
                 // accountBalanceLeaf is already in there! so we only insert _accountNoteHash
                 // note: _accountNoteHash is always unique, remember it is poseidon(totalSpend,viewingKey,nonce)
-                _insertManyInMerkleTree( _accountNoteHashes);
+                _insertManyInMerkleTree( _totalMintedLeafs);
             } else {
-                uint256[] memory leafs = new uint256[](1+_accountNoteHashes.length);
+                uint256[] memory leafs = new uint256[](1+_totalMintedLeafs.length);
                 leafs[0] = accountBalanceLeaf;
-                for (uint i = 0; i < _accountNoteHashes.length; i++) {
-                    leafs[i+1] = _accountNoteHashes[i];
+                for (uint i = 0; i < _totalMintedLeafs.length; i++) {
+                    leafs[i+1] = _totalMintedLeafs[i];
                 }
                 _insertManyInMerkleTree(leafs);
             }
         }
     }
 
-    function _updateBalanceInMerkleTree(address[] memory _accounts, uint256[] memory _newBalances, uint256[] memory _accountNoteHashes) override internal {        
+    function _updateBalanceInMerkleTree(address[] memory _accounts, uint256[] memory _newBalances, uint256[] memory _totalMintedLeafs) override internal {        
         // check if account == tx.origin since in that case it's not a private address.
         // and we only need to insert _accountNoteHash
         // tx.origin is always a EOA
-        uint256[] memory leafs = new uint256[](_accounts.length + _accountNoteHashes.length);
+        uint256[] memory leafs = new uint256[](_accounts.length + _totalMintedLeafs.length);
 
         uint256 leafsIndex = 0;
         for (uint256 i = 0; i < _accounts.length; i++) {
@@ -272,8 +272,8 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
             }
         }
 
-        for (uint256 i = 0; i < _accountNoteHashes.length; i++) {
-            leafs[leafsIndex++] = _accountNoteHashes[i];
+        for (uint256 i = 0; i < _totalMintedLeafs.length; i++) {
+            leafs[leafsIndex++] = _totalMintedLeafs[i];
         }
 
         // Trim array to actual length
@@ -300,10 +300,10 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         uint256 _root,
         uint256 _amount,
         bytes32 _signatureHash,
-        uint256[] memory _accountNoteHashes,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-        uint256[] memory _accountNoteNullifiers   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256[] memory _totalMintedLeafs,        // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_minted+amount, prev_account_nonce, viewing_key)
+        uint256[] memory _nullifiers   // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
     ) public view returns (bytes32[] memory) {
-        uint256 verifierSize = _accountNoteNullifiers.length;
+        uint256 verifierSize = _nullifiers.length;
         bytes32[] memory publicInputs = new bytes32[](4 + 32 + verifierSize*2);
 
         publicInputs[0] = bytes32(_root);
@@ -316,9 +316,9 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         }
 
         uint256 noteHashesOffSet = 32 + signatureHashOffset;
-        for (uint256 i = 0; i < _accountNoteHashes.length ; i++) {
-            publicInputs[2 * i + noteHashesOffSet] = bytes32(_accountNoteHashes[i]);
-            publicInputs[2 * i + noteHashesOffSet + 1] = bytes32(_accountNoteNullifiers[i]);
+        for (uint256 i = 0; i < _totalMintedLeafs.length ; i++) {
+            publicInputs[2 * i + noteHashesOffSet] = bytes32(_totalMintedLeafs[i]);
+            publicInputs[2 * i + noteHashesOffSet + 1] = bytes32(_nullifiers[i]);
         }
 
         return publicInputs;
@@ -327,25 +327,27 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
 
     function _verifyReMint(
         uint256 _amount,
-        uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-        uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256[] memory _totalMintedLeafs,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_minted+amount, prev_account_nonce, viewing_key)
+        uint256[] memory _nullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root,
         bytes calldata _snarkProof,
-        bytes[] calldata _encryptedTotalSpends,
+        bytes[] calldata _encryptedTotalMinted,
         bytes32 signatureHash
     ) public {
         require(roots[_root], "invalid root");
-        // check and store nullifiers, emit Nullified events with _encryptedTotalSpends blobs
-        for (uint256 i = 0; i < _accountNoteNullifiers.length; i++) {
-            uint256 _accountNoteNullifier = _accountNoteNullifiers[i];
-            require(nullifiers[_accountNoteNullifier] == uint256(0), "nullifier already exist");
-            nullifiers[_accountNoteNullifier] = block.number;
-            emit Nullified(_accountNoteNullifier, _encryptedTotalSpends[i]); 
+        // check and store nullifiers, emit Nullified events with _encryptedTotalMinted blobs
+        for (uint256 i = 0; i < _nullifiers.length; i++) {
+            uint256 _nullifier = _nullifiers[i];
+            if(_nullifier != 0) {
+                require(nullifiers[_nullifier] == uint256(0), "nullifier already exist");
+                nullifiers[_nullifier] = block.number;
+                emit Nullified(_nullifier, _encryptedTotalMinted[i]); 
+            }
         }
 
         // format public inputs and verify proof 
-        bytes32[] memory publicInputs = _formatPublicInputs(_root, _amount, signatureHash, _accountNoteHashes, _accountNoteNullifiers);
-        uint8 verifierSize = uint8(_accountNoteNullifiers.length);
+        bytes32[] memory publicInputs = _formatPublicInputs(_root, _amount, signatureHash, _totalMintedLeafs, _nullifiers);
+        uint8 verifierSize = uint8(_nullifiers.length);
         address verifierAddress = verifierPerSize[verifierSize];
         require(verifierAddress != address(0), "amount of note hashes not supported");
         if (!IVerifier(verifierAddress).verify(_snarkProof, publicInputs)) {
@@ -354,17 +356,17 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     }
 
     function reMint(
-        uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-        uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256[] memory _totalMintedLeafs, // a blinded commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_minted+amount, prev_account_nonce, viewing_key)
+        uint256[] memory _nullifiers,       // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root,
         bytes calldata _snarkProof,
         SignatureInputs calldata _signatureInputs
     ) public {
         bytes32 _signatureHash = _hashSignatureInputs(_signatureInputs);
-        _verifyReMint(_signatureInputs.amountToReMint, _accountNoteHashes, _accountNoteNullifiers, _root, _snarkProof, _signatureInputs.encryptedTotalSpends, _signatureHash);
+        _verifyReMint(_signatureInputs.amountToReMint, _totalMintedLeafs, _nullifiers, _root, _snarkProof, _signatureInputs.encryptedTotalMinted, _signatureHash);
         
         // modified version of _mint that also inserts noteHashes and does not modify total supply!
-        _reMint(_signatureInputs.recipient, _signatureInputs.amountToReMint, _accountNoteHashes);
+        _reMint(_signatureInputs.recipient, _signatureInputs.amountToReMint, _totalMintedLeafs);
         _processCall(_signatureInputs);
     }
 
@@ -379,8 +381,8 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     }
 
     function reMintRelayer(
-        uint256[] memory _accountNoteHashes,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_spent+amount, prev_account_nonce, viewing_key)
-        uint256[] memory _accountNoteNullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
+        uint256[] memory _totalMintedLeafs,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_minted+amount, prev_account_nonce, viewing_key)
+        uint256[] memory _nullifiers,     // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
         uint256 _root,
         bytes calldata _snarkProof,
         SignatureInputs calldata _signatureInputs,
@@ -388,7 +390,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
     ) public {
         (uint256 _fee, uint256 _refundAmount) = _calculateFee(_feeData, _signatureInputs.amountToReMint);
         bytes32 _signatureHash = _hashSignatureInputsRelayer(_signatureInputs, _feeData);
-        _verifyReMint(_signatureInputs.amountToReMint, _accountNoteHashes, _accountNoteNullifiers, _root, _snarkProof, _signatureInputs.encryptedTotalSpends, _signatureHash);
+        _verifyReMint(_signatureInputs.amountToReMint, _totalMintedLeafs, _nullifiers, _root, _snarkProof, _signatureInputs.encryptedTotalMinted, _signatureHash);
 
         // optional let anyone claim the fee
         address relayerAddress;
@@ -407,7 +409,7 @@ contract WormholeToken is ERC20WithWormHoleMerkleTree, EIP712 {
         amounts[0] = _feeData.amountForRecipient;
         amounts[1] = _refundAmount;
         amounts[2] = _fee;
-        _reMintBulk(recipients, amounts, _accountNoteHashes);
+        _reMintBulk(recipients, amounts, _totalMintedLeafs);
         _processCall(_signatureInputs);
     }
 

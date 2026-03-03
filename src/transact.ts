@@ -1,13 +1,13 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
 import { toHex } from "viem";
 import type { WormholeTokenTest } from "../test/remint2.test.ts";
-import type { CreateRelayerInputsOpts, FeeData, NotOwnedBurnAccount, PreSyncedTree, ProofInputs1n, ProofInputs4n, PublicProofInputs, RelayInputs, SelfRelayInputs, SignatureInputs, SignatureInputsWithFee, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts";
-import { generateProof, getSpendableBalanceProof, getPubInputs, getPrivInputs, padArray } from "./proving.ts";
-import type { BurnAccountProof } from "./proving.ts";
+import type { CreateRelayerInputsOpts, FakeBurnAccount, FeeData, NotOwnedBurnAccount, PreSyncedTree, ProofInputs1n, ProofInputs4n, PublicProofInputs, RelayInputs, SelfRelayInputs, SignatureInputs, SignatureInputsWithFee, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts";
+import { generateProof, getSpendableBalanceProof, getPubInputs, getPrivInputs, padArray, randomBN254FieldElement } from "./proving.ts";
+import type { BurnAccountProof, FakeBurnAccountProof } from "./proving.ts";
 import type { ProofData } from "@aztec/bb.js";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { getSyncedMerkleTree, getDeploymentBlock, syncMultipleBurnAccounts, encryptTotalSpend } from "./syncing.ts";
-import { getBurnAddress, getBurnAddressSafe, hashBlindedAddressData, hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, padWithRandomHex, signPrivateTransfer, signPrivateTransferWithFee } from "./hashing.ts";
+import { getBurnAddress, getBurnAddressSafe, hashBlindedAddressData, hashFakeLeaf, hashFakeNullifier, hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, padWithRandomHex, signPrivateTransfer, signPrivateTransferWithFee } from "./hashing.ts";
 import { BurnWallet } from "./BurnWallet.ts";
 import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, GAS_LIMIT_TX } from "./constants.ts";
 
@@ -55,7 +55,7 @@ export function getHashedInputs(
     return { merkleProofs, nullifier, nextTotalSpendNoteHashLeaf }
 }
 
-export function getCircuitSize(amountBurnAddresses: number, circuitSizes:number[]) {
+export function getCircuitSize(amountBurnAddresses: number, circuitSizes: number[]) {
     return circuitSizes.find((v) => v >= amountBurnAddresses) as number
 }
 
@@ -72,7 +72,7 @@ export function getCircuitSize(amountBurnAddresses: number, circuitSizes:number[
  * @returns 
  */
 export async function burn(
-    burnAddress: Address, amount: bigint,wormholeToken:WormholeTokenTest, account:Address, fullNode:PublicClient,
+    burnAddress: Address, amount: bigint, wormholeToken: WormholeTokenTest, account: Address, fullNode: PublicClient,
     { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
@@ -89,8 +89,8 @@ export async function burn(
     if (treeSize >= fullTreeSize) { throw new Error("Tree is FULL this tx WILL RESULT IS LOSS OF ALL FUNDS SEND. DO NOT SEND ANY BURN TRANSACTION!!!") }
     if (treeSize + safeDistanceFromFullTree >= fullTreeSize) { throw new Error("Tree is almost full and the risk is high this burn tx will result in loss of all funds send") }
     if (newBurnBalance < reMintLimit === false) { throw new Error(`This transfer will cause the balance to go over the RE_MINT_LIMIT. This wil result in LOSS OF ALL FUNDS OVER THE LIMIT!! DO NOT SEND THIS TRANSACTION!!\n new balance: ${newBurnBalance} \n limit:       ${reMintLimit}`) }
-    return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount],{account:account})
-    
+    return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount], { account: account })
+
 }
 
 /**
@@ -106,7 +106,7 @@ export async function burn(
  * @returns 
  */
 export async function safeBurn(
-    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint,wormholeToken:WormholeTokenTest, account:Address,
+    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint, wormholeToken: WormholeTokenTest, account: Address,
     { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
@@ -121,7 +121,7 @@ export async function safeBurn(
     if (treeSize >= fullTreeSize) { throw new Error("Tree is FULL this tx WILL RESULT IS LOSS OF ALL FUNDS SEND. DO NOT SEND ANY BURN TRANSACTION!!!") }
     if (treeSize + safeDistanceFromFullTree >= fullTreeSize) { throw new Error("Tree is almost full and the risk is high this burn tx will result in loss of all funds send") }
     if (newBurnBalance < reMintLimit === false) { throw new Error(`This transfer will cause the balance to go over the RE_MINT_LIMIT. This wil result in LOSS OF ALL FUNDS OVER THE LIMIT!! DO NOT SEND THIS TRANSACTION!!\n new balance: ${newBurnBalance} \n limit:       ${reMintLimit}`) }
-    return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount],{account:account})
+    return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount], { account: account })
 }
 
 
@@ -139,7 +139,7 @@ export async function safeBurn(
  * @returns 
  */
 export async function superSafeBurn(
-    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint,wormholeToken:WormholeTokenTest, account:Address,
+    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint, wormholeToken: WormholeTokenTest, account: Address,
     { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
@@ -155,12 +155,12 @@ export async function superSafeBurn(
     if (treeSize >= fullTreeSize) { throw new Error("Tree is FULL this tx WILL RESULT IS LOSS OF ALL FUNDS SEND. DO NOT SEND ANY BURN TRANSACTION!!!") }
     if (treeSize + safeDistanceFromFullTree >= fullTreeSize) { throw new Error("Tree is almost full and the risk is high this burn tx will result in loss of all funds send") }
     if (newBurnBalance < reMintLimit === false) { throw new Error(`This transfer will cause the balance to go over the RE_MINT_LIMIT. This wil result in LOSS OF ALL FUNDS OVER THE LIMIT!! DO NOT SEND THIS TRANSACTION!!\n new balance: ${newBurnBalance} \n limit:       ${reMintLimit}`) }
-    return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount],{account:account})
+    return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount], { account: account })
 }
 
-export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses, amount, largestCircuitSize }: {largestCircuitSize:number, burnAccounts: SyncedBurnAccount[], selectBurnAddresses: Address[], amount: bigint }) {
+export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses, amount, largestCircuitSize }: { largestCircuitSize: number, burnAccounts: SyncedBurnAccount[], selectBurnAddresses: Address[], amount: bigint }) {
     const sortedBurnAccounts = burnAccounts.sort((a, b) => Number(b.spendableBalance) - Number(a.spendableBalance))
-    const encryptedTotalSpends: Hex[] = []
+    const encryptedTotalMinted: Hex[] = []
     // man so many copy pasta of same array and big name!! Fix it i cant read this!!!!
     const burnAccountsAndAmounts: { burnAccount: SyncedBurnAccount, amountToClaim: bigint }[] = []
     let amountLeft = amount
@@ -175,7 +175,7 @@ export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddr
             }
             amountLeft -= amountToClaim
             const newTotalSpent = amountToClaim + BigInt(burnAccount.totalSpent)
-            encryptedTotalSpends.push(await encryptTotalSpend({ viewingKey: BigInt(burnAccount.viewingKey), amount: newTotalSpent }))
+            encryptedTotalMinted.push(await encryptTotalSpend({ viewingKey: BigInt(burnAccount.viewingKey), amount: newTotalSpent }))
             burnAccountsAndAmounts.push({
                 burnAccount: burnAccount,
                 amountToClaim: amountToClaim
@@ -193,12 +193,12 @@ export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddr
     if (burnAccountsAndAmounts.length > largestCircuitSize) {
         throw new Error(`need to consume more than LARGEST_CIRCUIT_SIZE of: ${largestCircuitSize}, but need to consume: ${burnAccountsAndAmounts.length} burnAccount to make the transaction. Please consolidate balance to make this tx`)
     }
-    return { burnAccountsAndAmounts, encryptedTotalSpends }
+    return { burnAccountsAndAmounts, encryptedTotalMinted }
 }
 
-export async function getCircuitSizesFromContract(wormholeToken:WormholeToken | WormholeTokenTest) {
+export async function getCircuitSizesFromContract(wormholeToken: WormholeToken | WormholeTokenTest) {
     const AMOUNT_OF_VERIFIERS = await wormholeToken.read.AMOUNT_OF_VERIFIERS()
-    const sizes = await Promise.all(new Array(AMOUNT_OF_VERIFIERS).fill(0).map((v,index)=>wormholeToken.read.VERIFIER_SIZES([BigInt(index)])))
+    const sizes = await Promise.all(new Array(AMOUNT_OF_VERIFIERS).fill(0).map((v, index) => wormholeToken.read.VERIFIER_SIZES([BigInt(index)])))
     return sizes
 }
 
@@ -210,7 +210,7 @@ export async function createRelayerInputs(
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
     opts: CreateRelayerInputsOpts & { feeData: FeeData }
-): Promise<{ relayInputs:RelayInputs, syncedData:{syncedTree:PreSyncedTree, syncedPrivateWallet:BurnWallet } }>;
+): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }>;
 
 // Overload 2: feeData omitted → SelfRelayInputs
 export async function createRelayerInputs(
@@ -220,7 +220,7 @@ export async function createRelayerInputs(
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
     opts?: CreateRelayerInputsOpts & { feeData?: undefined }
-): Promise<{ relayInputs:SelfRelayInputs, syncedData:{syncedTree:PreSyncedTree, syncedPrivateWallet:BurnWallet } }>;
+): Promise<{ relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }>;
 
 /**
  * Creates the inputs needed to relay a private transfer (either self-relay or via a relayer).
@@ -271,7 +271,7 @@ export async function createRelayerInputs(
     archiveClient: PublicClient,
     { circuitSizes, threads, chainId, callData = "0x", callValue = 0n, callCanFail = false, feeData, burnAddresses, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, reMintLimit, maxTreeDepth, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
         CreateRelayerInputsOpts & { feeData?: FeeData } = {}
-): Promise<{ relayInputs:RelayInputs, syncedData:{syncedTree:PreSyncedTree, syncedPrivateWallet:BurnWallet } } | { relayInputs:SelfRelayInputs,  syncedData:{syncedTree:PreSyncedTree, syncedPrivateWallet:BurnWallet } }> {
+): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } } | { relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }> {
     // set defaults
     burnAddresses ??= privateWallet.privateData.burnAccounts.map((b) => b.burnAddress)
     powDifficulty ??= await wormholeToken.read.POW_DIFFICULTY()
@@ -279,7 +279,7 @@ export async function createRelayerInputs(
     circuitSizes ??= await getCircuitSizesFromContract(wormholeToken);
     chainId ??= BigInt(await archiveClient.getChainId());
     maxTreeDepth ??= await wormholeToken.read.MAX_TREE_DEPTH()
-    const largestCircuitSize = circuitSizes[circuitSizes.length-1]
+    const largestCircuitSize = circuitSizes[circuitSizes.length - 1]
 
     // start this asap so we can resolve once we need it
     const syncedTreePromise = getSyncedMerkleTree({
@@ -301,7 +301,7 @@ export async function createRelayerInputs(
     const burnAccounts = privateWallet.privateData.burnAccounts as SyncedBurnAccount[]
 
     // select burn accounts for spend. Takes highest balances first
-    const { burnAccountsAndAmounts, encryptedTotalSpends } = await prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses: burnAddresses, amount, largestCircuitSize:largestCircuitSize })
+    const { burnAccountsAndAmounts, encryptedTotalMinted } = await prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses: burnAddresses, amount, largestCircuitSize: largestCircuitSize })
     circuitSize ??= getCircuitSize(burnAccountsAndAmounts.length, circuitSizes)
 
     // format inputs that wil be signed
@@ -312,7 +312,7 @@ export async function createRelayerInputs(
         callCanFail: callCanFail,
         callValue: toHex(callValue),
         // remember if you do not do padWithRandomHex you reveal how many address you consumed!
-        encryptedTotalSpends: padWithRandomHex({ arr: encryptedTotalSpends, len: circuitSize, hexSize: encryptedBlobLen, dir: "right" }),
+        encryptedTotalMinted: padWithRandomHex({ arr: encryptedTotalMinted, len: circuitSize, hexSize: encryptedBlobLen, dir: "right" }),
         feeData,
     }
 
@@ -346,25 +346,39 @@ export async function createRelayerInputs(
     // nullifiers, noteHashes, merkle proofs
     const nullifiers: bigint[] = []
     const noteHashes: bigint[] = []
-    const burnAccountProofs: BurnAccountProof[] = []
+    const burnAccountProofs: (BurnAccountProof|FakeBurnAccountProof)[] = []
     // TODO @Warptoad: check chainId matches burn account. remove burn account with different chainId
-    for (const { burnAccount, amountToClaim } of burnAccountsAndAmounts) {
-        const { merkleProofs, nullifier, nextTotalSpendNoteHashLeaf } = getHashedInputs({
-            burnAccount: burnAccount,
-            claimAmount: amountToClaim,
-            syncedTree: syncedTree,
-            maxTreeDepth: maxTreeDepth
-        })
+    for (let index = 0; index < circuitSize; index++) {
+        if (index < burnAccountsAndAmounts.length) {
+            const { burnAccount, amountToClaim } = burnAccountsAndAmounts[index];
+            const { merkleProofs, nullifier, nextTotalSpendNoteHashLeaf } = getHashedInputs({
+                burnAccount: burnAccount,
+                claimAmount: amountToClaim,
+                syncedTree: syncedTree,
+                maxTreeDepth: maxTreeDepth
+            })
 
-        // group all this private inclusion proof data
-        const burnAccountProof: BurnAccountProof = {
-            burnAccount: burnAccount,
-            merkleProofs: merkleProofs,
-            claimAmount: amountToClaim
+            // group all this private inclusion proof data
+            const burnAccountProof: BurnAccountProof = {
+                burnAccount: burnAccount,
+                merkleProofs: merkleProofs,
+                claimAmount: amountToClaim
+            }
+            burnAccountProofs.push(burnAccountProof)
+            nullifiers.push(nullifier)
+            noteHashes.push(nextTotalSpendNoteHashLeaf)
+        } else {
+            const fakeBurnAccount: FakeBurnAccount = {viewingKey:toHex(randomBN254FieldElement())} 
+            const burnAccountProof: FakeBurnAccountProof = {
+                burnAccount: fakeBurnAccount,
+            }
+            const nullifier = hashFakeNullifier({viewingKey:BigInt(fakeBurnAccount.viewingKey)})
+            const nextTotalSpendNoteHash = hashFakeLeaf({viewingKey:BigInt(fakeBurnAccount.viewingKey)})
+            burnAccountProofs.push(burnAccountProof)
+
+            nullifiers.push(nullifier)
+            noteHashes.push(nextTotalSpendNoteHash)
         }
-        burnAccountProofs.push(burnAccountProof)
-        nullifiers.push(nullifier)
-        noteHashes.push(nextTotalSpendNoteHashLeaf)
     }
 
     // final formatting proofs so noir can use them!
@@ -378,19 +392,20 @@ export async function createRelayerInputs(
         circuitSize: circuitSize,
         powDifficulty: powDifficulty,
         reMintLimit: reMintLimit,
-        circuitSizes:circuitSizes
+        circuitSizes: circuitSizes,
+        burnAccountProofs: burnAccountProofs
     })
     const privateInputs = getPrivInputs({
         burnAccountsProofs: burnAccountProofs,
         signatureData: signatureData,
         maxTreeDepth: maxTreeDepth,
         circuitSize: circuitSize,
-        circuitSizes:circuitSizes
+        circuitSizes: circuitSizes
     })
     const proofInputs = { ...publicInputs, ...privateInputs } as ProofInputs1n | ProofInputs4n
 
     // make proof!
-    const zkProof = await generateProof({ proofInputs: proofInputs, backend: backend, threads: threads, circuitSizes:circuitSizes })
+    const zkProof = await generateProof({ proofInputs: proofInputs, backend: backend, threads: threads, circuitSizes: circuitSizes })
     if (feeData) {
         return {
             relayInputs:
@@ -464,7 +479,7 @@ export async function proofAndSelfRelay(
     const chainId = BigInt(await archiveClient.getChainId())
     deploymentBlock ??= getDeploymentBlock(Number(chainId))
 
-    const {relayInputs:selfRelayInputs} = await createRelayerInputs(
+    const { relayInputs: selfRelayInputs } = await createRelayerInputs(
         recipient,
         amount,
         privateWallet,
@@ -504,7 +519,7 @@ export async function proofAndSelfRelay(
  * @param wormholeTokenContract - WormholeToken contract instance with write access.
  */
 export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: WalletClient, wormholeTokenContract: WormholeTokenTest) {
-    const _accountNoteHashes = selfRelayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.total_spent_leaf))
+    const _accountNoteHashes = selfRelayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.total_minted_leaf))
     const _accountNoteNullifiers = selfRelayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.nullifier))
     const _root = BigInt(selfRelayInputs.publicInputs.root)
     const _snarkProof = selfRelayInputs.proof
@@ -513,7 +528,7 @@ export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: Wall
         amountToReMint: BigInt(selfRelayInputs.signatureInputs.amountToReMint),
         recipient: selfRelayInputs.signatureInputs.recipient,
         callData: selfRelayInputs.signatureInputs.callData,
-        encryptedTotalSpends: selfRelayInputs.signatureInputs.encryptedTotalSpends,
+        encryptedTotalMinted: selfRelayInputs.signatureInputs.encryptedTotalMinted,
         callCanFail: selfRelayInputs.signatureInputs.callCanFail,
         callValue: BigInt(selfRelayInputs.signatureInputs.callValue)
 
@@ -538,7 +553,7 @@ export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: Wall
  * @param wormholeTokenContract - WormholeToken contract instance with write access.
  */
 export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, wormholeTokenContract: WormholeTokenTest) {
-    const _accountNoteHashes = relayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.total_spent_leaf))
+    const _accountNoteHashes = relayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.total_minted_leaf))
     const _accountNoteNullifiers = relayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.nullifier))
     const _root = BigInt(relayInputs.publicInputs.root)
     const _snarkProof = relayInputs.proof
@@ -547,7 +562,7 @@ export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, wo
         amountToReMint: BigInt(relayInputs.signatureInputs.amountToReMint),
         recipient: relayInputs.signatureInputs.recipient,
         callData: relayInputs.signatureInputs.callData,
-        encryptedTotalSpends: relayInputs.signatureInputs.encryptedTotalSpends,
+        encryptedTotalMinted: relayInputs.signatureInputs.encryptedTotalMinted,
         callCanFail: relayInputs.signatureInputs.callCanFail,
         callValue: BigInt(relayInputs.signatureInputs.callValue)
 

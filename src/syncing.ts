@@ -169,7 +169,7 @@ export async function syncBurnAccount(
                     nullifier: lastNullifier,
                 },
             })
-            const totalSpentEncrypted = logs[0].args.encryptedTotalSpends as Hex;
+            const totalSpentEncrypted = logs[0].args.encryptedTotalMinted as Hex;
             totalSpent = await decryptTotalSpend({ totalSpentEncrypted: totalSpentEncrypted, viewingKey: BigInt(viewingKey) });
         }
     }

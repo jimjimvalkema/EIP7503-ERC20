@@ -13,9 +13,13 @@ export const POW_DIFFICULTY = 2n**(256n-POW_BITS)-1n//16n ** (64n - POW_LEADING_
 export const RE_MINT_LIMIT = 100_000_000n*10n**18n; 
 
 // ---- circuit constants ---------------------
-export const PRIVATE_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n; //"0x" + [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('') as Hex
-export const TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544n; // UTF8("TOTAL_BURNED").toHex()
-export const TOTAL_SPENT_DOMAIN = 0x544f54414c5f5350454e44n; // UTF8("TOTAL_SPEND").toHex()
+// domain separators
+export const BURN_ADDRESS_TYPE = 0x5a4b574f524d484f4c45n;               // UTF8("ZKWORMHOLE").toHex() [...new TextEncoder().encode("ZKWORMHOLE")].map(b=>b.toString(16)).join('')
+export const TOTAL_BURNED_DOMAIN = 0x544f54414c5f4255524e4544n;         // UTF8("TOTAL_BURNED").toHex()
+export const TOTAL_MINTED_DOMAIN = 0x544f54414c5f4d494e544544n;         // UTF8("TOTAL_MINTED").toHex()
+export const NULLIFIER_DOMAIN = 0x4e554c4c4946494552n;                          // UTF8("NULLIFIER").toHex()
+export const FAKE_LEAF_DOMAIN = 0x46414b455f4c454146n;                  // UTF8("FAKE_LEAF").toHex()
+export const FAKE_NULLIFIER_DOMAIN = 0x46414b455f4e554c4c4946494552n;   // UTF8("FAKE_NULLIFIER").toHex()
 
 export const MAX_TREE_DEPTH = 44 as const;
 
@@ -84,7 +88,7 @@ export const PRIVATE_RE_MINT_712_TYPES = {
         { name: "_callData", type: "bytes" },
         { name: "_callCanFail", type: "bool" },
         { name: "_callValue", type: "uint256" },
-        { name: "_encryptedTotalSpends", type: "bytes[]" },
+        { name: "_encryptedTotalMinted", type: "bytes[]" },
     ],
 } as const;
 
@@ -95,7 +99,7 @@ export const PRIVATE_RE_MINT_RELAYER_712_TYPES = {
         { name: "_callData", type: "bytes" },
         { name: "_callCanFail", type: "bool" },
         { name: "_callValue", type: "uint256" },
-        { name: "_encryptedTotalSpends", type: "bytes[]" },
+        { name: "_encryptedTotalMinted", type: "bytes[]" },
         { name: "_feeData", type: "FeeData" },
     ],
     FeeData: [

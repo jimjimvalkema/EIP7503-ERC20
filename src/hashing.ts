@@ -1,7 +1,7 @@
 import type { Hex, Signature, Account, Hash, WalletClient, Address, } from "viem";
 import { recoverPublicKey, hashMessage, hexToBigInt, hexToBytes, toHex, getAddress, keccak256, toPrefixedMessage, encodePacked, padHex, bytesToHex, hashTypedData } from "viem";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
-import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, getPrivateReMintDomain, PRIVATE_ADDRESS_TYPE, PRIVATE_RE_MINT_712_TYPES, PRIVATE_RE_MINT_RELAYER_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_SPENT_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
+import { BURN_ADDRESS_TYPE, EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, FAKE_LEAF_DOMAIN, FAKE_NULLIFIER_DOMAIN, getPrivateReMintDomain, NULLIFIER_DOMAIN, PRIVATE_RE_MINT_712_TYPES, PRIVATE_RE_MINT_RELAYER_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_MINTED_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import type { FeeData, SignatureData, SignatureInputs, SignatureInputsWithFee, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.ts";
 import { BurnWallet } from "./BurnWallet.ts"
 import { padArray } from "./proving.ts";
@@ -95,8 +95,17 @@ export function hashBlindedAddressData(
 
 export function hashAddress({ blindedAddressDataHash, powNonce }: { blindedAddressDataHash: bigint, powNonce: bigint }) {
     //const pubKeyField = hexToBigInt("0x" + pubKeyX.slice(2 + 2) as Hex) //slice first byte so it fits in a field
-    const addressHash = poseidon2Hash([blindedAddressDataHash, powNonce, PRIVATE_ADDRESS_TYPE]);
+    const addressHash = poseidon2Hash([blindedAddressDataHash, powNonce, BURN_ADDRESS_TYPE]);
     return addressHash
+}
+
+export function hashFakeLeaf({viewingKey}:{viewingKey:bigint}): bigint {
+    return poseidon2Hash([viewingKey, FAKE_LEAF_DOMAIN])
+}
+
+
+export function hashFakeNullifier({viewingKey}:{viewingKey:bigint}): bigint {
+    return poseidon2Hash([viewingKey, FAKE_NULLIFIER_DOMAIN])
 }
 
 
@@ -128,13 +137,13 @@ export function hashPow({ blindedAddressDataHash, powNonce }: { blindedAddressDa
 // prev_account_nonce makes sure the hash is never the same even when the total_spent is not different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
 export function hashTotalSpentLeaf({ totalSpent, accountNonce, blindedAddressDataHash, viewingKey }: { totalSpent: bigint, accountNonce: bigint, blindedAddressDataHash: bigint, viewingKey: bigint }) {
-    return poseidon2Hash([totalSpent, accountNonce, blindedAddressDataHash, viewingKey, TOTAL_SPENT_DOMAIN])
+    return poseidon2Hash([totalSpent, accountNonce, blindedAddressDataHash, viewingKey, TOTAL_MINTED_DOMAIN])
 }
 
 // prev_account_nonce makes sure the hash is never the same even when the total_spent is not different
 // secret is so others cant try and find the pre-image (since this hash is posted onchain)
 export function hashNullifier({ accountNonce, viewingKey }: { accountNonce: bigint, viewingKey: bigint }) {
-    return poseidon2Hash([accountNonce, viewingKey])
+    return poseidon2Hash([accountNonce, viewingKey, NULLIFIER_DOMAIN])
 }
 
 export function hashTotalBurnedLeaf({ burnAddress, totalBurned }: { burnAddress: Address, totalBurned: bigint }) {
@@ -151,24 +160,24 @@ export function padWithRandomHex({ arr, len, hexSize, dir }: { arr: Hex[], len: 
 
 // export function hashSignatureInputs(signatureInputs: SignatureInputs, encryptedBlobPlainTextSize=ENCRYPTED_TOTAL_SPENT_PADDING) {
 //     const encryptedBlobLen = encryptedBlobPlainTextSize + EAS_BYTE_LEN_OVERHEAD
-//     if (signatureInputs.encryptedTotalSpends.length <= 2) {
-//         signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:2, hexSize:encryptedBlobLen, dir:"right"})
+//     if (signatureInputs.encryptedTotalMinted.length <= 2) {
+//         signatureInputs.encryptedTotalMinted = padWithRandomHex({arr:signatureInputs.encryptedTotalMinted, len:2, hexSize:encryptedBlobLen, dir:"right"})
 //         return keccak256(
 //             encodePacked(
 //                 ['address', 'uint256', 'bytes','bytes','bytes'],
-//                 [signatureInputs.recipient, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1]]
+//                 [signatureInputs.recipient, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalMinted[0], signatureInputs.encryptedTotalMinted[1]]
 //             ))
 
-//     } else if (signatureInputs.encryptedTotalSpends.length <= 4) {
-//         signatureInputs.encryptedTotalSpends = padWithRandomHex({arr:signatureInputs.encryptedTotalSpends, len:4, hexSize:encryptedBlobLen, dir:"right"})
+//     } else if (signatureInputs.encryptedTotalMinted.length <= 4) {
+//         signatureInputs.encryptedTotalMinted = padWithRandomHex({arr:signatureInputs.encryptedTotalMinted, len:4, hexSize:encryptedBlobLen, dir:"right"})
 //         return keccak256(
 //             encodePacked(
 //                 ['address', 'uint256', 'bytes', 'bytes', 'bytes', 'bytes', 'bytes'],
-//                 [signatureInputs.recipient, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalSpends[0], signatureInputs.encryptedTotalSpends[1], signatureInputs.encryptedTotalSpends[2], signatureInputs.encryptedTotalSpends[3]]
+//                 [signatureInputs.recipient, signatureInputs.amount, signatureInputs.callData, signatureInputs.encryptedTotalMinted[0], signatureInputs.encryptedTotalMinted[1], signatureInputs.encryptedTotalMinted[2], signatureInputs.encryptedTotalMinted[3]]
 //             ))
 //     }
 //     else {
-//         throw new Error("amount of encryptedTotalSpends not supported")
+//         throw new Error("amount of encryptedTotalMinted not supported")
 //     }
 // }
 
@@ -207,7 +216,7 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
         _callData: signatureInputs.callData,
         _callCanFail: signatureInputs.callCanFail,
         _callValue: BigInt(signatureInputs.callValue),
-        _encryptedTotalSpends: signatureInputs.encryptedTotalSpends,
+        _encryptedTotalMinted: signatureInputs.encryptedTotalMinted,
     };
 
     // The digest — same hash the contract produces via _hashTypedDataV4
@@ -249,7 +258,7 @@ export async function signPrivateTransferWithFee({ privateWallet, signatureInput
         _callData: signatureInputs.callData,
         _callCanFail: signatureInputs.callCanFail,
         _callValue: BigInt(signatureInputs.callValue),
-        _encryptedTotalSpends: signatureInputs.encryptedTotalSpends,
+        _encryptedTotalMinted: signatureInputs.encryptedTotalMinted,
         _feeData: {
             tokensPerEthPrice: BigInt(signatureInputs.feeData.tokensPerEthPrice),
             maxFee: BigInt(signatureInputs.feeData.maxFee),

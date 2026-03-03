@@ -42,7 +42,7 @@ export interface SignatureInputs {
     callData: Hex,
     callValue: Hex,
     callCanFail: boolean,
-    encryptedTotalSpends: Hex[],
+    encryptedTotalMinted: Hex[],
 }
 
 export interface SignatureInputsWithFee {
@@ -51,7 +51,7 @@ export interface SignatureInputsWithFee {
     callData: Hex,
     callValue: Hex,
     callCanFail: boolean,
-    encryptedTotalSpends: Hex[],
+    encryptedTotalMinted: Hex[],
     feeData: FeeData,
 }
 
@@ -69,7 +69,7 @@ export interface SpendableBalanceProof {
 }
 
 export interface BurnDataPublic extends InputMap {
-    total_spent_leaf: Hex,
+    total_minted_leaf: Hex,
     nullifier: Hex,
 }
 
@@ -77,8 +77,8 @@ export interface BurnDataPrivate extends InputMap {
     viewing_key: Hex,
     pow_nonce: Hex,
     total_burned: Hex,
-    prev_total_spent: Hex,
-    amount_to_spend: Hex,
+    prev_total_minted: Hex,
+    amount_to_mint: Hex,
     prev_account_nonce: Hex,
     prev_account_note_merkle_data: MerkleData,
     total_burned_merkle_data: MerkleData,
@@ -110,11 +110,15 @@ export interface ProofInputs4n extends ProofInputs {
     amount_burn_addresses: '0x0' & u32AsHex | '0x1' & u32AsHex | '0x2' & u32AsHex | '0x3' & u32AsHex | '0x4' & u32AsHex;
 }
 
+export interface FakeBurnAccount {
+    readonly viewingKey:Hex,
+}
 
-export interface noPowBurnAccount {
-    viewingKey:bigint,
-    spendingPubKeyX:Hex,
-    blindedAddressDataHash:bigint 
+
+export interface NoPowBurnAccount {
+    readonly viewingKey:bigint,
+    readonly spendingPubKeyX:Hex,
+    readonly blindedAddressDataHash:bigint 
 }
 
 export interface NotOwnedBurnAccount {

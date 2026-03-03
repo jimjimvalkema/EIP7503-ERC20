@@ -1,5 +1,5 @@
 mod domain_separators;
-use domain_separators::{BURN_ADDRESS_TYPE,TOTAL_BURNED_DOMAIN,TOTAL_SPENT_DOMAIN};
+use domain_separators::{NULLIFIER, FAKE_NULLIFIER, FAKE_LEAF, BURN_ADDRESS_TYPE,TOTAL_BURNED_DOMAIN, TOTAL_MINTED};
 
 use dep::poseidon::poseidon2::Poseidon2;
 //use dep::poseidon::{poseidon};
@@ -62,19 +62,30 @@ fn hash_total_burned_leaf(burn_address: Field, total_burned: Field) -> Field {
 }
 
 /*
-total_spent: total_spent for that specific burn address
+total_minted: total_minted for that specific burn address
 blinded_address_data_hash: this ties this commitment to the chain_id which is crucial for cross-chain warptoad like use cases, also ties it to the rest of the data in that hash
 viewing_key: is already inside blinded_address_data_hash, but is used again here so blinded_address_data_hash is sharable so sender can create burn addresses on the recipients behave
 */
-fn hash_total_spent_leaf(total_spent: Field, account_nonce: Field, blinded_address_data_hash:Field, viewing_key: Field) -> Field {
-    Poseidon2::hash([total_spent, account_nonce, blinded_address_data_hash, viewing_key, TOTAL_SPENT_DOMAIN], 5)
+fn hash_total_minted_leaf(total_minted: Field, account_nonce: Field, blinded_address_data_hash: Field, viewing_key: Field) -> Field {
+    Poseidon2::hash([total_minted, account_nonce, blinded_address_data_hash, viewing_key, TOTAL_MINTED], 5)
 }
 
-// account_nonce makes sure the hash is never the same even when the total_spent is not different
+
+fn hash_fake_leaf(viewing_key: Field) -> Field {
+    Poseidon2::hash([viewing_key, FAKE_LEAF], 2)
+}
+
+
+fn hash_fake_nullifier(viewing_key: Field) -> Field {
+    Poseidon2::hash([viewing_key, FAKE_NULLIFIER], 2)
+}
+
+
+// account_nonce makes sure the hash is never the same even when the total_minted is not different
 // viewing_key is so others cant try and find the pre-image (since this hash is posted onchain)
 // and viewing_key is also committed inside the burn address pre-image, so spender is forced to only use that viewing key. To prevent them using a new one and pretending they never spent before
 fn hash_nullifier(account_nonce: Field, viewing_key: Field) -> Field {
-    Poseidon2::hash([account_nonce, viewing_key], 2)
+    Poseidon2::hash([account_nonce, viewing_key, NULLIFIER], 3)
 }
 
 fn lower_then_or_equal(a: Field, b: Field) -> bool {
@@ -96,7 +107,7 @@ pub struct MerkleData<let MAX_TREE_DEPTH: u32> {
 
 
 pub struct BurnDataPublic {
-    total_spent_leaf: Field,       
+    total_minted_leaf: Field,       
     nullifier: Field,                   
 }
 
@@ -108,8 +119,8 @@ pub struct BurnDataPrivate <let MAX_TREE_DEPTH: u32> {
     pow_nonce: Field,
     // amounts
     total_burned: Field,              
-    prev_total_spent: Field,  
-    amount_to_spend: Field,                     
+    prev_total_minted: Field,  
+    amount_to_mint: Field,                     
     // inclusion proof
     prev_account_nonce: Field,               
     prev_account_note_merkle_data: MerkleData<MAX_TREE_DEPTH>,
@@ -138,23 +149,37 @@ pub fn bulkReMint<let MAX_TREE_DEPTH: u32>(
                 chain_id,
                 pow_difficulty,
                 re_mint_limit,
-                burn_data_public[i].total_spent_leaf,
+                burn_data_public[i].total_minted_leaf,
                 burn_data_public[i].nullifier,
 
                 //private
                 spending_pub_key,
                 burn_data_private[i].viewing_key,
                 burn_data_private[i].pow_nonce,
-                burn_data_private[i].amount_to_spend,
+                burn_data_private[i].amount_to_mint,
                 burn_data_private[i].total_burned,
-                burn_data_private[i].prev_total_spent,
+                burn_data_private[i].prev_total_minted,
                 burn_data_private[i].prev_account_nonce,
                 burn_data_private[i].prev_account_note_merkle_data,
                 burn_data_private[i].total_burned_merkle_data,
             );
 
-            amount_verified = amount_verified + burn_data_private[i].amount_to_spend;
+            amount_verified = amount_verified + burn_data_private[i].amount_to_mint;
+        } else {
+            // If an user decides to hide the actual amount of burn addresses, they need to emit fake nullifiers and leafs.
+            // The user cant just make burn accounts for free, they need to make burn txs to those addresses for it to exist in the tree! So instead we allow them to fake the data
+            // but to prevent a infinite mint bug, we need to make 100% sure that fake data does not have a valid pre-image that can potentially fake 0 tokens reMinted
+            if (burn_data_public[i].total_minted_leaf != 0) {
+                let fake_leaf: Field = hash_fake_leaf(burn_data_private[i].viewing_key);
+                assert(fake_leaf == burn_data_public[i].total_minted_leaf);
+            }
 
+            // Doing this to nullifiers also prevents potential grieving attacks where the attacker bricks another users account by nullifying a total_minted_leaf without inserting the next.
+            // Although that attack require knowledge of the viewing_key of the victim.
+            if (burn_data_public[i].nullifier != 0) {
+                let fake_nullifier: Field = hash_fake_nullifier(burn_data_private[i].viewing_key);
+                assert(fake_nullifier == burn_data_public[i].nullifier);
+            }
         }
     }
 
@@ -167,7 +192,7 @@ pub fn reMint<let MAX_TREE_DEPTH: u32>(
     chain_id: Field,
     pow_difficulty: Field,
     re_mint_limit: Field,
-    total_spent_leaf: Field,
+    total_minted_leaf: Field,
     nullifier: Field,
 
     // private, keys
@@ -176,9 +201,9 @@ pub fn reMint<let MAX_TREE_DEPTH: u32>(
     pow_nonce: Field,
 
     // private balances
-    amount_to_spend: Field,
+    amount_to_mint: Field,
     total_burned: Field,
-    prev_total_spent: Field,
+    prev_total_minted: Field,
 
     // private inclusion proof
     prev_account_nonce: Field,
@@ -195,29 +220,29 @@ pub fn reMint<let MAX_TREE_DEPTH: u32>(
     assert(root_total_burned_root == root, "total_burned merkle proof invalid");
 
     if prev_account_nonce != 0 {
-        // verify how much was spent in total before this tx: verify prev_total_spent
-        let prev_total_spent_leaf: Field = hash_total_spent_leaf(prev_total_spent, prev_account_nonce,blinded_address_data_hash, viewing_key);
-        let prev_total_spend_root: Field = merkle_hash_root::<MAX_TREE_DEPTH>(prev_total_spent_leaf, prev_account_note_merkle_data);
+        // verify how much was spent in total before this tx: verify prev_total_minted
+        let prev_total_minted_leaf: Field = hash_total_minted_leaf(prev_total_minted, prev_account_nonce,blinded_address_data_hash, viewing_key);
+        let prev_total_spend_root: Field = merkle_hash_root::<MAX_TREE_DEPTH>(prev_total_minted_leaf, prev_account_note_merkle_data);
         assert(prev_total_spend_root == root, "prev account note merkle proof invalid");
     } else {
         // we have to skip merkle proofs since a previous spent balance does not exist
 
         // this assert prevents you from effectively burning money on the first tx
-        assert(prev_total_spent == 0, "prev_account_nonce = 0 but prev_total_spent is not 0.");
+        assert(prev_total_minted == 0, "prev_account_nonce = 0 but prev_total_minted is not 0.");
     }
 
-    // nullify the prev_total_spent, which is inside prev_total_spent_leaf and tied to prev_account_nonce + viewing_key
+    // nullify the prev_total_minted, which is inside prev_total_minted_leaf and tied to prev_account_nonce + viewing_key
     let new_nullifier: Field = hash_nullifier(prev_account_nonce, viewing_key);
     assert(new_nullifier == nullifier, "nullifier mismatch");
 
     // check amount spent
-    let new_total_spent: Field = prev_total_spent + amount_to_spend;
-    assert_lt(new_total_spent, re_mint_limit);//, "burn account went over the re_mint_limit limit");
-    assert(lower_then_or_equal(new_total_spent, total_burned), "spend exceeds total received");
+    let new_total_minted: Field = prev_total_minted + amount_to_mint;
+    assert_lt(new_total_minted, re_mint_limit);//, "burn account went over the re_mint_limit limit");
+    assert(lower_then_or_equal(new_total_minted, total_burned), "spend exceeds total received");
 
     //
     let current_account_nonce: Field = prev_account_nonce + 1;
-    let new_total_spent_leaf: Field = hash_total_spent_leaf(new_total_spent, current_account_nonce,blinded_address_data_hash, viewing_key);
-    assert(new_total_spent_leaf == total_spent_leaf, "account note hash mismatch");
+    let new_total_minted_leaf: Field = hash_total_minted_leaf(new_total_minted, current_account_nonce,blinded_address_data_hash, viewing_key);
+    assert(new_total_minted_leaf == total_minted_leaf, "account note hash mismatch");
 
 }

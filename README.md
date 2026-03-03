@@ -25,7 +25,7 @@ The `total_spend` is tracked in an account based note system where:
 `note_hash=poseidon2Hash(total_spent, account_nonce, viewing_key)` and   
 `nullifier=poseidon2Hash(account_nonce, viewing_key)`    
 The circuit does an inclusion proof of `prev_note_hash`, nullifies it and then creates a new note hash with the new total amount spend that is:   
-`new_note_hash=poseidon2Hash(prev_total_spent+amount_spend_in_tx, account_nonce+1, viewing_key)`.    
+`new_note_hash=poseidon2Hash(prev_total_minted+amount_spend_in_tx, account_nonce+1, viewing_key)`.    
 On the first spend the inclusion proof of `prev_note_hash` is skipped (since it doesn't exist), but there is a nullifier is emitted, ensuring this can only happen once.  
   
 The `burned_balance` is tracked by the contract in the merkle tree with a leaf that is `leaf=poseidon2Hash(recipient_address, balance)` and the circuit uses that to make inclusion proof.  

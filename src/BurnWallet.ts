@@ -2,7 +2,7 @@
 
 import type { Address, Hex, WalletClient } from "viem";
 import { hashMessage, hexToBytes, toBytes, toHex } from "viem";
-import type { BurnAccount, noPowBurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
+import type { BurnAccount, NoPowBurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
 import { extractPubKeyFromSig, findPoWNonce, findPoWNonceAsync, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.ts";
 import { VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { poseidon2Hash } from "@zkpassport/poseidon2"

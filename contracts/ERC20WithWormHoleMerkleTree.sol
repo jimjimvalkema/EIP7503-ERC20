@@ -51,9 +51,9 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
 
 
     function _updateBalanceInMerkleTree(address _to, uint256 _newBalance) virtual internal;
-    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _accountNoteHashes) virtual internal;
-    function _updateBalanceInMerkleTree(address[] memory _to, uint256[] memory _newBalance, uint256[] memory _accountNoteHashes) virtual internal;
-    function _insertManyInMerkleTree(uint256[] memory _accountNoteHashes) virtual internal;
+    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _totalMintedLeafs) virtual internal;
+    function _updateBalanceInMerkleTree(address[] memory _to, uint256[] memory _newBalance, uint256[] memory _totalMintedLeafs) virtual internal;
+    function _insertManyInMerkleTree(uint256[] memory _totalMintedLeafs) virtual internal;
 
     /**
      * @dev Returns the name of the token.
@@ -231,13 +231,14 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
      * 
      * Same as _update but added _accountNoteHash so it use insertMany to save on gas and _totalSupply doesn't increase
      */
-    function _reMint(address to, uint256 value, uint256[] memory _accountNoteHashes) internal virtual {
+    function _reMint(address to, uint256 value, uint256[] memory _totalMintedLeafs) internal virtual {
+        uint256[] memory _totalMintedLeafsTrimmed = trimTrailingZeros(_totalMintedLeafs);
         if (to == address(0)) {
             unchecked {
                 // Overflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
                 _totalSupply -= value;
             }
-            _insertManyInMerkleTree(_accountNoteHashes);
+            _insertManyInMerkleTree(_totalMintedLeafsTrimmed);
         } else {
             uint256 newBalance;
             newBalance = _balances[to] + value;
@@ -248,12 +249,31 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
             // we only care about `to` since zkwormhole accounts can only receive from the public not spend
             // so the _balances[to] number goes up only :D
             // this inserts both _accountNoteHash and poseidon2(to, newBalance)
-            _updateBalanceInMerkleTree(to, newBalance, _accountNoteHashes);
+            _updateBalanceInMerkleTree(to, newBalance, _totalMintedLeafsTrimmed);
         }
         emit Transfer(address(0), to, value);
     }
 
-    function _reMintBulk(address[] memory recipients, uint256[] memory amounts, uint256[] memory _accountNoteHashes) internal virtual {
+    function trimTrailingZeros(uint256[] memory arr) internal pure returns (uint256[] memory) {
+        // you can trim the original without copies. But that can be unsafe.
+        uint256[] memory trimmed = new uint256[](arr.length);
+        uint256 lastNonZero = 0;
+
+        for (uint256 i = 0; i < arr.length; i++) {
+            trimmed[i] = arr[i];
+            if (arr[i] != 0) {
+                lastNonZero = i + 1;
+            }
+        }
+
+        assembly {
+            mstore(trimmed, lastNonZero)
+        }
+
+        return trimmed;
+    }
+    function _reMintBulk(address[] memory recipients, uint256[] memory amounts, uint256[] memory _totalMintedLeafs) internal virtual {
+        uint256[] memory _totalMintedLeafsTrimmed = trimTrailingZeros(_totalMintedLeafs);
         uint256[] memory newBalances = new uint256[](amounts.length);
         for (uint i = 0; i < recipients.length; i++) {
             address to = recipients[i];
@@ -263,7 +283,7 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
                     // Overflow not possible: value <= totalSupply or value <= fromBalance <= totalSupply.
                     _totalSupply -= value;
                 }
-                _insertManyInMerkleTree(_accountNoteHashes);
+                _insertManyInMerkleTree(_totalMintedLeafsTrimmed);
             } else {
                 uint256 newBalance;
                 newBalance = _balances[to] + value;
@@ -277,7 +297,7 @@ abstract contract ERC20WithWormHoleMerkleTree is Context, IERC20, IERC20Metadata
             }
             emit Transfer(address(0), to, value);
         }
-        _updateBalanceInMerkleTree(recipients, newBalances, _accountNoteHashes);
+        _updateBalanceInMerkleTree(recipients, newBalances, _totalMintedLeafsTrimmed);
     }
 
     /**

@@ -1,9 +1,9 @@
 import { hexToBytes, toHex, hexToNumber } from "viem"
-import type { Hex, Address, PublicClient, TypedDataDomain} from "viem"
-import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs } from "./types.js"
+import type { Hex, Address, PublicClient, TypedDataDomain } from "viem"
+import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs, FakeBurnAccount } from "./types.js"
 import { EMPTY_UNFORMATTED_MERKLE_PROOF, FIELD_LIMIT, FIELD_MODULUS } from "./constants.ts"
-import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer } from "./hashing.ts"
-import type {LeanIMTMerkleProof} from  "@zk-kit/lean-imt"
+import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer, hashFakeLeaf, hashFakeNullifier } from "./hashing.ts"
+import type { LeanIMTMerkleProof } from "@zk-kit/lean-imt"
 import { LeanIMT } from "@zk-kit/lean-imt"
 import type { WormholeTokenTest } from "../test/remint2.test.ts"
 import { getSyncedMerkleTree } from "./syncing.ts"
@@ -14,10 +14,10 @@ import { Noir } from "@noir-lang/noir_js"
 import reMint2Circuit from '../circuits/reMint2/target/reMint2.json' with { type: 'json' };
 import reMint32Circuit from '../circuits/reMint32/target/reMint32.json' with { type: 'json' };
 import reMint100Circuit from '../circuits/reMint100/target/reMint100.json'  with { type: 'json' };
-const circuits:{[k:number]:any} = {
-    2:reMint2Circuit,
-    32:reMint32Circuit,
-    100:reMint100Circuit
+const circuits: { [k: number]: any } = {
+    2: reMint2Circuit,
+    32: reMint32Circuit,
+    100: reMint100Circuit
 }
 
 //import { Fr } from "@aztec/aztec.js"
@@ -105,27 +105,26 @@ export function getSpendableBalanceProof(
 }
 
 // get random value until it fits within field limit (rejection sampling)
-function randomBN254FieldElement(): bigint {
-  while (true) {
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    const val = bytes.reduce((acc, b) => (acc << 8n) | BigInt(b), 0n);
-    if (val < FIELD_MODULUS) return val;
-  }
+export function randomBN254FieldElement(): bigint {
+    while (true) {
+        const bytes = new Uint8Array(32);
+        crypto.getRandomValues(bytes);
+        const val = bytes.reduce((acc, b) => (acc << 8n) | BigInt(b), 0n);
+        if (val < FIELD_MODULUS) return val;
+    }
 }
 
 export function getPubInputs(
-    {circuitSizes, amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize, powDifficulty, reMintLimit }:
-        {circuitSizes:number[], amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], circuitSize?: number, powDifficulty:Hex, reMintLimit:Hex }) {
+    { circuitSizes, amountToReMint, root, chainId, signatureHash, nullifiers, noteHashes, circuitSize, powDifficulty, reMintLimit, burnAccountProofs }:
+        { circuitSizes: number[], amountToReMint: bigint, root: bigint, chainId: bigint, signatureHash: Hex, nullifiers: bigint[], noteHashes: bigint[], burnAccountProofs: (BurnAccountProof | FakeBurnAccountProof)[], circuitSize?: number, powDifficulty: Hex, reMintLimit: Hex }) {
 
     const burn_data_public: BurnDataPublic[] = []
     circuitSize ??= getCircuitSize(nullifiers.length, circuitSizes)
     for (let index = 0; index < circuitSize; index++) {
-        // empty values are ignored in the circuit, but it's still better for privacy to set them to something random since these are public
-        const noteHash = noteHashes[index] === undefined ? randomBN254FieldElement() : noteHashes[index]
-        const nullifier = nullifiers[index] === undefined ? randomBN254FieldElement() : nullifiers[index]
+        const noteHash = noteHashes[index] === undefined ? hashFakeLeaf({ viewingKey: BigInt(burnAccountProofs[index].burnAccount.viewingKey) }) : noteHashes[index]
+        const nullifier = nullifiers[index] === undefined ? hashFakeNullifier({ viewingKey: BigInt(burnAccountProofs[index].burnAccount.viewingKey) }) : nullifiers[index]
         const publicBurnPoofData: BurnDataPublic = {
-            total_spent_leaf: toHex(noteHash),
+            total_minted_leaf: toHex(noteHash),
             nullifier: toHex(nullifier),
         }
         burn_data_public.push(publicBurnPoofData)
@@ -136,7 +135,7 @@ export function getPubInputs(
         amount: toHex(amountToReMint),
         signature_hash: hexToU8AsHexLen32(signatureHash),
         burn_data_public: burn_data_public,
-        pow_difficulty:powDifficulty,
+        pow_difficulty: powDifficulty,
         re_mint_limit: reMintLimit
     }
     return pubInputs
@@ -149,33 +148,26 @@ export interface BurnAccountProof {
     claimAmount: bigint
 }
 
+export interface FakeBurnAccountProof {
+    burnAccount: FakeBurnAccount,
+}
+
 /**
  * Notice: assumes the merkle proofs are in the same order as syncedPrivateWallets and amountsToClaim
  * @param param0 
  * @returns 
  */
 export function getPrivInputs(
-    {circuitSizes, signatureData, burnAccountsProofs, circuitSize, maxTreeDepth }:
-        {circuitSizes:number[], signatureData: SignatureData, burnAccountsProofs: BurnAccountProof[], circuitSize?: number, maxTreeDepth:number }) {
+    { circuitSizes, signatureData, burnAccountsProofs, circuitSize, maxTreeDepth }:
+        { circuitSizes: number[], signatureData: SignatureData, burnAccountsProofs: (BurnAccountProof | FakeBurnAccountProof)[], circuitSize?: number, maxTreeDepth: number }) {
 
     const burn_address_private_proof_data: BurnDataPrivate[] = [];
     circuitSize ??= getCircuitSize(burnAccountsProofs.length, circuitSizes)
+    let amountOfRealBurnAddresses = 0;
     for (let index = 0; index < circuitSize; index++) {
         const burnAccountProof = burnAccountsProofs[index];
-        if (burnAccountProof === undefined) {
-                // circuit is not constraining this but it still needs something
-                const privateBurnData: BurnDataPrivate = {
-                    viewing_key: toHex(0n),
-                    pow_nonce: toHex(0n),
-                    total_burned: toHex(0n),
-                    prev_total_spent: toHex(0n),
-                    amount_to_spend: toHex(0n),
-                    prev_account_nonce: toHex(0n),
-                    prev_account_note_merkle_data: formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF, maxTreeDepth),
-                    total_burned_merkle_data: formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF, maxTreeDepth),
-                }
-                burn_address_private_proof_data.push(privateBurnData)
-        } else {
+        if ("merkleProofs" in burnAccountProof) {
+            amountOfRealBurnAddresses += 1
             const prevTotalSpendMerkleProof = burnAccountProof.merkleProofs.totalSpendMerkleProofs
             const totalBurnedMerkleProof = burnAccountProof.merkleProofs.totalBurnedMerkleProofs;
             const claimAmount = burnAccountProof.claimAmount
@@ -191,11 +183,25 @@ export function getPrivInputs(
                 viewing_key: burnAccountProof.burnAccount.viewingKey,
                 pow_nonce: burnAccountProof.burnAccount.powNonce,
                 total_burned: totalBurned,
-                prev_total_spent: prevTotalSpent,
-                amount_to_spend: toHex(claimAmount),
+                prev_total_minted: prevTotalSpent,
+                amount_to_mint: toHex(claimAmount),
                 prev_account_nonce: prevAccountNonce,
                 prev_account_note_merkle_data: prevTotalSpendMerkleProof,
                 total_burned_merkle_data: totalBurnedMerkleProof,
+            }
+            burn_address_private_proof_data.push(privateBurnData)
+
+        } else {
+            // circuit is not constraining this but it still needs something
+            const privateBurnData: BurnDataPrivate = {
+                viewing_key: burnAccountProof.burnAccount.viewingKey,
+                pow_nonce: toHex(0n),
+                total_burned: toHex(0n),
+                prev_total_minted: toHex(0n),
+                amount_to_mint: toHex(0n),
+                prev_account_nonce: toHex(0n),
+                prev_account_note_merkle_data: formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF, maxTreeDepth),
+                total_burned_merkle_data: formatMerkleProof(EMPTY_UNFORMATTED_MERKLE_PROOF, maxTreeDepth),
             }
             burn_address_private_proof_data.push(privateBurnData)
 
@@ -206,7 +212,7 @@ export function getPrivInputs(
     const privInputs: PrivateProofInputs = {
         burn_data_private: burn_address_private_proof_data,
         signature_data: signatureData,
-        amount_burn_addresses: toHex(burnAccountsProofs.length) as u32AsHex
+        amount_burn_addresses: toHex(amountOfRealBurnAddresses) as u32AsHex
     }
     return privInputs
 }
@@ -228,9 +234,9 @@ export async function getBackend(circuitSize: number, threads?: number) {
     return new UltraHonkBackend(byteCode, { threads: threads }, { recursive: false });
 }
 
-export async function generateProof({ proofInputs, backend, threads, circuitSizes }: {circuitSizes:number[], threads?:number,proofInputs: ProofInputs1n | ProofInputs4n, backend?: UltraHonkBackend }) {
+export async function generateProof({ proofInputs, backend, threads, circuitSizes }: { circuitSizes: number[], threads?: number, proofInputs: ProofInputs1n | ProofInputs4n, backend?: UltraHonkBackend }) {
     const circuitSize = getCircuitSize(proofInputs.burn_data_public.length, circuitSizes)
-    console.log("proving with:", {circuitSize, threads})
+    console.log("proving with:", { circuitSize, threads })
     backend = backend ?? await getBackend(circuitSize, threads)
 
     const circuitJson = circuits[circuitSize];
