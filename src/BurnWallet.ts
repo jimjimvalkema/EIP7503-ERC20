@@ -1,8 +1,8 @@
 // PrivateWallet is a wrapper that exposes some ov viems WalletClient functions and requires them to only ever use one ethAccount
 
 import type { Address, Hex, WalletClient } from "viem";
-import { hashMessage, hexToBytes, toBytes, toHex } from "viem";
-import type { BurnAccount, NoPowBurnAccount, PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
+import { hashMessage, toHex } from "viem";
+import type { PrivateWalletData, UnsyncedBurnAccount } from "./types.ts"
 import { extractPubKeyFromSig, findPoWNonce, findPoWNonceAsync, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.ts";
 import { VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
@@ -24,10 +24,6 @@ export class BurnWallet {
     readonly powDifficulty: bigint;
     readonly acceptedChainIds: bigint[];
     readonly defaultChainId: bigint;
-
-    //deterministic viewingKey Root. The same ethAccount can always recover to this key. User only needs to know their seed phrase to recover funds
-    private detViewKeyRoot: Hex | undefined;
-    private detViewKeyCounter = 0;
 
     /**
      * 
@@ -66,6 +62,7 @@ export class BurnWallet {
                 ethAccount: viemWallet.account?.address as Address,
                 viewKeySigMessage: viewKeySigMessage,
                 burnAccounts: [],
+                detViewKeyCounter: 0,
             }
         } else {
             // check input
@@ -89,8 +86,8 @@ export class BurnWallet {
 
     private storeDetViewKeyRootFromSig({ signature }: { signature: Hex }) {
         if (this.privateData.detViewKeyRoot === undefined) {
-            this.detViewKeyRoot = toHex(getViewingKey({ signature: signature }))
-            return this.detViewKeyRoot
+            this.privateData.detViewKeyRoot = toHex(getViewingKey({ signature: signature }));
+            return this.privateData.detViewKeyRoot
         }
     }
 
@@ -100,8 +97,8 @@ export class BurnWallet {
      * @returns 
      */
     async getDeterministicViewKeyRoot() {
-        if (this.detViewKeyRoot) {
-            return this.detViewKeyRoot as Hex
+        if (this.privateData.detViewKeyRoot) {
+            return this.privateData.detViewKeyRoot as Hex
         } else {
             const signature = await this.viemWallet.signMessage({ message: VIEWING_KEY_SIG_MESSAGE, account: this.privateData.ethAccount })
             const hash = hashMessage(VIEWING_KEY_SIG_MESSAGE);
@@ -167,9 +164,9 @@ export class BurnWallet {
         if (isDeterministicViewKey) {
             viewingKey = poseidon2Hash([
                 BigInt(await this.getDeterministicViewKeyRoot()),
-                BigInt(this.detViewKeyCounter)
+                BigInt(this.privateData.detViewKeyCounter)
             ])
-            this.detViewKeyCounter += 1
+            this.privateData.detViewKeyCounter += 1;
         }
         const { x: spendingPubKeyX } = await this.getPubKey()
         const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX, viewingKey: viewingKey as bigint, chainId })
@@ -225,9 +222,9 @@ export class BurnWallet {
      */
     async createBurnAccounts(amountOfBurnAccounts: number, { chainId, difficulty = this.powDifficulty, async = false }: { async?: boolean, chainId?: bigint, difficulty?: bigint } = {}) {
         chainId ??= this.defaultChainId
-        const burnAccountsPromises = new Array(amountOfBurnAccounts).fill(0).map((v, i) => this.createBurnAccountFromViewKeyIndex({ viewingKeyIndex: this.detViewKeyCounter + i, chainId: chainId, difficulty: difficulty, async: async }))
+        const burnAccountsPromises = new Array(amountOfBurnAccounts).fill(0).map((v, i) => this.createBurnAccountFromViewKeyIndex({ viewingKeyIndex: this.privateData.detViewKeyCounter + i, chainId: chainId, difficulty: difficulty, async: async }))
         const burnAccounts = await Promise.all(burnAccountsPromises)
-        this.detViewKeyCounter += amountOfBurnAccounts
+        this.privateData.detViewKeyCounter += amountOfBurnAccounts;
         return burnAccounts
     }
 

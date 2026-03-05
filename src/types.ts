@@ -159,10 +159,10 @@ export type BurnAccount = UnsyncedBurnAccount & Partial<SyncedBurnAccount>
 export interface PrivateWalletData {
     readonly ethAccount: Address
     readonly viewKeySigMessage: string,
-    readonly detViewKeyRoot?: Hex,
+    detViewKeyCounter: number
+    detViewKeyRoot?: Hex,
     burnAccounts: BurnAccount[],
     pubKey?: { x: Hex, y: Hex },
-    detViewKeyCounter?: number
 }
 
 export interface SignatureHashPreImg {
@@ -175,6 +175,12 @@ export interface PreSyncedTree {
     tree: LeanIMT<bigint>
     lastSyncedBlock: bigint,
     firstSyncedBlock: bigint
+}
+
+export interface PreSyncedTreeStringifyable {
+    exportedNodes: string,
+    lastSyncedBlock: Hex,
+    firstSyncedBlock: Hex,
 }
 
 export interface SelfRelayInputs {

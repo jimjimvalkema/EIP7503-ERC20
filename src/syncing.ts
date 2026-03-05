@@ -44,7 +44,9 @@ export async function getSyncedMerkleTree(
     }
 
     // sync it
+    const timeBefore = Date.now()
     const lastSyncedBlock = await publicClient.getBlockNumber()
+    console.log(`syncing merkle tree from ${firstSyncBlock} till ${lastSyncedBlock}`)
     const events = await queryEventInChunks({
         publicClient: publicClient,
         contract: wormholeToken as WormholeToken,
@@ -53,6 +55,7 @@ export async function getSyncedMerkleTree(
         lastBlock: lastSyncedBlock,
         chunkSize: blocksPerGetLogsReq,
     })
+    console.log(`done syncing merkle tree from ${firstSyncBlock} till ${lastSyncedBlock} \n it took: ${Date.now() - timeBefore} ms`)
     // formatting
     const sortedEvents = events.sort((a: any, b: any) => Number(a.args.index - b.args.index))
     const leafs = [...preSyncedLeaves, ...sortedEvents.map((event) => event.args.leaf)]
