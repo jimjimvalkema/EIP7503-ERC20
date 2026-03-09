@@ -3,7 +3,7 @@ import { beforeEach, describe, it, after } from "node:test";
 
 import { network } from "hardhat";
 
-import type { BurnAccount, UnsyncedBurnAccount } from "../src/types.js";
+import type { BurnAccount, UnsyncedBurnAccountNonDet } from "../src/types.js";
 import { BurnWallet } from "../src/BurnWallet.ts";
 
 describe("Token", async function () {
@@ -22,7 +22,7 @@ describe("Token", async function () {
             const alicePrivate = new BurnWallet(alice, POW_DIFFICULTY, { acceptedChainIds: [BigInt(await publicClient.getChainId())]})
             const amountBurnAddresses = 10
 
-            const burnAccounts:UnsyncedBurnAccount[] = await alicePrivate.createBurnAccounts(amountBurnAddresses,{async:true})
+            const burnAccounts:UnsyncedBurnAccountNonDet[] = await alicePrivate.createBurnAccountsBulk(amountBurnAddresses,{async:true})
         })
     })
 

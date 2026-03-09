@@ -1,6 +1,6 @@
 import { hexToBytes, toHex, hexToNumber } from "viem"
 import type { Hex, Address, PublicClient, TypedDataDomain } from "viem"
-import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccount, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccount, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs, FakeBurnAccount } from "./types.js"
+import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccountNonDet, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccountNonDet, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs, FakeBurnAccount } from "./types.js"
 import { EMPTY_UNFORMATTED_MERKLE_PROOF, FIELD_LIMIT, FIELD_MODULUS } from "./constants.ts"
 import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer, hashFakeLeaf, hashFakeNullifier } from "./hashing.ts"
 import type { LeanIMTMerkleProof } from "@zk-kit/lean-imt"
@@ -143,7 +143,7 @@ export function getPubInputs(
 
 
 export interface BurnAccountProof {
-    burnAccount: SyncedBurnAccount,
+    burnAccount: SyncedBurnAccountNonDet,
     merkleProofs: SpendableBalanceProof,
     claimAmount: bigint
 }

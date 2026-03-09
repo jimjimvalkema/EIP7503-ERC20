@@ -14,7 +14,7 @@ import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
 import { BurnWallet } from "../src/BurnWallet.ts";
 import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Address, type Hash, type Hex } from "viem";
-import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccount } from "../src/types.ts";
+import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccountNonDet } from "../src/types.ts";
 
 const CIRCUIT_SIZE = 100;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
@@ -86,8 +86,8 @@ describe("Token", async function () {
 
             const chainId = BigInt(await publicClient.getChainId())
             const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [chainId] })
-            const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
-            const aliceRefundBurnAccount = await alicePrivate.createNewBurnAccount()
+            const aliceBurnAccount = await alicePrivate.createBurnAccount()
+            const aliceRefundBurnAccount = await alicePrivate.createBurnAccount()
             const decimalsToken = await wormholeToken.read.decimals()
             const amountToBurn = parseUnits("42069", decimalsToken);
             await safeBurn(aliceBurnAccount, amountToBurn, wormholeTokenAlice, alice.account.address)

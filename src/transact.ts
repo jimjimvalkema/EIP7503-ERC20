@@ -1,20 +1,20 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
 import { toHex } from "viem";
 import type { WormholeTokenTest } from "../test/remint2.test.ts";
-import type { CreateRelayerInputsOpts, FakeBurnAccount, FeeData, NotOwnedBurnAccount, PreSyncedTree, ProofInputs1n, ProofInputs4n, PublicProofInputs, RelayInputs, SelfRelayInputs, SignatureInputs, SignatureInputsWithFee, SyncedBurnAccount, UnsyncedBurnAccount, WormholeToken } from "./types.ts";
+import type { CreateRelayerInputsOpts, FakeBurnAccount, FeeData, NotOwnedBurnAccount, PreSyncedTree, ProofInputs1n, ProofInputs4n, PublicProofInputs, RelayInputs, SelfRelayInputs, SignatureInputs, SignatureInputsWithFee, SyncedBurnAccountNonDet, UnsyncedBurnAccountNonDet, WormholeToken } from "./types.ts";
 import { generateProof, getSpendableBalanceProof, getPubInputs, getPrivInputs, padArray, randomBN254FieldElement } from "./proving.ts";
 import type { BurnAccountProof, FakeBurnAccountProof } from "./proving.ts";
 import type { ProofData } from "@aztec/bb.js";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { getSyncedMerkleTree, getDeploymentBlock, syncMultipleBurnAccounts, encryptTotalSpend } from "./syncing.ts";
 import { getBurnAddress, getBurnAddressSafe, hashBlindedAddressData, hashFakeLeaf, hashFakeNullifier, hashNullifier, hashTotalBurnedLeaf, hashTotalSpentLeaf, padWithRandomHex, signPrivateTransfer, signPrivateTransferWithFee } from "./hashing.ts";
-import { BurnWallet } from "./BurnWallet.ts";
+import { BurnWallet, getAllBurnAccounts } from "./BurnWallet.ts";
 import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, GAS_LIMIT_TX } from "./constants.ts";
 
 
 export function getHashedInputs(
     { burnAccount, claimAmount, syncedTree, maxTreeDepth }:
-        { burnAccount: SyncedBurnAccount, claimAmount: bigint, syncedTree: PreSyncedTree, maxTreeDepth: number }) {
+        { burnAccount: SyncedBurnAccountNonDet, claimAmount: bigint, syncedTree: PreSyncedTree, maxTreeDepth: number }) {
 
     // --- inclusion proof ---
     // hash leafs
@@ -106,7 +106,7 @@ export async function burn(
  * @returns 
  */
 export async function safeBurn(
-    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint, wormholeToken: WormholeTokenTest, account: Address,
+    burnAccount: UnsyncedBurnAccountNonDet | SyncedBurnAccountNonDet, amount: bigint, wormholeToken: WormholeTokenTest, account: Address,
     { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
@@ -139,7 +139,7 @@ export async function safeBurn(
  * @returns 
  */
 export async function superSafeBurn(
-    burnAccount: UnsyncedBurnAccount | SyncedBurnAccount, amount: bigint, wormholeToken: WormholeTokenTest, account: Address,
+    burnAccount: UnsyncedBurnAccountNonDet | SyncedBurnAccountNonDet, amount: bigint, wormholeToken: WormholeTokenTest, account: Address,
     { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
@@ -158,11 +158,11 @@ export async function superSafeBurn(
     return await (wormholeToken as WormholeTokenTest).write.transfer([burnAddress, amount], { account: account })
 }
 
-export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses, amount, largestCircuitSize }: { largestCircuitSize: number, burnAccounts: SyncedBurnAccount[], selectBurnAddresses: Address[], amount: bigint }) {
+export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses, amount, largestCircuitSize }: { largestCircuitSize: number, burnAccounts: SyncedBurnAccountNonDet[], selectBurnAddresses: Address[], amount: bigint }) {
     const sortedBurnAccounts = burnAccounts.sort((a, b) => Number(b.spendableBalance) - Number(a.spendableBalance))
     const encryptedTotalMinted: Hex[] = []
     // man so many copy pasta of same array and big name!! Fix it i cant read this!!!!
-    const burnAccountsAndAmounts: { burnAccount: SyncedBurnAccount, amountToClaim: bigint }[] = []
+    const burnAccountsAndAmounts: { burnAccount: SyncedBurnAccountNonDet, amountToClaim: bigint }[] = []
     let amountLeft = amount
     for (const burnAccount of sortedBurnAccounts) {
         if (selectBurnAddresses.includes(burnAccount.burnAddress)) {
@@ -273,7 +273,7 @@ export async function createRelayerInputs(
         CreateRelayerInputsOpts & { feeData?: FeeData } = {}
 ): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } } | { relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }> {
     // set defaults
-    burnAddresses ??= privateWallet.privateData.burnAccounts.map((b) => b.burnAddress)
+    burnAddresses ??= getAllBurnAccounts(privateWallet.privateData).map((b) => b.burnAddress)
     powDifficulty ??= await wormholeToken.read.POW_DIFFICULTY()
     reMintLimit ??= await wormholeToken.read.RE_MINT_LIMIT();
     circuitSizes ??= await getCircuitSizesFromContract(wormholeToken);
@@ -298,7 +298,7 @@ export async function createRelayerInputs(
         privateWallet: privateWallet,
         burnAddressesToSync: burnAddresses //@notice, only syncs these addresses!
     })
-    const burnAccounts = privateWallet.privateData.burnAccounts as SyncedBurnAccount[]
+    const burnAccounts = getAllBurnAccounts(privateWallet.privateData) as SyncedBurnAccountNonDet[]
 
     // select burn accounts for spend. Takes highest balances first
     const { burnAccountsAndAmounts, encryptedTotalMinted } = await prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses: burnAddresses, amount, largestCircuitSize: largestCircuitSize })
@@ -590,5 +590,5 @@ export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, wo
     ], { account: wallet.account?.address as Address, gas: _accountNoteHashes.length > 32 ? GAS_LIMIT_TX : undefined })
 }
 export async function getFreshBurnAccount(privateWallet: BurnWallet, wormholeToken: WormholeTokenTest | WormholeToken) {
-    const neverUsedBurnAccounts = privateWallet.privateData.burnAccounts.filter(async (b) => await wormholeToken.read.balanceOf([b.burnAddress]) === 0n)
+    const neverUsedBurnAccounts = getAllBurnAccounts(privateWallet.privateData).filter(async (b) => await wormholeToken.read.balanceOf([b.burnAddress]) === 0n)
 }

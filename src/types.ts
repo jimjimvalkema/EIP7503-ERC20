@@ -128,10 +128,9 @@ export interface NotOwnedBurnAccount {
     readonly difficulty:Hex;
 }
 
-export interface UnsyncedBurnAccount extends NotOwnedBurnAccount {
+export interface UnsyncedBurnAccountNonDet extends NotOwnedBurnAccount {
     /**used to encrypt total spend, unconstrained, not a circuit input */
     readonly viewingKey: Hex;
-    readonly isDeterministicViewKey: Boolean;
     /**used t */
     readonly powNonce: Hex;
     readonly burnAddress: Address;
@@ -140,14 +139,29 @@ export interface UnsyncedBurnAccount extends NotOwnedBurnAccount {
     readonly spendingPubKeyX: Hex;
 }
 
-export interface SyncedBurnAccount extends UnsyncedBurnAccount {
+export interface UnsyncedBurnAccountDet extends UnsyncedBurnAccountNonDet {
+    readonly ethAccount: Address;
+    readonly viewKeySigMessage: string;
+    readonly viewingKeyIndex: number;
+}
+
+export interface SyncedBurnAccountNonDet extends UnsyncedBurnAccountNonDet {
     accountNonce: Hex;
     totalSpent: Hex;
     totalBurned: Hex;
     spendableBalance: Hex;
 }
 
-export type BurnAccount = UnsyncedBurnAccount & Partial<SyncedBurnAccount>
+export interface SyncedBurnAccountDet extends UnsyncedBurnAccountDet {
+    accountNonce: Hex;
+    totalSpent: Hex;
+    totalBurned: Hex;
+    spendableBalance: Hex;
+}
+
+export type BurnAccountDet = (UnsyncedBurnAccountDet) & Partial<SyncedBurnAccountDet>
+export type BurnAccountNonDet = (UnsyncedBurnAccountNonDet ) & Partial<SyncedBurnAccountNonDet>
+export type BurnAccount = BurnAccountDet | BurnAccountNonDet
 // one wallet has one priv pub key pair, but can have multiple burn address, and spent from all of them at once
 // export interface PrivateWallet {
 //     viem: { wallet: WalletClient, ethAddress:Address };
@@ -161,10 +175,12 @@ export interface PrivateWalletData {
     readonly viewKeySigMessage: string,
     detViewKeyCounter: number
     detViewKeyRoot?: Hex,
-    burnAccounts: BurnAccount[],
+    /** stores mapping of chainId=>powDifficulty=>burnAccount. Where chainId and powDifficulty are 32 byte padded Hex. 
+     * burnAccounts[toHex(chainId,{size:32})][toHex(powDifficulty,{size:32})] = BurnAccount */
+    detBurnAccounts: Record<Hex, Record<Hex, BurnAccount[]>>,
+    nonDetBurnAccounts:  Record<Hex, Record<Hex, BurnAccount[]>>,
     pubKey?: { x: Hex, y: Hex },
 }
-
 export interface SignatureHashPreImg {
     recipientAddress: Address,
     amount: Hex,

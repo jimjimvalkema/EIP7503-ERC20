@@ -14,7 +14,7 @@ import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
 import { BurnWallet } from "../src/BurnWallet.ts";
 import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Address, type Hash, type Hex } from "viem";
-import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccount } from "../src/types.ts";
+import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccountNonDet } from "../src/types.ts";
 
 const CIRCUIT_SIZE = 100;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
@@ -86,7 +86,7 @@ describe("Token", async function () {
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
             const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
-            const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
+            const aliceBurnAccount = await alicePrivate.createBurnAccount()
             const amountToBurn = 1000n * 10n ** 18n;
 
             await superSafeBurn(aliceBurnAccount, amountToBurn, wormholeTokenAlice, alice.account.address)
@@ -159,9 +159,9 @@ describe("Token", async function () {
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
             const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
-            const aliceBurnAccount1 = await alicePrivate.createNewBurnAccount()
-            const aliceBurnAccount2 = await alicePrivate.createNewBurnAccount()
-            const aliceBurnAccount3 = await alicePrivate.createNewBurnAccount()
+            const aliceBurnAccount1 = await alicePrivate.createBurnAccount()
+            const aliceBurnAccount2 = await alicePrivate.createBurnAccount()
+            const aliceBurnAccount3 = await alicePrivate.createBurnAccount()
 
             const claimableBurnAddress = [aliceBurnAccount1.burnAddress, aliceBurnAccount2.burnAddress, aliceBurnAccount3.burnAddress];
             const reMintRecipient = bob.account.address
@@ -238,7 +238,7 @@ describe("Token", async function () {
             const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             const amountBurnAddresses = 100
 
-            const burnAccounts: UnsyncedBurnAccount[] = await alicePrivate.createBurnAccounts(amountBurnAddresses, { async: true })
+            const burnAccounts: UnsyncedBurnAccountNonDet[] = await alicePrivate.createBurnAccountsBulk(amountBurnAddresses, { async: true })
             const claimableBurnAddress = burnAccounts.map((b: BurnAccount) => b.burnAddress)
 
             const reMintRecipient = bob.account.address

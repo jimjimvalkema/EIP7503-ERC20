@@ -14,7 +14,7 @@ import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
 import { BurnWallet } from "../src/BurnWallet.ts";
 import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Address, type Hash, type Hex } from "viem";
-import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccount } from "../src/types.ts";
+import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccountNonDet } from "../src/types.ts";
 
 const CIRCUIT_SIZE = 100;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
@@ -81,7 +81,7 @@ describe("Token", async function () {
     describe("Token", async function () {
         it("Should transfer", async function () {
             const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
-            const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
+            const aliceBurnAccount = await alicePrivate.createBurnAccount()
 
             let totalAmountInserts = 0
             const startIndex = 2
@@ -129,7 +129,7 @@ describe("Token", async function () {
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
             const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())], powDifficulty: powDifficulty })
-            const aliceBurnAccount = await alicePrivate.createNewBurnAccount()
+            const aliceBurnAccount = await alicePrivate.createBurnAccount()
             const amountToBurn = 1000n * 10n ** 18n;
             await safeBurn(aliceBurnAccount, amountToBurn, wormholeTokenAlice, alice.account.address)
 
@@ -201,7 +201,7 @@ describe("Token", async function () {
 
             const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             // PoW nonce hashing is with workers so can be done in parallel!
-            const [aliceBurnAccount1, aliceBurnAccount2] = await Promise.all([alicePrivate.createNewBurnAccount({ async: true }), alicePrivate.createNewBurnAccount({ async: true })])
+            const [aliceBurnAccount1, aliceBurnAccount2] = await Promise.all([alicePrivate.createBurnAccount({ async: true }), alicePrivate.createBurnAccount({ async: true })])
 
 
             const claimableBurnAddress = [aliceBurnAccount1.burnAddress, aliceBurnAccount2.burnAddress];

@@ -2,8 +2,8 @@ import { createPublicClient, createWalletClient, custom, formatUnits, getAddress
 import type { Address, Hex, WalletClient } from 'viem'
 import { sepolia } from 'viem/chains'
 import 'viem/window';
-import { BurnWallet } from '../src/BurnWallet.ts';
-import type { WormholeToken, SelfRelayInputs, BurnAccount, SyncedBurnAccount, PrivateWalletData, PreSyncedTree, PreSyncedTreeStringifyable } from '../src/types.js';
+import { BurnWallet, getDeterministicBurnAccounts } from '../src/BurnWallet.ts';
+import type { WormholeToken, SelfRelayInputs, BurnAccount, SyncedBurnAccountNonDet, PrivateWalletData, PreSyncedTree, PreSyncedTreeStringifyable, SyncedBurnAccountDet } from '../src/types.js';
 import { createRelayerInputs, selfRelayTx, superSafeBurn } from '../src/transact.js';
 import WormholeTokenArtifact from '../artifacts/contracts/WormholeToken.sol/WormholeToken.json'    with {"type": "json"};
 import sepoliaDeployments from "../ignition/deployments/chain-11155111/deployed_addresses.json" with {"type": "json"};
@@ -249,7 +249,8 @@ async function updateWalletInfoUi(
     everyClass(".publicBalance", (el) => el.innerText = formatUnits(publicBalance, decimals))
     //@ts-ignore
     const privateWallet = window.privateWallet as BurnWallet | undefined
-    if (privateWallet && privateWallet.privateData.burnAccounts.length > 0) {
+    const allBurnAccounts = privateWallet ? getDeterministicBurnAccounts(privateWallet) : [];
+    if (privateWallet && allBurnAccounts.length > 0) {
         let dotCount = 0;
         const burnMsg = showBurnMsg ? POW_EXPLANATION_MSG : "" + `<br><br>`
         const powInterval = setInterval(() => {
@@ -261,14 +262,14 @@ async function updateWalletInfoUi(
                 "----------Syncing burn Accounts" + ".".repeat(dotCount)
                 , true, true,false);
         }, 500);
-        const syncPromises = privateWallet.privateData.burnAccounts.map((ba, i) =>
+        const syncPromises = allBurnAccounts.map((ba) =>
             syncBurnAccount({ wormholeToken: wormholeTokenWallet, burnAccount: ba, archiveNode: publicClient })
-                .then((synced) => { privateWallet.privateData.burnAccounts[i] = synced })
+                .then((synced) => { privateWallet.importBurnAccount(synced) })
         )
         await Promise.all(syncPromises)
         await sleep(500)
         clearInterval(powInterval);
-        updateBurnAccountsListUi(privateWallet.privateData.burnAccounts, decimals)
+        updateBurnAccountsListUi(getDeterministicBurnAccounts(privateWallet), decimals)
     }
 }
 
@@ -284,7 +285,7 @@ function updateTotalSelectedSpendable() {
 
     let total = 0n
     for (const addr of selectedRemintAddresses) {
-        const ba = privateWallet.privateData.burnAccounts.find((b) => b?.burnAddress === addr)
+        const ba = getDeterministicBurnAccounts(privateWallet).find((b) => b?.burnAddress === addr)
         if (ba && 'spendableBalance' in ba && ba.spendableBalance !== undefined) {
             total += BigInt(ba.spendableBalance)
         }
@@ -335,12 +336,12 @@ function updateBurnAccountsListUi(burnAccounts: BurnAccount[], decimals: number)
     const pendingSpans: HTMLElement[] = []
 
     for (let i = startIndex; i < pageEndIndex; i++) {
-        const ba = burnAccounts[i]
+        const burnAccount = burnAccounts[i] as SyncedBurnAccountDet
         const li = document.createElement("li")
         li.style.marginBottom = "0.4em"
         li.id = `burnAccountLi_${i}`
 
-        if (!ba) {
+        if (!burnAccount) {
             // --- placeholder: still doing PoW ---
             const span = document.createElement("span")
             span.textContent = `#${i}: doing PoW...`
@@ -348,20 +349,20 @@ function updateBurnAccountsListUi(burnAccounts: BurnAccount[], decimals: number)
             pendingSpans.push(span)
             li.appendChild(span)
         } else {
-            const short = ba.burnAddress.slice(0, 8) + "…" + ba.burnAddress.slice(-6)
+            const short = burnAccount.burnAddress.slice(0, 8) + "…" + burnAccount.burnAddress.slice(-6)
 
             // --- remint checkbox: restore from selectedRemintAddresses ---
             const cb = document.createElement("input")
             cb.type = "checkbox"
             cb.name = "remintBurnAddresses"
-            cb.value = ba.burnAddress
+            cb.value = burnAccount.burnAddress
             cb.id = `remintBurnCb_${i}`
-            cb.checked = selectedRemintAddresses.has(ba.burnAddress)
+            cb.checked = selectedRemintAddresses.has(burnAccount.burnAddress)
             cb.addEventListener("change", () => {
                 if (cb.checked) {
-                    selectedRemintAddresses.add(ba.burnAddress)
+                    selectedRemintAddresses.add(burnAccount.burnAddress)
                 } else {
-                    selectedRemintAddresses.delete(ba.burnAddress)
+                    selectedRemintAddresses.delete(burnAccount.burnAddress)
                 }
                 updateTotalSelectedSpendable()
             })
@@ -377,11 +378,11 @@ function updateBurnAccountsListUi(burnAccounts: BurnAccount[], decimals: number)
             const isFirstAccount = i === 0
             infoDiv.style.display = isFirstAccount ? "block" : "none"
 
-            const isSynced = 'totalBurned' in ba && ba.totalBurned !== undefined
+            const isSynced = 'totalBurned' in burnAccount && burnAccount.totalBurned !== undefined
             if (isSynced) {
-                const synced = ba as SyncedBurnAccount
+                const synced = burnAccount as SyncedBurnAccountNonDet
                 infoDiv.innerHTML =
-                    `burn address: ${ba.burnAddress}<br>` +
+                    `burn address: ${burnAccount.burnAddress}<br>` +
                     `burned balance: ${formatUnits(BigInt(synced.totalBurned), decimals)}<br>` +
                     `private spent balance: ${formatUnits(BigInt(synced.totalSpent), decimals)}<br>` +
                     `spendable balance: ${formatUnits(BigInt(synced.spendableBalance), decimals)}<br>` +
@@ -493,31 +494,33 @@ async function ensurePageAccounts(page: number, privateWallet: BurnWallet, wormh
     const decimals = Number(await wormholeToken.read.decimals())
     // figure out which indices need generating
     const indicesToGenerate: number[] = []
+    const allBurnAccounts = getDeterministicBurnAccounts(privateWallet)
     for (let i = startIndex; i < endIndex; i++) {
-        if (!privateWallet.privateData.burnAccounts[i]) {
+        if (!allBurnAccounts[i]) {
             indicesToGenerate.push(i)
         }
     }
     if (indicesToGenerate.length === 0) return
 
     // render the page now — missing accounts show as "doing PoW..."
-    updateBurnAccountsListUi(privateWallet.privateData.burnAccounts, decimals)
+    updateBurnAccountsListUi(allBurnAccounts, decimals)
 
     // generate + sync each account, re-render as each one completes
     logUi(
         `<br><br>` + POW_EXPLANATION_MSG + `<br><br>`
         , clearMsg, true)
     const perAccountPromises = indicesToGenerate.map((i) =>
-        privateWallet.createBurnAccountFromViewKeyIndex({ async: true, viewingKeyIndex: i })
+        privateWallet.createBurnAccount({ async: true, viewingKeyIndex: i })
             .then((ba) =>
                 syncBurnAccount({ wormholeToken: wormholeTokenWallet, burnAccount: ba, archiveNode: publicClient })
             )
             .then((synced) => {
-                privateWallet.privateData.burnAccounts[i] = synced
+                privateWallet.importBurnAccount(synced)
                 savePrivateWalletData(privateWallet)
                 // re-render so this account replaces its placeholder
                 if (currentBurnPage === page) {
-                    updateBurnAccountsListUi(privateWallet.privateData.burnAccounts, decimals)
+                    const updatedBurnAccounts = getDeterministicBurnAccounts(privateWallet)
+                    updateBurnAccountsListUi(updatedBurnAccounts, decimals)
                 }
             })
     )
@@ -556,10 +559,10 @@ async function connectPrivateWallet() {
     savePrivateWalletData(privateWallet)
 
     const decimals = Number(await wormholeToken.read.decimals())
-    updateBurnAccountsListUi(privateWallet.privateData.burnAccounts, decimals)
+    updateBurnAccountsListUi(getDeterministicBurnAccounts(privateWallet), decimals)
 
     //@ts-ignore
-    window.burnAccount = privateWallet.privateData.burnAccounts[0]
+    window.burnAccount = getDeterministicBurnAccounts(privateWallet)[0]
     logUi("done! created private wallet with burn addresses", false, true)
 }
 
@@ -598,7 +601,7 @@ async function prevBurnAccountsPageHandler() {
     const privateWallet = window.privateWallet as BurnWallet | undefined
     if (!privateWallet) return
     const decimals = Number(await wormholeToken.read.decimals())
-    updateBurnAccountsListUi(privateWallet.privateData.burnAccounts, decimals)
+    updateBurnAccountsListUi(getDeterministicBurnAccounts(privateWallet), decimals)
 }
 
 async function nextBurnAccountsPageHandler() {
@@ -612,7 +615,7 @@ async function nextBurnAccountsPageHandler() {
         return
     }
     const decimals = Number(await wormholeToken.read.decimals())
-    updateBurnAccountsListUi(privateWallet.privateData.burnAccounts, decimals)
+    updateBurnAccountsListUi(getDeterministicBurnAccounts(privateWallet), decimals)
     logUi(`page ${currentBurnPage + 1} ready`, false, true)
 }
 
@@ -685,7 +688,7 @@ async function burnBtnHandler() {
 
     // superSafeBurn needs an UnsyncedBurnAccount with viewingKey, chainId, spendingPubKeyX etc.
     // Verify the recipient matches a known burn account
-    const targetBurnAccount = privateWallet.privateData.burnAccounts.find((b) => b.burnAddress === to)
+    const targetBurnAccount = getDeterministicBurnAccounts(privateWallet).find((b) => b.burnAddress === to)
     if (!targetBurnAccount) {
         logUi("WARNING not a ")
         return
@@ -758,7 +761,7 @@ async function proofPrivateTransferBtnHandler() {
         addRelayInputsToLocalStorage(relayerInputs)
         savePreSyncedTree(syncedTree)
         //@ts-ignore
-        window.burnAccount = syncedPrivateWallet.privateData.burnAccounts[0]
+        window.burnAccount = syncedPrivateWallet.getDeterministicBurnAccounts()[0]
         //@ts-ignore
         window.merkleTree = syncedTree
     } catch (error) {
@@ -767,8 +770,8 @@ async function proofPrivateTransferBtnHandler() {
     clearInterval(powInterval);
     logUi("proof done! saved to pending relay txs")
     //@ts-ignore
-    const syncedBurnAccount = window.burnAccount as SyncedBurnAccount
-    await updateWalletInfoUi(wormholeTokenWallet, publicAddress, syncedBurnAccount as SyncedBurnAccount)
+    const syncedBurnAccount = window.burnAccount as SyncedBurnAccountNonDet
+    await updateWalletInfoUi(wormholeTokenWallet, publicAddress, syncedBurnAccount as SyncedBurnAccountNonDet)
     await listPendingRelayTxs()
 }
 

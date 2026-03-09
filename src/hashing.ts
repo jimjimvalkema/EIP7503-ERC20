@@ -62,7 +62,7 @@ export function verifyPowNonce({ blindedAddressDataHash, powNonce, difficulty }:
     return powHash < difficulty
 }
 
-export async function extractPubKeyFromSig({ hash, signature }: { hash: Hash, signature: Signature | Hex }) {
+export async function extractPubKeyFromSig({hash, signature}:{hash: Hash, signature: Signature | Hex}) {
     const publicKey = await recoverPublicKey({
         hash: hash,
         signature: signature
@@ -237,7 +237,7 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
         message,
     });
 
-    const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash: hash, signature: signature });
+    const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({hash, signature});
     return {
         viemFormatSignature: { signature, pubKeyX, pubKeyY },
         signatureData: {
