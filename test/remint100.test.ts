@@ -14,10 +14,18 @@ import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
 import { BurnWallet } from "../src/BurnWallet.ts";
 import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Address, type Hash, type Hex } from "viem";
-import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccountNonDet } from "../src/types.ts";
+import type { BurnAccount, FeeData, PrivateWalletData, RelayInputs, UnsyncedBurnAccountNonDet } from "../src/types.ts";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const path = join(__dirname, './data/privateDataAlice.json')
 
 const CIRCUIT_SIZE = 100;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
+const PRE_MADE_BURN_ACCOUNTS = JSON.parse(await readFile(path, { encoding: "utf-8" })) as PrivateWalletData;
+Object.freeze(PRE_MADE_BURN_ACCOUNTS)
 
 export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
 
@@ -52,9 +60,9 @@ describe("Token", async function () {
             WormholeTokenContractName,
             [
                 [
-                    {contractAddress: reMintVerifier2.address, size: 2},
-                    {contractAddress: reMintVerifier32.address, size: 32},
-                    {contractAddress: reMintVerifier100.address, size: 100}
+                    { contractAddress: reMintVerifier2.address, size: 2 },
+                    { contractAddress: reMintVerifier32.address, size: 32 },
+                    { contractAddress: reMintVerifier100.address, size: 100 }
                 ],
                 toHex(POW_DIFFICULTY, { size: 32 }),
                 RE_MINT_LIMIT,
@@ -79,14 +87,14 @@ describe("Token", async function () {
         }
     })
 
-    describe("Token", async function () {
+    describe("Token1", async function () {
         it("reMint 3x from 1 burn account", async function () {
             const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
-            const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
-            const aliceBurnAccount = await alicePrivate.createBurnAccount()
+            const alicePrivate = new BurnWallet(alice, powDifficulty, { privateWalletData: PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())] })
+            const aliceBurnAccount = await alicePrivate.createBurnAccount({ viewingKeyIndex: 0 })
             const amountToBurn = 1000n * 10n ** 18n;
 
             await superSafeBurn(aliceBurnAccount, amountToBurn, wormholeTokenAlice, alice.account.address)
@@ -158,10 +166,10 @@ describe("Token", async function () {
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
-            const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
-            const aliceBurnAccount1 = await alicePrivate.createBurnAccount()
-            const aliceBurnAccount2 = await alicePrivate.createBurnAccount()
-            const aliceBurnAccount3 = await alicePrivate.createBurnAccount()
+            const alicePrivate = new BurnWallet(alice, powDifficulty, { privateWalletData: PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())] })
+            const aliceBurnAccount1 = await alicePrivate.createBurnAccount({ viewingKeyIndex: 0 })
+            const aliceBurnAccount2 = await alicePrivate.createBurnAccount({ viewingKeyIndex: 1 })
+            const aliceBurnAccount3 = await alicePrivate.createBurnAccount({ viewingKeyIndex: 2 })
 
             const claimableBurnAddress = [aliceBurnAccount1.burnAddress, aliceBurnAccount2.burnAddress, aliceBurnAccount3.burnAddress];
             const reMintRecipient = bob.account.address
@@ -229,22 +237,22 @@ describe("Token", async function () {
             // assert.equal(burnedBalanceAlicePrivate2, amountToBurn, "alicePrivate.burnAddress didn't burn the expected amount of tokens")
             // assert.equal(balanceAlicePublic, amountFreeTokens - amountToBurn*2n, "alice didn't burn the expected amount of tokens")
         })
-
         it("reMint 5x from 100 burn accounts", async function () {
+            //console.log({PRE_MADE_BURN_ACCOUNTS})
             const wormholeTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: wormholeToken.abi, address: wormholeToken.address });
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
-            const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [BigInt(await publicClient.getChainId())] })
+            const alicePrivate = new BurnWallet(alice, powDifficulty, { privateWalletData: PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             const amountBurnAddresses = 100
 
-            const burnAccounts: UnsyncedBurnAccountNonDet[] = await alicePrivate.createBurnAccountsBulk(amountBurnAddresses, { async: true })
+            const burnAccounts: UnsyncedBurnAccountNonDet[] = await alicePrivate.createBurnAccountsBulk(amountBurnAddresses, { startingViewKeyIndex: 0, async: true })
             const claimableBurnAddress = burnAccounts.map((b: BurnAccount) => b.burnAddress)
 
             const reMintRecipient = bob.account.address
 
             // reMint 3 times since the 1st tx needs no commitment inclusion proof, the 2nd one the total spend balance read only contains information of one spend
-            const reMintAmounts = [69n, 69000n]//, 420n * 10n ** 18n, 420n * 10n ** 18n, 420n * 10n ** 18n]
+            const reMintAmounts = [69n, 69000n, 420n * 10n ** 18n, 420n * 10n ** 18n, 420n * 10n ** 18n]
             let expectedRecipientBalance = 0n
             let reMintTxs: Hex[] = []
             for (const reMintAmount of reMintAmounts) {

@@ -83,7 +83,7 @@ export class BurnWallet {
             if (viewKeySigMessage !== privateWalletData.viewKeySigMessage) {
                 throw new Error(`cant change viewKey message of a imported account`)
             }
-            this.privateData = privateWalletData
+            this.privateData = structuredClone(privateWalletData)
         }
         this.#createBurnAccountsKeys({ chainId: chainId, difficulty: powDifficulty })
     }
@@ -179,7 +179,15 @@ export class BurnWallet {
         const { x: spendingPubKeyX } = await this.getPubKey()
 
         if (viewingKeyIndex === undefined) {
-            viewingKeyIndex = this.privateData.detViewKeyCounter++
+            viewingKeyIndex = this.privateData.detViewKeyCounter
+            this.privateData.detViewKeyCounter += 1
+        }
+
+        if (isDeterministic) {
+            const preCachedBurnAccounts = getDeterministicBurnAccounts(this, { difficulty: difficulty, chainId: chainId })
+            if (preCachedBurnAccounts[viewingKeyIndex]) {
+                return preCachedBurnAccounts[viewingKeyIndex]
+            } 
         }
 
         viewingKey ??= poseidon2Hash([
@@ -278,16 +286,23 @@ export class BurnWallet {
      * @TODO spawning one worker per account may be inefficient beyond available
      *   thread count  assumes most callers don't need large batches.
      */
-    async createBurnAccountsBulk(amountOfBurnAccounts: number, { chainId, difficulty = this.defaults.powDifficulty, async = false }: { async?: boolean, chainId?: bigint, difficulty?: bigint } = {}) {
+    async createBurnAccountsBulk(
+        amountOfBurnAccounts: number, 
+        {startingViewKeyIndex = this.privateData.detViewKeyCounter, chainId, difficulty = this.defaults.powDifficulty, async = false }: 
+        { startingViewKeyIndex?:number, async?: boolean, chainId?: bigint, difficulty?: bigint } = {}
+    ) {
         chainId ??= this.defaults.chainId
         const burnAccountsPromises = new Array(amountOfBurnAccounts).fill(0).map((v, i) =>
             this.createBurnAccount(
-                { viewingKeyIndex: this.privateData.detViewKeyCounter + i, chainId: chainId, difficulty: difficulty, async: async }
+                { viewingKeyIndex: startingViewKeyIndex + i, chainId: chainId, difficulty: difficulty, async: async }
             )
         )
 
         const burnAccounts = await Promise.all(burnAccountsPromises)
-        this.privateData.detViewKeyCounter += amountOfBurnAccounts;
+        const lastIndex = amountOfBurnAccounts + startingViewKeyIndex
+        if (lastIndex > this.privateData.detViewKeyCounter ) {
+            this.privateData.detViewKeyCounter = lastIndex
+        }
         return burnAccounts
     }
 
@@ -343,7 +358,6 @@ export function getDeterministicBurnAccounts(burnWallet: BurnWallet,
 ): BurnAccount[] {
     const difficultyPadded = toHex(difficulty, { size: 32 })
     const chainIdPadded = toHex(chainId, { size: 32 })
-    console.log({ burnAccounts: burnWallet.privateData.detBurnAccounts[chainIdPadded][difficultyPadded] })
     return burnWallet.privateData.detBurnAccounts[chainIdPadded][difficultyPadded]
 
 }

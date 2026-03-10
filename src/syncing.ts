@@ -142,16 +142,35 @@ export async function syncBurnAccount(
     let accountNonce = initialAccountNonce
     //accountNonce = accountNonce === 0n ? 0n : accountNonce - 1n
     let totalSpent = BigInt(burnAccount.totalSpent ?? 0n)
-    let isNullified = true;
+    let isNullified: boolean|null = null;
     let lastSpendBlockNum: bigint | null = null
     let lastNullifier: bigint | null = null;
-    while (isNullified) {
+    while (isNullified || isNullified === null) {
         const nullifier = hashNullifier({ accountNonce: accountNonce, viewingKey: viewingKey })
         const nullifiedAtBlock = await wormholeToken.read.nullifiers([nullifier])
-        isNullified = nullifiedAtBlock > 0n
-        if (!isNullified) {
+        // if not nullified
+        if (nullifiedAtBlock === 0n) {
+            // we are at the first iteration and accountNonce is not at 0. 
+            // this means the account was previously synced, and didn't need another sync
+            const wasPreviouslySynced = isNullified === null && accountNonce !== 0n;
+            if(wasPreviouslySynced) {
+                const prevNullifier = hashNullifier({ accountNonce: accountNonce-1n, viewingKey: viewingKey })
+                // another rpc call but trust me i got stuck on this stupid ah bug for hours and it took claude a while to find it as well 
+                const prevNullifiedAtBlock = await wormholeToken.read.nullifiers([prevNullifier])
+                if(prevNullifiedAtBlock === 0n) {
+                    throw new Error(`
+                        provided burnAccount has an invalid accountNonce. Account nonce was set to a non 0 number but it's previous nonce was not nullified
+                        previous nonce expected to be nullified: ${toHex(prevNullifier,{size:32})} (accountNonce: ${accountNonce-1n})
+                        current nonce nullifier: ${toHex(nullifier,{size:32})} (accountNonce: ${accountNonce})
+                        
+                        burnAccount: 
+                        ${JSON.stringify(burnAccount)}
+                        `)
+                }
+            }
             break
         }
+        isNullified = nullifiedAtBlock > 0n
         accountNonce += 1n
         lastSpendBlockNum = nullifiedAtBlock
         lastNullifier = nullifier
@@ -182,6 +201,11 @@ export async function syncBurnAccount(
     syncedBurnAccount.totalSpent = toHex(totalSpent);
     syncedBurnAccount.accountNonce = toHex(accountNonce);
     syncedBurnAccount.totalBurned = toHex(totalReceived)
+    if(totalSpent > totalReceived){
+         console.log({totalReceived, totalSpent, accountNonce,prevSpendable:syncedBurnAccount.spendableBalance, syncedBurnAccount})
+
+    }
+   
     syncedBurnAccount.spendableBalance = toHex(totalReceived - totalSpent)
     return syncedBurnAccount
 }

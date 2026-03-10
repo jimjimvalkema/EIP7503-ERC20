@@ -3,8 +3,8 @@ import { beforeEach, describe, it, after } from "node:test";
 
 import { network } from "hardhat";
 
-import type { BurnAccount, UnsyncedBurnAccountNonDet } from "../src/types.js";
-import { BurnWallet } from "../src/BurnWallet.ts";
+import type { BurnAccount, UnsyncedBurnAccountNonDet } from "../../src/types.ts";
+import { BurnWallet } from "../../src/BurnWallet.ts";
 
 describe("Token", async function () {
     const { viem } = await network.connect();

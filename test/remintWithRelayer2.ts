@@ -6,7 +6,7 @@ import { network } from "hardhat";
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 
-import {MAX_TREE_DEPTH, FIELD_LIMIT, WormholeTokenContractName, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100, POW_DIFFICULTY, RE_MINT_LIMIT } from "../src/constants.ts";
+import { FIELD_LIMIT, WormholeTokenContractName, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100, POW_DIFFICULTY, RE_MINT_LIMIT, MAX_TREE_DEPTH } from "../src/constants.ts";
 import { getSyncedMerkleTree, syncBurnAccount } from "../src/syncing.ts";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
 import { getBackend } from "../src/proving.ts";
@@ -14,10 +14,17 @@ import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
 import { BurnWallet } from "../src/BurnWallet.ts";
 import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Address, type Hash, type Hex } from "viem";
-import type { BurnAccount, FeeData, RelayInputs, UnsyncedBurnAccountNonDet } from "../src/types.ts";
+import type { BurnAccount, FeeData, PrivateWalletData, RelayInputs, UnsyncedBurnAccountNonDet } from "../src/types.ts";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const path =  join(__dirname, './data/privateDataAlice.json')
 
 const CIRCUIT_SIZE = 100;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
+const PRE_MADE_BURN_ACCOUNTS = JSON.parse(await readFile(path,{encoding:"utf-8"})) as PrivateWalletData;
 
 export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
 
@@ -85,9 +92,9 @@ describe("Token", async function () {
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
             const chainId = BigInt(await publicClient.getChainId())
-            const alicePrivate = new BurnWallet(alice, powDifficulty, { acceptedChainIds: [chainId] })
-            const aliceBurnAccount = await alicePrivate.createBurnAccount()
-            const aliceRefundBurnAccount = await alicePrivate.createBurnAccount()
+            const alicePrivate = new BurnWallet(alice, powDifficulty, {privateWalletData:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [chainId] })
+            const aliceBurnAccount = await alicePrivate.createBurnAccount({viewingKeyIndex:0})
+            const aliceRefundBurnAccount = await alicePrivate.createBurnAccount({viewingKeyIndex:1})
             const decimalsToken = await wormholeToken.read.decimals()
             const amountToBurn = parseUnits("42069", decimalsToken);
             await safeBurn(aliceBurnAccount, amountToBurn, wormholeTokenAlice, alice.account.address)
