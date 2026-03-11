@@ -1,12 +1,12 @@
-import { hexToBytes, toHex, hexToNumber } from "viem"
-import type { Hex, Address, PublicClient, TypedDataDomain } from "viem"
-import type { MerkleData, SpendableBalanceProof, PreSyncedTree, PrivateWalletData, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccountNonDet, u1AsHexArr, u32AsHex, u8sAsHexArrLen64, UnsyncedBurnAccountNonDet, WormholeToken, PublicProofInputs, BurnDataPublic, u8sAsHexArrLen32, BurnDataPrivate, PrivateProofInputs, FakeBurnAccount } from "./types.js"
-import { EMPTY_UNFORMATTED_MERKLE_PROOF, FIELD_LIMIT, FIELD_MODULUS } from "./constants.ts"
-import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, signPrivateTransfer, hashFakeLeaf, hashFakeNullifier } from "./hashing.ts"
+import { toHex } from "viem"
+import type { Hex, Address, PublicClient } from "viem"
+import type { MerkleData, SpendableBalanceProof, PreSyncedTree, ProofInputs1n, ProofInputs4n, SignatureData, SyncedBurnAccountNonDet, u1AsHexArr, u32AsHex, WormholeToken, PublicProofInputs, BurnDataPublic, BurnDataPrivate, PrivateProofInputs, FakeBurnAccount, CreateRelayerInputsOpts, FeeData, SelfRelayInputs, SignatureInputs, SignatureInputsWithFee, BurnAccountProof, FakeBurnAccountProof, RelayInputs } from "./types.js"
+import { EAS_BYTE_LEN_OVERHEAD, EMPTY_UNFORMATTED_MERKLE_PROOF, ENCRYPTED_TOTAL_SPENT_PADDING } from "./constants.ts"
+import { hashTotalSpentLeaf, hashNullifier, hashTotalBurnedLeaf, hashFakeLeaf, hashFakeNullifier } from "./hashing.ts"
 import type { LeanIMTMerkleProof } from "@zk-kit/lean-imt"
 import { LeanIMT } from "@zk-kit/lean-imt"
 import type { WormholeTokenTest } from "../test/remint2.test.ts"
-import { getSyncedMerkleTree } from "./syncing.ts"
+import { encryptTotalSpend, getSyncedMerkleTree, syncMultipleBurnAccounts } from "./syncing.ts"
 import type { ProofData } from '@aztec/bb.js';
 import { UltraHonkBackend } from '@aztec/bb.js';
 import type { CompiledCircuit, InputMap } from "@noir-lang/noir_js"
@@ -22,25 +22,9 @@ const circuits: { [k: number]: any } = {
 
 //import { Fr } from "@aztec/aztec.js"
 import { BurnWallet } from "./BurnWallet.ts"
-import { getCircuitSize } from "./transact.ts"
 import { assert } from "node:console"
-
-export function padArray<T>({ arr, size, value, dir }: { arr: T[], size: number, value?: T, dir?: "left" | "right" }): T[] {
-    if (arr.length > size) { throw new Array(`array is larger then target size. Array len: ${arr.length}, target len: ${size}`) }
-    dir = dir ?? "right"
-    if (value === undefined) {
-        if (typeof arr[0] === 'string' && arr[0].startsWith('0x')) {
-            value = "0x00" as T
-        } else if (typeof arr[0] === "bigint") {
-            value = 0n as T
-        } else {//if (typeof arr[0] === "number") {
-            value = 0 as T
-        }
-    }
-
-    const padding = (new Array(size - arr.length)).fill(value)
-    return dir === "left" ? [...padding, ...arr] : [...arr, ...padding]
-}
+import { getAllBurnAccounts, getAvailableThreads, getCircuitSize, getCircuitSizesFromContract, hexToU8AsHexLen32, padArray, padWithRandomHex, randomBN254FieldElement } from "./utils.ts"
+import { signPrivateTransfer } from "./signing.ts"
 
 export function formatMerkleProof(merkleProof: LeanIMTMerkleProof<bigint>, maxTreeDepth: number): MerkleData {
     const depth = toHex(merkleProof.siblings.length)
@@ -104,14 +88,85 @@ export function getSpendableBalanceProof(
     }
 }
 
-// get random value until it fits within field limit (rejection sampling)
-export function randomBN254FieldElement(): bigint {
-    while (true) {
-        const bytes = new Uint8Array(32);
-        crypto.getRandomValues(bytes);
-        const val = bytes.reduce((acc, b) => (acc << 8n) | BigInt(b), 0n);
-        if (val < FIELD_MODULUS) return val;
+export async function prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses, amount, largestCircuitSize }: { largestCircuitSize: number, burnAccounts: SyncedBurnAccountNonDet[], selectBurnAddresses: Address[], amount: bigint }) {
+    const sortedBurnAccounts = burnAccounts.sort((a, b) => Number(b.spendableBalance) - Number(a.spendableBalance))
+    const encryptedTotalMinted: Hex[] = []
+    // man so many copy pasta of same array and big name!! Fix it i cant read this!!!!
+    const burnAccountsAndAmounts: { burnAccount: SyncedBurnAccountNonDet, amountToClaim: bigint }[] = []
+    let amountLeft = amount
+    for (const burnAccount of sortedBurnAccounts) {
+        if (selectBurnAddresses.includes(burnAccount.burnAddress)) {
+            const spendableBalance = BigInt(burnAccount.spendableBalance)
+            let amountToClaim = 0n
+            if (spendableBalance <= amountLeft) {
+                amountToClaim = spendableBalance
+            } else {
+                amountToClaim = amountLeft
+            }
+            amountLeft -= amountToClaim
+            const newTotalSpent = amountToClaim + BigInt(burnAccount.totalSpent)
+            encryptedTotalMinted.push(await encryptTotalSpend({ viewingKey: BigInt(burnAccount.viewingKey), amount: newTotalSpent }))
+            burnAccountsAndAmounts.push({
+                burnAccount: burnAccount,
+                amountToClaim: amountToClaim
+            })
+            if (amountLeft === 0n) {
+                break
+            }
+        }
     }
+    if (amountLeft !== 0n) {
+        throw new Error(`not enough balances in selected burn accounts, short of ${Number(amountLeft)}, selected burn accounts: ${sortedBurnAccounts}`)
+    }
+
+    //console.log(`burn accounts selected: \n${burnAccountsAndAmounts.map((b) => `${b.burnAccount.burnAddress},spendable:${b.burnAccount.spendableBalance},burned:${b.burnAccount.totalBurned},amountToBeClaimed:${b.amountToClaim}\n`)}`)
+    if (burnAccountsAndAmounts.length > largestCircuitSize) {
+        throw new Error(`need to consume more than LARGEST_CIRCUIT_SIZE of: ${largestCircuitSize}, but need to consume: ${burnAccountsAndAmounts.length} burnAccount to make the transaction. Please consolidate balance to make this tx`)
+    }
+    return { burnAccountsAndAmounts, encryptedTotalMinted }
+}
+
+export function getHashedInputs(
+    { burnAccount, claimAmount, syncedTree, maxTreeDepth }:
+        { burnAccount: SyncedBurnAccountNonDet, claimAmount: bigint, syncedTree: PreSyncedTree, maxTreeDepth: number }) {
+
+    // --- inclusion proof ---
+    // hash leafs
+    const totalBurnedLeaf = hashTotalBurnedLeaf({
+        burnAddress: burnAccount.burnAddress,
+        totalBurned: BigInt(burnAccount.totalBurned)
+    })
+    const prevTotalSpendNoteHashLeaf = BigInt(burnAccount.accountNonce) === 0n ? 0n : hashTotalSpentLeaf({
+        totalSpent: BigInt(burnAccount.totalSpent),
+        accountNonce: BigInt(burnAccount.accountNonce),
+        blindedAddressDataHash: BigInt(burnAccount.blindedAddressDataHash),
+        viewingKey: BigInt(burnAccount.viewingKey)
+    })
+    // make merkle proofs
+    const merkleProofs = getSpendableBalanceProof({
+        tree: syncedTree.tree,
+        totalSpendNoteHashLeaf: prevTotalSpendNoteHashLeaf,
+        totalBurnedLeaf,
+        maxTreeDepth
+    })
+
+    // --- public circuit inputs ---
+    // hash public hashes (nullifier, commitment)
+    const nextTotalSpend = BigInt(burnAccount.totalSpent) + claimAmount
+    const prevAccountNonce = BigInt(burnAccount.accountNonce)
+    const nextAccountNonce = BigInt(burnAccount.accountNonce) + 1n
+    const nextTotalSpendNoteHashLeaf = hashTotalSpentLeaf({
+        totalSpent: nextTotalSpend,
+        accountNonce: nextAccountNonce,
+        blindedAddressDataHash: BigInt(burnAccount.blindedAddressDataHash),
+        viewingKey: BigInt(burnAccount.viewingKey)
+    })
+    const nullifier = hashNullifier({
+        accountNonce: prevAccountNonce,
+        viewingKey: BigInt(burnAccount.viewingKey)
+    })
+
+    return { merkleProofs, nullifier, nextTotalSpendNoteHashLeaf }
 }
 
 export function getPubInputs(
@@ -139,17 +194,6 @@ export function getPubInputs(
         re_mint_limit: reMintLimit
     }
     return pubInputs
-}
-
-
-export interface BurnAccountProof {
-    burnAccount: SyncedBurnAccountNonDet,
-    merkleProofs: SpendableBalanceProof,
-    claimAmount: bigint
-}
-
-export interface FakeBurnAccountProof {
-    burnAccount: FakeBurnAccount,
 }
 
 /**
@@ -217,12 +261,223 @@ export function getPrivInputs(
     return privInputs
 }
 
-export function getAvailableThreads() {
-    if (typeof navigator !== undefined && 'hardwareConcurrency' in navigator) {
-        return navigator.hardwareConcurrency ?? 1;
+// Overload 1: feeData provided → RelayInputs
+export async function createRelayerInputs(
+    recipient: Address,
+    amount: bigint,
+    privateWallet: BurnWallet,
+    wormholeToken: WormholeToken | WormholeTokenTest,
+    archiveClient: PublicClient,
+    opts: CreateRelayerInputsOpts & { feeData: FeeData }
+): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }>;
+
+// Overload 2: feeData omitted → SelfRelayInputs
+export async function createRelayerInputs(
+    recipient: Address,
+    amount: bigint,
+    privateWallet: BurnWallet,
+    wormholeToken: WormholeToken | WormholeTokenTest,
+    archiveClient: PublicClient,
+    opts?: CreateRelayerInputsOpts & { feeData?: undefined }
+): Promise<{ relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }>;
+
+/**
+ * Creates the inputs needed to relay a private transfer (either self-relay or via a relayer).
+ *
+ * Syncs burn accounts, prepares encrypted spend data, signs the transfer, generates a Merkle
+ * inclusion proof for each burn account, and produces a ZK proof over all inputs.
+ *
+ * Returns `SelfRelayInputs` when no `feeData` is provided, or `RelayInputs` when it is.
+ *
+ * @note chainId is not yet constrained in the circuit — included for future cross-chain support.
+ *
+ * @param amount              - Amount to re-mint (required).
+ * @param recipient           - Address that will receive the re-minted tokens (required).
+ * @param privateWallet       - The caller's private wallet containing burn accounts and signing keys (required).
+ * @param wormholeToken       - Contract instance for the WormholeToken (required).
+ * @param archiveClient       - Archive-node viem PublicClient used for syncing and log queries (required).
+ *
+ * --- Defaults via RPC call if not set ---
+ * @param powDifficulty       - Proof-of-work difficulty. Defaults to on-chain value from `wormholeToken.POW_DIFFICULTY()`.
+ * @param reMintLimit - Max cumulative re-mint cap. Defaults to on-chain value from `wormholeToken.RE_MINT_LIMIT()`.
+ * @param chainId             - (@NOTICE not constrained rn) ChainId for the cross-chain transfer. Defaults to `archiveClient.getChainId()`.
+ * @param circuitSizes         - sorted array of available circuit sizes. Sorted from smallest to highest.
+ * @param maxTreeDepth        - Maximum Merkle tree depth. Defaults to `MAX_TREE_DEPTH`. Changing this produces invalid proofs.
+ * 
+ * --- Defaults without RPC call ---
+ * @param feeData             - If provided, produces `RelayInputs` (third-party relay); omit for `SelfRelayInputs`.
+ * @param callData            - Arbitrary calldata forwarded after re-mint. Defaults to `"0x"` (none).
+ * @param callValue           - Native value forwarded with the call. Defaults to `0`.
+ * @param callCanFail         - Whether a revert in the forwarded call is tolerated. Defaults to `true`.
+ * @param burnAddresses       - Subset of burn addresses to spend from. Defaults to every address in `privateWallet`.
+ * @param circuitSize         - Circuit size (number of burn-account slots). Defaults to the minimum size that fits the spend (e.g. 2 or 100).
+ * @param encryptedBlobLen    - Byte length of each encrypted total-spend blob. Defaults to `ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD`. Changing this makes the transaction distinguishable and reduces anonymity.
+ *
+ * --- Performance / caching ---
+ * @param threads             - Number of worker threads for proof generation. Defaults to max available.
+ * @param deploymentBlock     - Block number the contract was deployed at. Defaults to the value in `src/constants.ts`.
+ * @param preSyncedTree       - A previously synced Merkle tree to avoid re-syncing from scratch.
+ * @param blocksPerGetLogsReq - Max block range per `eth_getLogs` request. Defaults to 19 999.
+ * @param backend             - Pre-initialized prover backend; omit to create one internally.
+ *
+ * --- Circuit constants (do not change unless you know what you're doing) ---
+ */
+export async function createRelayerInputs(
+    recipient: Address,
+    amount: bigint,
+    privateWallet: BurnWallet,
+    wormholeToken: WormholeToken | WormholeTokenTest,
+    archiveClient: PublicClient,
+    { circuitSizes, threads, chainId, callData = "0x", callValue = 0n, callCanFail = false, feeData, burnAddresses, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, reMintLimit, maxTreeDepth, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
+        CreateRelayerInputsOpts & { feeData?: FeeData } = {}
+): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } } | { relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }> {
+    // set defaults
+    burnAddresses ??= getAllBurnAccounts(privateWallet.privateData).map((b) => b.burnAddress)
+    powDifficulty ??= await wormholeToken.read.POW_DIFFICULTY()
+    reMintLimit ??= await wormholeToken.read.RE_MINT_LIMIT();
+    circuitSizes ??= await getCircuitSizesFromContract(wormholeToken);
+    chainId ??= BigInt(await archiveClient.getChainId());
+    maxTreeDepth ??= await wormholeToken.read.MAX_TREE_DEPTH()
+    const largestCircuitSize = circuitSizes[circuitSizes.length - 1]
+
+    // start this asap so we can resolve once we need it
+    const syncedTreePromise = getSyncedMerkleTree({
+        wormholeToken,
+        publicClient: archiveClient,
+        //optional inputs
+        preSyncedTree,
+        deploymentBlock,
+        blocksPerGetLogsReq
+    })
+
+    // sync burn accounts
+    const syncedPrivateWallet = await syncMultipleBurnAccounts({
+        wormholeToken: wormholeToken,
+        archiveNode: archiveClient,
+        privateWallet: privateWallet,
+        burnAddressesToSync: burnAddresses //@notice, only syncs these addresses!
+    })
+    const burnAccounts = getAllBurnAccounts(privateWallet.privateData) as SyncedBurnAccountNonDet[]
+
+    // select burn accounts for spend. Takes highest balances first
+    const { burnAccountsAndAmounts, encryptedTotalMinted } = await prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses: burnAddresses, amount, largestCircuitSize: largestCircuitSize })
+    circuitSize ??= getCircuitSize(burnAccountsAndAmounts.length, circuitSizes)
+
+    // format inputs that wil be signed
+    let signatureInputs: SignatureInputs | SignatureInputsWithFee  = {
+        recipient: recipient,
+        amountToReMint: toHex(amount),
+        callData: callData,
+        callCanFail: callCanFail,
+        callValue: toHex(callValue),
+        // remember if you do not do padWithRandomHex you reveal how many address you consumed!
+        encryptedTotalMinted: padWithRandomHex({ arr: encryptedTotalMinted, len: circuitSize, hexSize: encryptedBlobLen, dir: "right" }),
+    }
+    if (feeData) {
+        signatureInputs = {...signatureInputs, feeData} as SignatureInputsWithFee
+    }
+
+    const allSignatureDataPromise = signPrivateTransfer({
+        privateWallet: privateWallet,
+        signatureInputs: signatureInputs,
+        chainId: Number(chainId),
+        tokenAddress: wormholeToken.address,
+    })
+
+    const syncedTree = await syncedTreePromise;
+    const { signatureData, signatureHash } = await allSignatureDataPromise;
+    privateWallet = syncedPrivateWallet
+    //----------------------------------------------------------------------
+
+    // ----- collect proof inputs from the burn accounts -----
+    // nullifiers, noteHashes, merkle proofs
+    const nullifiers: bigint[] = []
+    const noteHashes: bigint[] = []
+    const burnAccountProofs: (BurnAccountProof|FakeBurnAccountProof)[] = []
+    // TODO @Warptoad: check chainId matches burn account. remove burn account with different chainId
+    for (let index = 0; index < circuitSize; index++) {
+        if (index < burnAccountsAndAmounts.length) {
+            const { burnAccount, amountToClaim } = burnAccountsAndAmounts[index];
+            const { merkleProofs, nullifier, nextTotalSpendNoteHashLeaf } = getHashedInputs({
+                burnAccount: burnAccount,
+                claimAmount: amountToClaim,
+                syncedTree: syncedTree,
+                maxTreeDepth: maxTreeDepth
+            })
+
+            // group all this private inclusion proof data
+            const burnAccountProof: BurnAccountProof = {
+                burnAccount: burnAccount,
+                merkleProofs: merkleProofs,
+                claimAmount: amountToClaim
+            }
+            burnAccountProofs.push(burnAccountProof)
+            nullifiers.push(nullifier)
+            noteHashes.push(nextTotalSpendNoteHashLeaf)
+        } else {
+            const fakeBurnAccount: FakeBurnAccount = {viewingKey:toHex(randomBN254FieldElement())} 
+            const burnAccountProof: FakeBurnAccountProof = {
+                burnAccount: fakeBurnAccount,
+            }
+            const nullifier = hashFakeNullifier({viewingKey:BigInt(fakeBurnAccount.viewingKey)})
+            const nextTotalSpendNoteHash = hashFakeLeaf({viewingKey:BigInt(fakeBurnAccount.viewingKey)})
+            burnAccountProofs.push(burnAccountProof)
+
+            nullifiers.push(nullifier)
+            noteHashes.push(nextTotalSpendNoteHash)
+        }
+    }
+
+    // final formatting proofs so noir can use them!
+    const publicInputs = getPubInputs({
+        amountToReMint: amount,
+        root: syncedTree.tree.root,
+        chainId: chainId,
+        signatureHash: signatureHash,
+        nullifiers: nullifiers,
+        noteHashes: noteHashes,
+        circuitSize: circuitSize,
+        powDifficulty: powDifficulty,
+        reMintLimit: reMintLimit,
+        circuitSizes: circuitSizes,
+        burnAccountProofs: burnAccountProofs
+    })
+    const privateInputs = getPrivInputs({
+        burnAccountsProofs: burnAccountProofs,
+        signatureData: signatureData,
+        maxTreeDepth: maxTreeDepth,
+        circuitSize: circuitSize,
+        circuitSizes: circuitSizes
+    })
+    const proofInputs = { ...publicInputs, ...privateInputs } as ProofInputs1n | ProofInputs4n
+
+    // make proof!
+    const zkProof = await generateProof({ proofInputs: proofInputs, backend: backend, threads: threads, circuitSizes: circuitSizes })
+    if (feeData) {
+        return {
+            relayInputs:
+                {
+                    publicInputs: publicInputs,
+                    proof: toHex(zkProof.proof),
+                    signatureInputs: signatureInputs as SignatureInputsWithFee,
+                } as RelayInputs,
+            syncedData: {
+                syncedTree,
+                syncedPrivateWallet
+            }
+        };
     } else {
-        // TODO naively assumes that it runs on node if not in browser!
-        return (process as any).availableParallelism()
+        return {
+            relayInputs: {
+                publicInputs: publicInputs,
+                proof: toHex(zkProof.proof),
+                signatureInputs: signatureInputs as SignatureInputs,
+            } as SelfRelayInputs,
+            syncedData: {
+                syncedTree,
+                syncedPrivateWallet
+            }
+        };
     }
 }
 
@@ -252,14 +507,4 @@ export async function generateProof({ proofInputs, backend, threads, circuitSize
 export async function verifyProof({ proof, backend, circuitSize = 2 }: { proof: ProofData, backend?: UltraHonkBackend, circuitSize?: number }) {
     backend = backend ?? await getBackend(circuitSize, undefined)
     return await backend.verifyProof(proof, { keccakZK: true })
-}
-
-export function hexToU8AsHexLen32(hex: Hex): u8sAsHexArrLen32 {
-    const unPadded = [...hexToBytes(hex)].map((v) => toHex(v))
-    return padArray({ size: 32, dir: "left", arr: unPadded }) as u8sAsHexArrLen32
-}
-
-export function hexToU8AsHexLen64(hex: Hex): u8sAsHexArrLen64 {
-    const unPadded = [...hexToBytes(hex)].map((v) => toHex(v))
-    return padArray({ size: 64, dir: "left", arr: unPadded }) as u8sAsHexArrLen64
 }

@@ -2,10 +2,12 @@
 
 import type { Address, Hex, WalletClient } from "viem";
 import { hashMessage, padHex, toHex } from "viem";
-import type { BurnAccount, BurnAccountDet, PrivateWalletData, UnsyncedBurnAccountNonDet, UnsyncedBurnAccountDet } from "./types.ts"
-import { extractPubKeyFromSig, findPoWNonce, findPoWNonceAsync, getBurnAddress, getViewingKey, hashBlindedAddressData, verifyPowNonce } from "./hashing.ts";
+import type { BurnAccount, PrivateWalletData, UnsyncedBurnAccountNonDet, UnsyncedBurnAccountDet } from "./types.ts"
+import { findPoWNonce, findPoWNonceAsync, getBurnAddress, hashBlindedAddressData } from "./hashing.ts";
 import { VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { poseidon2Hash } from "@zkpassport/poseidon2"
+import { getDeterministicBurnAccounts } from "./utils.ts";
+import { extractPubKeyFromSig, getViewingKey } from "./signing.ts";
 //import { findPoWNonceAsync } from "./hashingAsync.js";
 
 
@@ -305,59 +307,5 @@ export class BurnWallet {
         }
         return burnAccounts
     }
-
-}
-
-function filterBurnAccounts(burnAccounts: Record<Hex, Record<Hex, BurnAccount[]>>, selectedDifficulties?: Hex[], selectedChainIds?: Hex[]): BurnAccount[] {
-    selectedChainIds ??= Object.keys(burnAccounts) as Hex[];
-
-    return selectedChainIds.flatMap(chainId => {
-        const burnAccountsPerDiff = burnAccounts[chainId];
-        if (!burnAccountsPerDiff) return [];
-
-        // remember: can't use ??= here  it would assign on the first iteration and
-        // carry over to all subsequent chainIds, ignoring their actual difficulties.
-        const difficulties = selectedDifficulties ?? Object.keys(burnAccountsPerDiff) as Hex[];
-
-        return difficulties.flatMap(difficulty => burnAccountsPerDiff[difficulty] ?? []);
-    });
-}
-
-/**
- * 
- * Retrieves stored burn accounts, with optional filtering by chain ID, difficulty,
- * and account type.
- *
- * @param options - Optional filter configuration.
- * @param options.difficulties - If provided, only returns accounts matching these PoW difficulties.
- *   Defaults to all difficulties.
- * @param options.chainIds - If provided, only returns accounts matching these chain IDs.
- *   Defaults to all chain IDs.
- * @param options.deterministicAccounts - Whether to include deterministic accounts. Defaults to `true`.
- * @param options.nonDeterministicAccounts - Whether to include non-deterministic accounts. Defaults to `true`.
- *
- * @returns A flat array of matching {@link BurnAccount} objects.
- */
-export function getAllBurnAccounts(privateData: PrivateWalletData,
-    { difficulties, chainIds, deterministicAccounts = true, nonDeterministicAccounts = true }:
-        { difficulties?: bigint[], chainIds?: bigint[], deterministicAccounts?: boolean, nonDeterministicAccounts?: boolean } = {}
-): BurnAccount[] {
-    const difficultiesHex = difficulties !== undefined ? difficulties.map((diff) => padHex(toHex(diff), { size: 32 })) : undefined;
-    const chainIdsHex = chainIds !== undefined ? chainIds.map((chainId) => padHex(toHex(chainId), { size: 32 })) : undefined;
-
-    return [
-        ...(deterministicAccounts ? filterBurnAccounts(privateData.detBurnAccounts, difficultiesHex, chainIdsHex) : []),
-        ...(nonDeterministicAccounts ? filterBurnAccounts(privateData.nonDetBurnAccounts, difficultiesHex, chainIdsHex) : []),
-    ];
-}
-
-export function getDeterministicBurnAccounts(burnWallet: BurnWallet,
-    { difficulty = burnWallet.defaults.powDifficulty, chainId = burnWallet.defaults.chainId }:
-        { difficulty?: bigint, chainId?: bigint } = {}
-
-): BurnAccount[] {
-    const difficultyPadded = toHex(difficulty, { size: 32 })
-    const chainIdPadded = toHex(chainId, { size: 32 })
-    return burnWallet.privateData.detBurnAccounts[chainIdPadded][difficultyPadded]
 
 }

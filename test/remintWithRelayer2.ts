@@ -7,20 +7,20 @@ import { network } from "hardhat";
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 
 import { FIELD_LIMIT, WormholeTokenContractName, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100, POW_DIFFICULTY, RE_MINT_LIMIT, MAX_TREE_DEPTH } from "../src/constants.ts";
-import { getSyncedMerkleTree, syncBurnAccount } from "../src/syncing.ts";
+import { getSyncedMerkleTree } from "../src/syncing.ts";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
-import { getBackend } from "../src/proving.ts";
+import { createRelayerInputs, getBackend } from "../src/proving.ts";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
-import { createRelayerInputs, proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
+import { proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
 import { BurnWallet } from "../src/BurnWallet.ts";
-import { formatUnits, getContract, padHex, parseEventLogs, parseUnits, toHex, type Address, type Hash, type Hex } from "viem";
-import type { BurnAccount, FeeData, PrivateWalletData, RelayInputs, UnsyncedBurnAccountNonDet } from "../src/types.ts";
+import { getContract, padHex, parseEventLogs, parseUnits, toHex, type Hash, type Hex } from "viem";
+import type { BurnAccount, FeeData, PrivateWalletData, UnsyncedBurnAccountDet } from "../src/types.ts";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const path =  join(__dirname, './data/privateDataAlice.json')
+const path = join(__dirname, './data/privateDataAlice.json')
 
 const CIRCUIT_SIZE = 100;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available

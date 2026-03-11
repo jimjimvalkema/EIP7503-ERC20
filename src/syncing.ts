@@ -1,14 +1,15 @@
 import { queryEventInChunks } from "@warptoad/gigabridge-js/viem-utils"
 import type { LeanIMTHashFunction } from "@zk-kit/lean-imt"
 import { LeanIMT } from "@zk-kit/lean-imt"
-import type { Abi, AbiEvent, Address, Hex, PublicClient } from "viem"
-import { bytesToHex, concatHex, hexToBytes, presignMessagePrefix, sliceHex, toBytes, toHex } from "viem"
+import type { Address, Hex, PublicClient } from "viem"
+import { bytesToHex, concatHex, hexToBytes, sliceHex, toHex } from "viem"
 import type { WormholeTokenTest } from "../test/remint2.test.ts"
 import { ENCRYPTED_TOTAL_SPENT_PADDING, WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "./constants.ts"
 import type { BurnAccount, PreSyncedTree, SyncedBurnAccountNonDet, UnsyncedBurnAccountNonDet, WormholeToken } from "./types.ts"
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { hashNullifier } from "./hashing.ts"
-import { BurnWallet, getAllBurnAccounts } from "./BurnWallet.ts"
+import { BurnWallet } from "./BurnWallet.ts"
+import { getAllBurnAccounts } from "./utils.ts"
 
 export function getDeploymentBlock(chainId: number) {
     if (Number(chainId) in WORMHOLE_TOKEN_DEPLOYMENT_BLOCK) {

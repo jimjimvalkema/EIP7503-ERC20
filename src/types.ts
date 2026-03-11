@@ -1,9 +1,7 @@
-import  { hashMessage, toHex } from "viem";
 import type  { Address, GetContractReturnType, Hex, PublicClient, WalletClient } from "viem";
 import type { WormholeToken$Type } from "../artifacts/contracts/WormholeToken.sol/artifacts.js";
-import type { SignMessageReturnType } from "viem/accounts";
 import type { InputMap } from "@noir-lang/noir_js";
-import type { ProofData, UltraHonkBackend } from "@aztec/bb.js";
+import type { UltraHonkBackend } from "@aztec/bb.js";
 import { LeanIMT } from "@zk-kit/lean-imt";
 
 export type WormholeToken = GetContractReturnType<WormholeToken$Type["abi"], Required<{ public?: PublicClient; wallet?: WalletClient; }>>
@@ -231,3 +229,13 @@ export type CreateRelayerInputsOpts = {
     encryptedBlobLen?: number;
     circuitSizes?: number[];
 };
+
+export interface BurnAccountProof {
+    burnAccount: SyncedBurnAccountNonDet,
+    merkleProofs: SpendableBalanceProof,
+    claimAmount: bigint
+}
+
+export interface FakeBurnAccountProof {
+    burnAccount: FakeBurnAccount,
+}
