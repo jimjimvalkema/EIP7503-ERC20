@@ -2,7 +2,7 @@ import { createPublicClient, createWalletClient, custom, formatUnits, getAddress
 import type { Address, Hex, WalletClient } from 'viem'
 import { sepolia } from 'viem/chains'
 import 'viem/window';
-import { BurnWallet, getDeterministicBurnAccounts } from '../src/BurnWallet.ts';
+import { BurnViewKeyManager, getDeterministicBurnAccounts } from '../src/BurnWallet.ts';
 import type { WormholeToken, SelfRelayInputs, BurnAccount, SyncedBurnAccountNonDet, PrivateWalletData, PreSyncedTree, PreSyncedTreeStringifyable, SyncedBurnAccountDet } from '../src/types.js';
 import { createRelayerInputs, selfRelayTx, superSafeBurn } from '../src/transact.js';
 import WormholeTokenArtifact from '../artifacts/contracts/WormholeToken.sol/WormholeToken.json'    with {"type": "json"};
@@ -205,7 +205,7 @@ function privateWalletLsKey(ethAccount: Address) {
     return `burnWalletData_${ethAccount}`
 }
 
-function savePrivateWalletData(privateWallet: BurnWallet) {
+function savePrivateWalletData(privateWallet: BurnViewKeyManager) {
     localStorage.setItem(privateWalletLsKey(privateWallet.privateData.ethAccount), JSON.stringify(privateWallet.privateData))
 }
 
@@ -248,7 +248,7 @@ async function updateWalletInfoUi(
     const publicBalance = await wormholeTokenWallet.read.balanceOf([publicAddress])
     everyClass(".publicBalance", (el) => el.innerText = formatUnits(publicBalance, decimals))
     //@ts-ignore
-    const privateWallet = window.privateWallet as BurnWallet | undefined
+    const privateWallet = window.privateWallet as BurnViewKeyManager | undefined
     const allBurnAccounts = privateWallet ? getDeterministicBurnAccounts(privateWallet) : [];
     if (privateWallet && allBurnAccounts.length > 0) {
         let dotCount = 0;
@@ -280,7 +280,7 @@ let powDotInterval: ReturnType<typeof setInterval> | null = null
 
 function updateTotalSelectedSpendable() {
     //@ts-ignore
-    const privateWallet = window.privateWallet as BurnWallet | undefined
+    const privateWallet = window.privateWallet as BurnViewKeyManager | undefined
     if (!privateWallet) { totalSelectedSpendableEl!.textContent = "0"; return }
 
     let total = 0n
@@ -488,7 +488,7 @@ async function getPublicWallet() {
  * Creates all missing accounts in parallel with async PoW.
  * Progressively updates the UI as each account finishes.
  */
-async function ensurePageAccounts(page: number, privateWallet: BurnWallet, wormholeTokenWallet: WormholeToken, clearMsg = true) {
+async function ensurePageAccounts(page: number, privateWallet: BurnViewKeyManager, wormholeTokenWallet: WormholeToken, clearMsg = true) {
     const startIndex = page * BURN_ACCOUNTS_PER_PAGE
     const endIndex = startIndex + BURN_ACCOUNTS_PER_PAGE
     const decimals = Number(await wormholeToken.read.decimals())
@@ -538,12 +538,12 @@ async function connectPrivateWallet() {
     const POW_DIFFICULTY = BigInt(await wormholeTokenWallet.read.POW_DIFFICULTY())
 
     const storedData = loadPrivateWalletData(publicAddress)
-    let privateWallet: BurnWallet
+    let privateWallet: BurnViewKeyManager
     if (storedData) {
         logUi("restoring private wallet from local storage...", true)
-        privateWallet = new BurnWallet(publicWallet, POW_DIFFICULTY, { privateWalletData: storedData, acceptedChainIds: [chainId] })
+        privateWallet = new BurnViewKeyManager(publicWallet, POW_DIFFICULTY, { privateWalletData: storedData, acceptedChainIds: [chainId] })
     } else {
-        privateWallet = new BurnWallet(publicWallet, POW_DIFFICULTY, { acceptedChainIds: [chainId] })
+        privateWallet = new BurnViewKeyManager(publicWallet, POW_DIFFICULTY, { acceptedChainIds: [chainId] })
         logUi("creating private wallet...\n please sign the message in your wallet", true)
         await privateWallet.getDeterministicViewKeyRoot()
     }
@@ -573,7 +573,7 @@ async function getPrivateWallet() {
         await connectPrivateWallet()
     }
     //@ts-ignore
-    const privateWallet = window.privateWallet as BurnWallet
+    const privateWallet = window.privateWallet as BurnViewKeyManager
     //@ts-ignore
     const burnAccount = window.burnAccount
     return { publicWallet, wormholeTokenWallet, publicAddress, privateWallet, burnAccount }
@@ -598,7 +598,7 @@ async function prevBurnAccountsPageHandler() {
     if (currentBurnPage <= 0) return
     currentBurnPage -= 1
     //@ts-ignore
-    const privateWallet = window.privateWallet as BurnWallet | undefined
+    const privateWallet = window.privateWallet as BurnViewKeyManager | undefined
     if (!privateWallet) return
     const decimals = Number(await wormholeToken.read.decimals())
     updateBurnAccountsListUi(getDeterministicBurnAccounts(privateWallet), decimals)
@@ -621,7 +621,7 @@ async function nextBurnAccountsPageHandler() {
 
 function selectAllRemintHandler() {
     //@ts-ignore
-    const privateWallet = window.privateWallet as BurnWallet | undefined
+    const privateWallet = window.privateWallet as BurnViewKeyManager | undefined
     if (!privateWallet) return
 
     const checkboxes = Array.from(burnAccountsListEl!.querySelectorAll<HTMLInputElement>('input[name="remintBurnAddresses"]'))

@@ -6,13 +6,13 @@ import { network } from "hardhat";
 // TODO fix @warptoad/gigabridge-js why it doesn't automatically gets @aztec/aztec.js
 import { deployPoseidon2Huff } from "@warptoad/gigabridge-js"
 
-import { WormholeTokenContractName, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100, POW_DIFFICULTY, RE_MINT_LIMIT, MAX_TREE_DEPTH } from "../../src/constants.ts";
+import { WormholeTokenContractName, reMint2InVerifierContractName, reMint32InVerifierContractName, reMint100InVerifierContractName, leanIMTPoseidon2ContractName, ZKTranscriptLibContractName100, POW_DIFFICULTY, RE_MINT_LIMIT, MAX_TREE_DEPTH } from "../src/constants.ts";
 //import { noir_test_main_self_relay, noir_verify_sig } from "../src/noirtests.js";
-import { getBackend } from "../../src/proving.ts";
+import { getBackend } from "../src/proving.ts";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
-import { BurnWallet } from "../../src/BurnWallet.ts";
+import { BurnWallet } from "../src/BurnWallet.ts";
 import { getContract, padHex, toHex} from "viem";
-import type { UnsyncedBurnAccountNonDet } from "../../src/types.ts";
+import type { UnsyncedBurnAccountNonDet } from "../src/types.ts";
 import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,7 +93,7 @@ describe("Token", async function () {
             const __dirname = dirname(fileURLToPath(import.meta.url));
             const path =  join(__dirname, '../data/privateDataAlice.json')
             console.log({path})
-            await writeFile(path, JSON.stringify(alicePrivate.privateData, null, 2), 'utf-8');
+            await writeFile(path, alicePrivate.exportPrivateWalletData(), 'utf-8');
             
         })
     })

@@ -8,7 +8,7 @@ import { ENCRYPTED_TOTAL_SPENT_PADDING, WORMHOLE_TOKEN_DEPLOYMENT_BLOCK } from "
 import type { BurnAccount, PreSyncedTree, SyncedBurnAccountNonDet, UnsyncedBurnAccountNonDet, WormholeToken } from "./types.ts"
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { hashNullifier } from "./hashing.ts"
-import { BurnWallet } from "./BurnWallet.ts"
+import { BurnViewKeyManager } from "./BurnViewKeyManager.ts"
 import { getAllBurnAccounts } from "./utils.ts"
 
 export function getDeploymentBlock(chainId: number) {
@@ -219,8 +219,8 @@ export async function syncBurnAccount(
  * @param param0 
  * @returns 
  */
-export async function syncMultipleBurnAccounts({ wormholeToken, archiveNode, privateWallet, burnAddressesToSync }: { archiveNode: PublicClient, wormholeToken: WormholeToken, privateWallet: BurnWallet, burnAddressesToSync?: Address[] }) {
-    const allBurnAccounts = getAllBurnAccounts(privateWallet.privateData)
+export async function syncMultipleBurnAccounts({ wormholeToken, archiveNode, BurnViewKeyManager, burnAddressesToSync }: { archiveNode: PublicClient, wormholeToken: WormholeToken, BurnViewKeyManager: BurnViewKeyManager, burnAddressesToSync?: Address[] }) {
+    const allBurnAccounts = getAllBurnAccounts(BurnViewKeyManager.privateData)
     burnAddressesToSync ??= allBurnAccounts.map((v) => v.burnAddress)
 
     const syncedBurnAccounts = await Promise.all(allBurnAccounts.map((burnAccount) => {
@@ -230,13 +230,13 @@ export async function syncMultipleBurnAccounts({ wormholeToken, archiveNode, pri
             return burnAccount
         }
     }))
-    syncedBurnAccounts.map((burnAccount)=>privateWallet.importBurnAccount(burnAccount))
-    return privateWallet
+    syncedBurnAccounts.map((burnAccount)=>BurnViewKeyManager.importBurnAccount(burnAccount))
+    return BurnViewKeyManager
 }
 
-// export async function isSyncedPrivateWallet({ privateWallet, wormholeToken }: { privateWallet: SyncedPrivateWallet | UnsyncedPrivateWallet, wormholeToken: WormholeToken | WormholeTokenTest }) {
-//     if ("accountNonce" in privateWallet) {
-//         const nextNullifier = hashNullifier({ accountNonce: (privateWallet as SyncedPrivateWallet).accountNonce, viewingKey: privateWallet.viewingKey });
+// export async function isSyncedPrivateWallet({ BurnViewKeyManager, wormholeToken }: { BurnViewKeyManager: SyncedPrivateWallet | UnsyncedPrivateWallet, wormholeToken: WormholeToken | WormholeTokenTest }) {
+//     if ("accountNonce" in BurnViewKeyManager) {
+//         const nextNullifier = hashNullifier({ accountNonce: (BurnViewKeyManager as SyncedPrivateWallet).accountNonce, viewingKey: BurnViewKeyManager.viewingKey });
 //         const res = await wormholeToken.read.nullifiers([nextNullifier]);
 //         return !Boolean(res); //0n === not spend, any other amount = spend
 //     } else {

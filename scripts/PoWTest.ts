@@ -3,8 +3,8 @@ import { beforeEach, describe, it, after } from "node:test";
 
 import { network } from "hardhat";
 
-import type { BurnAccount, UnsyncedBurnAccountNonDet } from "../../src/types.ts";
-import { BurnWallet } from "../../src/BurnWallet.ts";
+import type { BurnAccount, UnsyncedBurnAccountNonDet } from "../src/types.ts";
+import { BurnViewKeyManager } from "../src/BurnWallet.ts";
 
 describe("Token", async function () {
     const { viem } = await network.connect();
@@ -19,7 +19,7 @@ describe("Token", async function () {
             // 2^(intSize-POW_BITS)-1;
             const POW_DIFFICULTY = 2n**(256n-POW_BITS)-1n//16n ** (64n - POW_LEADING_ZEROS) - 1n;
             
-            const alicePrivate = new BurnWallet(alice, POW_DIFFICULTY, { acceptedChainIds: [BigInt(await publicClient.getChainId())]})
+            const alicePrivate = new BurnViewKeyManager(alice, POW_DIFFICULTY, { acceptedChainIds: [BigInt(await publicClient.getChainId())]})
             const amountBurnAddresses = 10
 
             const burnAccounts:UnsyncedBurnAccountNonDet[] = await alicePrivate.createBurnAccountsBulk(amountBurnAddresses,{async:true})

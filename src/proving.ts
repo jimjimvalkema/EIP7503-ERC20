@@ -21,7 +21,7 @@ const circuits: { [k: number]: any } = {
 }
 
 //import { Fr } from "@aztec/aztec.js"
-import { BurnWallet } from "./BurnWallet.ts"
+import { BurnViewKeyManager } from "./BurnViewKeyManager.ts"
 import { assert } from "node:console"
 import { getAllBurnAccounts, getAvailableThreads, getCircuitSize, getCircuitSizesFromContract, hexToU8AsHexLen32, padArray, padWithRandomHex, randomBN254FieldElement } from "./utils.ts"
 import { signPrivateTransfer } from "./signing.ts"
@@ -265,21 +265,21 @@ export function getPrivInputs(
 export async function createRelayerInputs(
     recipient: Address,
     amount: bigint,
-    privateWallet: BurnWallet,
+    BurnViewKeyManager: BurnViewKeyManager,
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
     opts: CreateRelayerInputsOpts & { feeData: FeeData }
-): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }>;
+): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnViewKeyManager } }>;
 
 // Overload 2: feeData omitted → SelfRelayInputs
 export async function createRelayerInputs(
     recipient: Address,
     amount: bigint,
-    privateWallet: BurnWallet,
+    BurnViewKeyManager: BurnViewKeyManager,
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
     opts?: CreateRelayerInputsOpts & { feeData?: undefined }
-): Promise<{ relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }>;
+): Promise<{ relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnViewKeyManager } }>;
 
 /**
  * Creates the inputs needed to relay a private transfer (either self-relay or via a relayer).
@@ -293,7 +293,7 @@ export async function createRelayerInputs(
  *
  * @param amount              - Amount to re-mint (required).
  * @param recipient           - Address that will receive the re-minted tokens (required).
- * @param privateWallet       - The caller's private wallet containing burn accounts and signing keys (required).
+ * @param BurnViewKeyManager       - The caller's private wallet containing burn accounts and signing keys (required).
  * @param wormholeToken       - Contract instance for the WormholeToken (required).
  * @param archiveClient       - Archive-node viem PublicClient used for syncing and log queries (required).
  *
@@ -309,7 +309,7 @@ export async function createRelayerInputs(
  * @param callData            - Arbitrary calldata forwarded after re-mint. Defaults to `"0x"` (none).
  * @param callValue           - Native value forwarded with the call. Defaults to `0`.
  * @param callCanFail         - Whether a revert in the forwarded call is tolerated. Defaults to `true`.
- * @param burnAddresses       - Subset of burn addresses to spend from. Defaults to every address in `privateWallet`.
+ * @param burnAddresses       - Subset of burn addresses to spend from. Defaults to every address in `BurnViewKeyManager`.
  * @param circuitSize         - Circuit size (number of burn-account slots). Defaults to the minimum size that fits the spend (e.g. 2 or 100).
  * @param encryptedBlobLen    - Byte length of each encrypted total-spend blob. Defaults to `ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD`. Changing this makes the transaction distinguishable and reduces anonymity.
  *
@@ -325,14 +325,14 @@ export async function createRelayerInputs(
 export async function createRelayerInputs(
     recipient: Address,
     amount: bigint,
-    privateWallet: BurnWallet,
+    BurnViewKeyManager: BurnViewKeyManager,
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
     { circuitSizes, threads, chainId, callData = "0x", callValue = 0n, callCanFail = false, feeData, burnAddresses, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, reMintLimit, maxTreeDepth, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD }:
         CreateRelayerInputsOpts & { feeData?: FeeData } = {}
-): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } } | { relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnWallet } }> {
+): Promise<{ relayInputs: RelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnViewKeyManager } } | { relayInputs: SelfRelayInputs, syncedData: { syncedTree: PreSyncedTree, syncedPrivateWallet: BurnViewKeyManager } }> {
     // set defaults
-    burnAddresses ??= getAllBurnAccounts(privateWallet.privateData).map((b) => b.burnAddress)
+    burnAddresses ??= getAllBurnAccounts(BurnViewKeyManager.privateData).map((b) => b.burnAddress)
     powDifficulty ??= await wormholeToken.read.POW_DIFFICULTY()
     reMintLimit ??= await wormholeToken.read.RE_MINT_LIMIT();
     circuitSizes ??= await getCircuitSizesFromContract(wormholeToken);
@@ -354,10 +354,10 @@ export async function createRelayerInputs(
     const syncedPrivateWallet = await syncMultipleBurnAccounts({
         wormholeToken: wormholeToken,
         archiveNode: archiveClient,
-        privateWallet: privateWallet,
+        BurnViewKeyManager: BurnViewKeyManager,
         burnAddressesToSync: burnAddresses //@notice, only syncs these addresses!
     })
-    const burnAccounts = getAllBurnAccounts(privateWallet.privateData) as SyncedBurnAccountNonDet[]
+    const burnAccounts = getAllBurnAccounts(BurnViewKeyManager.privateData) as SyncedBurnAccountNonDet[]
 
     // select burn accounts for spend. Takes highest balances first
     const { burnAccountsAndAmounts, encryptedTotalMinted } = await prepareBurnAccountsForSpend({ burnAccounts, selectBurnAddresses: burnAddresses, amount, largestCircuitSize: largestCircuitSize })
@@ -378,7 +378,7 @@ export async function createRelayerInputs(
     }
 
     const allSignatureDataPromise = signPrivateTransfer({
-        privateWallet: privateWallet,
+        BurnViewKeyManager: BurnViewKeyManager,
         signatureInputs: signatureInputs,
         chainId: Number(chainId),
         tokenAddress: wormholeToken.address,
@@ -386,7 +386,7 @@ export async function createRelayerInputs(
 
     const syncedTree = await syncedTreePromise;
     const { signatureData, signatureHash } = await allSignatureDataPromise;
-    privateWallet = syncedPrivateWallet
+    BurnViewKeyManager = syncedPrivateWallet
     //----------------------------------------------------------------------
 
     // ----- collect proof inputs from the burn accounts -----

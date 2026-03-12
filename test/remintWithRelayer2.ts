@@ -12,7 +12,7 @@ import { getSyncedMerkleTree } from "../src/syncing.ts";
 import { createRelayerInputs, getBackend } from "../src/proving.ts";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
-import { BurnWallet } from "../src/BurnWallet.ts";
+import { BurnViewKeyManager } from "../src/BurnWallet.ts";
 import { getContract, padHex, parseEventLogs, parseUnits, toHex, type Hash, type Hex } from "viem";
 import type { BurnAccount, FeeData, PrivateWalletData, UnsyncedBurnAccountDet } from "../src/types.ts";
 import { readFile } from "node:fs/promises";
@@ -92,7 +92,7 @@ describe("Token", async function () {
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
             const chainId = BigInt(await publicClient.getChainId())
-            const alicePrivate = new BurnWallet(alice, powDifficulty, {privateWalletData:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [chainId] })
+            const alicePrivate = new BurnViewKeyManager(alice, powDifficulty, {privateWalletData:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [chainId] })
             const aliceBurnAccount = await alicePrivate.createBurnAccount({viewingKeyIndex:0})
             const aliceRefundBurnAccount = await alicePrivate.createBurnAccount({viewingKeyIndex:1})
             const decimalsToken = await wormholeToken.read.decimals()

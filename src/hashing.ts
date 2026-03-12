@@ -3,7 +3,7 @@ import { recoverPublicKey, hashMessage, hexToBigInt, hexToBytes, toHex, getAddre
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { BURN_ADDRESS_TYPE, EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, FAKE_LEAF_DOMAIN, FAKE_NULLIFIER_DOMAIN, getPrivateReMintDomain, NULLIFIER_DOMAIN, PRIVATE_RE_MINT_712_TYPES, PRIVATE_RE_MINT_RELAYER_712_TYPES, TOTAL_BURNED_DOMAIN as TOTAL_BURNED_DOMAIN, TOTAL_MINTED_DOMAIN, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import type { FeeData, SignatureData, SignatureInputs, SignatureInputsWithFee, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.ts";
-import { BurnWallet } from "./BurnWallet.ts"
+import { BurnViewKeyManager } from "./BurnViewKeyManager.ts"
 import { encryptTotalSpend } from "./syncing.ts";
 
 // ------------- circuit spec -------------------

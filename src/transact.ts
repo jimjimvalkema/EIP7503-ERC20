@@ -5,13 +5,12 @@ import type { PreSyncedTree, RelayInputs, SelfRelayInputs, SyncedBurnAccountNonD
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { getDeploymentBlock } from "./syncing.ts";
 import { getBurnAddressSafe, hashBlindedAddressData } from "./hashing.ts";
-import { BurnWallet } from "./BurnWallet.ts";
+import { BurnViewKeyManager } from "./BurnViewKeyManager.ts";
 import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_SPENT_PADDING, GAS_LIMIT_TX } from "./constants.ts";
 import { createRelayerInputs } from "./proving.ts";
 
 
 /**
- * checks that at least the PoW nonce is correct,
  * that the merkle tree is not full and the balance of the recipient wont exceed reMintLimit
  * @notice does not check that the blindedAddressDataHash is correct!
  * TODO maybe put max tree depth in contract
@@ -23,7 +22,7 @@ import { createRelayerInputs } from "./proving.ts";
  * @returns 
  */
 export async function burn(
-    burnAddress: Address, amount: bigint, wormholeToken: WormholeTokenTest, account: Address, fullNode: PublicClient,
+    burnAddress: Address, amount: bigint, wormholeToken: WormholeTokenTest, account: Address,
     { difficulty, reMintLimit, maxTreeDepth }: { difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     difficulty ??= BigInt(await wormholeToken.read.POW_DIFFICULTY())
@@ -116,7 +115,7 @@ export async function superSafeBurn(
  *
  * @param amount              - Amount to re-mint (required).
  * @param recipient           - Address that will receive the re-minted tokens (required).
- * @param privateWallet       - The caller's private wallet containing burn accounts and signing keys (required).
+ * @param BurnViewKeyManager       - The caller's private wallet containing burn accounts and signing keys (required).
  * @param burnAddresses       - Burn addresses to spend from (required).
  * @param wormholeToken       - Contract instance for the WormholeToken (required).
  * @param archiveClient       - Archive-node viem PublicClient used for syncing and log queries (required).
@@ -146,7 +145,7 @@ export async function superSafeBurn(
 export async function proofAndSelfRelay(
     recipient: Address,
     amount: bigint,
-    privateWallet: BurnWallet,
+    BurnViewKeyManager: BurnViewKeyManager,
     wormholeToken: WormholeToken | WormholeTokenTest,
     archiveClient: PublicClient,
     { burnAddresses, threads, callData = "0x", callValue = 0n, callCanFail = false, preSyncedTree, backend, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth, encryptedBlobLen = ENCRYPTED_TOTAL_SPENT_PADDING + EAS_BYTE_LEN_OVERHEAD, powDifficulty, reMintLimit }:
@@ -158,7 +157,7 @@ export async function proofAndSelfRelay(
     const { relayInputs: selfRelayInputs } = await createRelayerInputs(
         recipient,
         amount,
-        privateWallet,
+        BurnViewKeyManager,
         wormholeToken,
         archiveClient,
         {
@@ -182,7 +181,7 @@ export async function proofAndSelfRelay(
 
     return await selfRelayTx(
         selfRelayInputs,
-        privateWallet.viemWallet,
+        BurnViewKeyManager.viemWallet,
         wormholeToken as WormholeTokenTest,
     )
 }

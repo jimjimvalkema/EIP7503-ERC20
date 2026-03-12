@@ -22,9 +22,9 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const path =  join(__dirname, './data/privateDataAlice.json')
 
-const CIRCUIT_SIZE = 100;
+const CIRCUIT_SIZE = 2;
 const provingThreads = 1 //1; //undefined  // giving the backend more threads makes it hang and impossible to debug // set to undefined to use max threads available
-const PRE_MADE_BURN_ACCOUNTS = JSON.parse(await readFile(path,{encoding:"utf-8"})) as PrivateWalletData;
+const PRE_MADE_BURN_ACCOUNTS = await readFile(path,{encoding:"utf-8"});
 
 export type WormholeTokenTest = ContractReturnType<typeof WormholeTokenContractName>
 
@@ -87,7 +87,7 @@ describe("Token", async function () {
 
     describe("Token", async function () {
         it("Should transfer", async function () {
-            const alicePrivate = new BurnWallet(alice, powDifficulty, {privateWalletData:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())] })
+            const alicePrivate = new BurnWallet(alice, powDifficulty, {walletDataImport:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             const aliceBurnAccount = await alicePrivate.createBurnAccount({viewingKeyIndex:0})
 
             let totalAmountInserts = 0
@@ -135,7 +135,7 @@ describe("Token", async function () {
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
-            const alicePrivate = new BurnWallet(alice, powDifficulty, {privateWalletData:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())], powDifficulty: powDifficulty })
+            const alicePrivate = new BurnWallet(alice, powDifficulty, {walletDataImport:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())], powDifficulty: powDifficulty })
             const aliceBurnAccount = await alicePrivate.createBurnAccount({viewingKeyIndex:0})
             const amountToBurn = 1000n * 10n ** 18n;
             await safeBurn(aliceBurnAccount, amountToBurn, wormholeTokenAlice, alice.account.address)
@@ -151,7 +151,7 @@ describe("Token", async function () {
                 const reMintTx = await proofAndSelfRelay(
                     reMintRecipient,
                     reMintAmount,
-                    alicePrivate,
+                    alicePrivate.burnViewKeyManager,
                     wormholeToken,
                     publicClient,
                     {
@@ -206,7 +206,7 @@ describe("Token", async function () {
             const amountFreeTokens = await wormholeTokenAlice.read.amountFreeTokens()
             await wormholeTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
 
-            const alicePrivate = new BurnWallet(alice, powDifficulty, {privateWalletData:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())] })
+            const alicePrivate = new BurnWallet(alice, powDifficulty, {walletDataImport:PRE_MADE_BURN_ACCOUNTS, acceptedChainIds: [BigInt(await publicClient.getChainId())] })
             // PoW nonce hashing is with workers so can be done in parallel!
             const [aliceBurnAccount1, aliceBurnAccount2] = await Promise.all([alicePrivate.createBurnAccount({viewingKeyIndex:0, async: true }), alicePrivate.createBurnAccount({viewingKeyIndex:1, async: true })])
 
@@ -224,7 +224,7 @@ describe("Token", async function () {
                 const reMintTx = await proofAndSelfRelay(
                     reMintRecipient,
                     reMintAmount,
-                    alicePrivate,
+                    alicePrivate.burnViewKeyManager,
                     wormholeToken,
                     publicClient,
                     {

@@ -1,7 +1,7 @@
 import { hashTypedData, hexToBigInt, recoverPublicKey, type Address, type Hash, type Hex, type Signature } from "viem";
 import type { SignatureData, SignatureInputs, SignatureInputsWithFee, u8sAsHexArrLen32, u8sAsHexArrLen64 } from "./types.ts";
 import { getPrivateReMintDomain, PRIVATE_RE_MINT_712_TYPES, PRIVATE_RE_MINT_RELAYER_712_TYPES } from "./constants.ts";
-import type { BurnWallet } from "./BurnWallet.ts";
+import type { BurnViewKeyManager } from "./BurnViewKeyManager.ts";
 import { poseidon2Hash } from "@zkpassport/poseidon2";
 import { hexToU8sAsHexArr } from "./utils.ts";
 
@@ -26,16 +26,16 @@ export function getViewingKey({ signature }: { signature: Hex }) {
 }
 
 export async function signPrivateTransfer(
-    args: { privateWallet: BurnWallet, signatureInputs: SignatureInputsWithFee, chainId: number, tokenAddress: Address }
+    args: { BurnViewKeyManager: BurnViewKeyManager, signatureInputs: SignatureInputsWithFee, chainId: number, tokenAddress: Address }
 ): Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }>;
 
 export async function signPrivateTransfer(
-    args: { privateWallet: BurnWallet, signatureInputs: SignatureInputs, chainId: number, tokenAddress: Address }
+    args: { BurnViewKeyManager: BurnViewKeyManager, signatureInputs: SignatureInputs, chainId: number, tokenAddress: Address }
 ): Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }>;
 
-export async function signPrivateTransfer({ privateWallet, signatureInputs, chainId, tokenAddress }: { privateWallet: BurnWallet, signatureInputs: SignatureInputs | SignatureInputsWithFee, chainId: number, tokenAddress: Address }):
+export async function signPrivateTransfer({ BurnViewKeyManager, signatureInputs, chainId, tokenAddress }: { BurnViewKeyManager: BurnViewKeyManager, signatureInputs: SignatureInputs | SignatureInputsWithFee, chainId: number, tokenAddress: Address }):
     Promise<{ viemFormatSignature: { signature: Hex; pubKeyX: Hex; pubKeyY: Hex; }, signatureData: SignatureData, signatureHash: Hex }> {
-    chainId ??= await privateWallet.viemWallet.getChainId()
+    chainId ??= await BurnViewKeyManager.viemWallet.getChainId()
     const domain = getPrivateReMintDomain(chainId, tokenAddress)
 
     const baseMessage = {
@@ -66,14 +66,14 @@ export async function signPrivateTransfer({ privateWallet, signatureInputs, chai
         }
         // hash and sign: else case does exactly the same but typescript freaks out if outside of if clause
         hash = hashTypedData({ domain, types, primaryType, message })
-        signature = await privateWallet.viemWallet.signTypedData({ account: privateWallet.privateData.ethAccount, domain, types, primaryType, message })
+        signature = await BurnViewKeyManager.viemWallet.signTypedData({ account: BurnViewKeyManager.privateData.ethAccount, domain, types, primaryType, message })
     } else {
         types = PRIVATE_RE_MINT_712_TYPES
         primaryType = "reMint" as const
         message = baseMessage
         // hash and sign: same as above but typescript freaks out if outside of if clause
         hash = hashTypedData({ domain, types, primaryType, message })
-        signature = await privateWallet.viemWallet.signTypedData({ account: privateWallet.privateData.ethAccount, domain, types, primaryType, message })
+        signature = await BurnViewKeyManager.viemWallet.signTypedData({ account: BurnViewKeyManager.privateData.ethAccount, domain, types, primaryType, message })
     }
     const { pubKeyX, pubKeyY } = await extractPubKeyFromSig({ hash, signature })
     return {

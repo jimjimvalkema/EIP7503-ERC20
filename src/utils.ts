@@ -1,7 +1,7 @@
 import { bytesToHex, hexToBytes, padHex, toHex, type Hex } from "viem";
 import type { WormholeTokenTest } from "../test/remint2.test.ts";
 import type { BurnAccount, PrivateWalletData, u8AsHex, u8sAsHexArrLen32, u8sAsHexArrLen64, WormholeToken } from "./types.ts";
-import type { BurnWallet } from "./BurnWallet.ts";
+import type { BurnViewKeyManager } from "./BurnViewKeyManager.ts";
 import { FIELD_MODULUS } from "./constants.ts";
 
 export function padWithRandomHex({ arr, len, hexSize, dir }: { arr: Hex[], len: number, hexSize: number, dir: 'left' | 'right' }): Hex[] {
@@ -121,7 +121,7 @@ export function getAllBurnAccounts(privateData: PrivateWalletData,
     ];
 }
 
-export function getDeterministicBurnAccounts(burnWallet: BurnWallet,
+export function getDeterministicBurnAccounts(burnWallet: BurnViewKeyManager,
     { difficulty = burnWallet.defaults.powDifficulty, chainId = burnWallet.defaults.chainId }:
         { difficulty?: bigint, chainId?: bigint } = {}
 
@@ -132,8 +132,8 @@ export function getDeterministicBurnAccounts(burnWallet: BurnWallet,
 
 }
 
-export async function getFreshBurnAccount(privateWallet: BurnWallet, wormholeToken: WormholeTokenTest | WormholeToken) {
-    const neverUsedBurnAccounts = getAllBurnAccounts(privateWallet.privateData).filter(async (b) => await wormholeToken.read.balanceOf([b.burnAddress]) === 0n)
+export async function getFreshBurnAccount(BurnViewKeyManager: BurnViewKeyManager, wormholeToken: WormholeTokenTest | WormholeToken) {
+    const neverUsedBurnAccounts = getAllBurnAccounts(BurnViewKeyManager.privateData).filter(async (b) => await wormholeToken.read.balanceOf([b.burnAddress]) === 0n)
 }
 
 export async function getCircuitSizesFromContract(wormholeToken: WormholeToken | WormholeTokenTest) {
