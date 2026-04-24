@@ -126,6 +126,8 @@ export type {
     DerivedBurnAccountImportable,
     SyncedDerivedBurnAccount,
     DerivedBurnAccount,
+    UnsyncedSingleUseBurnAccount,
+    SyncedSingleUseBurnAccount,
     UnsyncedUnknownBurnAccount,
     UnknownBurnAccountRecoverable,
     UnknownBurnAccountImportable,

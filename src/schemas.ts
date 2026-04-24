@@ -124,6 +124,12 @@ export const DerivedBurnAccountRecoverableSchema = BurnAccountBaseSchema.omit(de
 export const DerivedBurnAccountImportableSchema = DerivedBurnAccountRecoverableSchema.extend({ syncData: BurnAccountImportableSyncDataSchema, ...BurnAccountBaseSchema.pick(importableExtraKeys).shape  });
 export const DerivedBurnAccountSchema = BurnAccountBaseSchema.extend({ syncData: BurnAccountSyncDataSchema.optional() });
 
+// --- single-use family -------------------------------------------------------
+// Single-use accounts extend the derived base with contractAddress, which is
+// needed to re-derive the viewing key via hashSingleUseViewingKey.
+export const UnsyncedSingleUseBurnAccountSchema = BurnAccountBaseSchema.extend({ contractAddress: AddressSchema });
+export const SyncedSingleUseBurnAccountSchema = UnsyncedSingleUseBurnAccountSchema.extend({ syncData: BurnAccountSyncDataSchema });
+
 // --- unknown family ----------------------------------------------------------
 
 export const UnsyncedUnknownBurnAccountSchema = BurnAccountBaseSchema.omit(derivationKeys);
@@ -181,6 +187,9 @@ export type DerivedBurnAccountRecoverable = WithReadonlyBase<z.infer<typeof Deri
 export type DerivedBurnAccountImportable = WithReadonlyBase<z.infer<typeof DerivedBurnAccountImportableSchema>>;
 export type SyncedDerivedBurnAccount = WithReadonlyBase<z.infer<typeof SyncedDerivedBurnAccountSchema>>;
 export type DerivedBurnAccount = WithReadonlyBase<z.infer<typeof DerivedBurnAccountSchema>>;
+
+export type UnsyncedSingleUseBurnAccount = WithReadonlyBase<z.infer<typeof UnsyncedSingleUseBurnAccountSchema>>;
+export type SyncedSingleUseBurnAccount = WithReadonlyBase<z.infer<typeof SyncedSingleUseBurnAccountSchema>>;
 
 export type UnsyncedUnknownBurnAccount = WithReadonlyBase<z.infer<typeof UnsyncedUnknownBurnAccountSchema>>;
 export type UnknownBurnAccountRecoverable = WithReadonlyBase<z.infer<typeof UnknownBurnAccountRecoverableSchema>>;
@@ -315,6 +324,9 @@ export const ViewKeyDataSchema = <T extends z.ZodTypeAny>(burnAccountSchema: T) 
             pubKey: PubKeyHexSchema.optional(),
             detViewKeyCounter: z.number().int().nonnegative(),
             detViewKeyRoot: HexSchema.optional(),
+            // Single-use accounts use a contract-specific viewing key derivation so that
+            // freshness only requires checking one token, keyed [chainId][difficulty][contract].
+            singleUseViewKeyCounter: z.number().int().nonnegative().default(0),
             burnAccounts: keyValidatedRecord(
                 Hex32Schema,
                 keyValidatedRecord(
@@ -322,6 +334,7 @@ export const ViewKeyDataSchema = <T extends z.ZodTypeAny>(burnAccountSchema: T) 
                     z.object({
                         derivedBurnAccounts: z.array(burnAccountSchema),
                         unknownBurnAccounts: keyValidatedRecord(AddressSchema, burnAccountSchema),
+                        singleUseBurnAccounts: keyValidatedRecord(AddressSchema, z.array(UnsyncedSingleUseBurnAccountSchema)).optional(),
                     })
                 )
             ),

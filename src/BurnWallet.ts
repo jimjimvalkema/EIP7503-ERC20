@@ -628,7 +628,7 @@ export class BurnWallet {
      * for when you just want to burn without thinking about it
      * or when you need to receive some change for relayer fees, without revealing who you are.
      * @notice this.burnViewKeyManager.getFreshBurnAccount checks if it's fresh by checking the balance, but only on one chain and balance of one coin. It is not fool proof. Maybe we need derivation path for one time use addresses
-     * @param tokenAddress 
+     * @param tokenAddress
      * @param signingEthAccount
      * @param param2
      * @returns
@@ -643,6 +643,38 @@ export class BurnWallet {
             await this.#getPublicClient({ type: "full", chainId: chainId }),
             (await this.#getContractConfig(tokenAddress, chainId)).POW_DIFFICULTY,
             { chainId: chainId }
+        )
+    }
+
+    /**
+     * Creates a single-use burn account specific to `tokenAddress` + chain.
+     * The viewing key derivation includes both the contract address and chain ID,
+     * so freshness can be verified by checking only this token's balance.
+     */
+    async createSingleUseBurnAccount(tokenAddress: Address, { signingEthAccount, chainId, viewingKeyIndex, async: async }: { signingEthAccount?: Address, chainId?: number, viewingKeyIndex?: number, async?: boolean } = {}) {
+        [signingEthAccount, chainId] = await Promise.all([
+            signingEthAccount ?? this.defaultSigner(),
+            chainId ?? this.viemWallet.getChainId(),
+        ])
+        const difficulty = (await this.#getContractConfig(tokenAddress, chainId)).POW_DIFFICULTY
+        return await this.burnViewKeyManager.createSingleUseBurnAccount(tokenAddress, chainId, difficulty, { signingEthAccount, viewingKeyIndex, async: async })
+    }
+
+    /**
+     * Returns a single-use burn account with zero balance for `tokenAddress`.
+     * Prefer this over `getFreshBurnAccount` when receiving relayer fee refunds —
+     * the contract-specific derivation means a single balance check is sufficient.
+     */
+    async getFreshSingleUseBurnAccount(tokenAddress: Address, { signingEthAccount, chainId }: { signingEthAccount?: Address, chainId?: number } = {}) {
+        [signingEthAccount, chainId] = await Promise.all([
+            signingEthAccount ?? this.defaultSigner(),
+            chainId ?? this.viemWallet.getChainId(),
+        ])
+        return await this.burnViewKeyManager.getFreshSingleUseBurnAccount(
+            tokenAddress,
+            await this.#getPublicClient({ type: "full", chainId: chainId }),
+            (await this.#getContractConfig(tokenAddress, chainId)).POW_DIFFICULTY,
+            { signingEthAccount, chainId }
         )
     }
 

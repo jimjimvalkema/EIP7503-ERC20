@@ -65,12 +65,30 @@ export function hashTotalBurnedLeaf({ burnAddress, totalBurned }: { burnAddress:
 }
 
 // ----------
-export function hashViewKeyFromRoot(viewKeyRoot:bigint, viewingKeyIndex:bigint) {
+// Regular accounts: viewingKey is shared across all tokens on the same chain.
+export function hashRegularViewingKey(viewKeyRoot:bigint, viewingKeyIndex:bigint) {
     return poseidon2Hash([
             viewKeyRoot,
             viewingKeyIndex
         ])
 
+}
+
+// Single-use accounts: viewingKey is specific to one contract+chain so freshness
+// only requires checking that one token. The ZK circuit is unaffected —
+// viewingKey is always a private input.
+export function hashSingleUseViewingKey(
+    viewKeyRoot: bigint,
+    viewingKeyIndex: bigint,
+    contractAddress: Address,
+    chainId: bigint
+): bigint {
+    return poseidon2Hash([
+        viewKeyRoot,
+        viewingKeyIndex,
+        hexToBigInt(contractAddress as Hex),
+        chainId,
+    ])
 }
 // ------------
 
