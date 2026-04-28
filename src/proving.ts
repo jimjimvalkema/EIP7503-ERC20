@@ -22,7 +22,7 @@ const circuits: { [circuitSize: number]: any } = {
 //import { Fr } from "@aztec/aztec.js"
 import { BurnViewKeyManager } from "./BurnViewKeyManager.ts"
 import { assert } from "node:console"
-import { getAcceptedChainIdFromContract, getAllBurnAccounts, getAvailableThreads, getCircuitSize, getCircuitSizesFromContract, getTransWarpTokenContract, hexToU8AsHexLen32, padArray, padWithRandomHex, randomBN254FieldElement } from "./utils.ts"
+import { filterBurnAccounts, getAcceptedChainIdFromContract, getAvailableThreads, getCircuitSize, getCircuitSizesFromContract, getTransWarpTokenContract, hexToU8AsHexLen32, padArray, padWithRandomHex, randomBN254FieldElement } from "./utils.ts"
 import { signPrivateTransfer } from "./signing.ts"
 
 export function formatMerkleProof(merkleProof: LeanIMTMerkleProof<bigint>, maxTreeDepth: number): MerkleData {
@@ -270,7 +270,11 @@ export async function selectBurnAccountsForClaim(
     tokenAddress = getAddress(tokenAddress)
     signingEthAccount = getAddress(signingEthAccount)
     // TODO should be a minimum powDifficulty
-    const allBurnAccounts = getAllBurnAccounts(burnViewKeyManager.privateData, { ethAccounts: [signingEthAccount], chainIds: [chainId], difficulties: [BigInt(powDifficulty)] }) as SyncedBurnAccount[]
+    const allBurnAccounts = filterBurnAccounts(
+        burnViewKeyManager.privateData.burnAccounts, 
+        {
+            tokenAddresses:[tokenAddress], ethAccounts: [signingEthAccount], chainIds: [chainId], difficulties: [BigInt(powDifficulty)] 
+        }) as SyncedBurnAccount[]
     burnAddresses ??= allBurnAccounts.map((b) => b.burnAddress)
 
     // select burn accounts for spend. Takes highest balances first

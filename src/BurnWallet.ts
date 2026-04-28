@@ -12,7 +12,7 @@ import { burn, relayTx, selfRelayTx, superSafeBurn, superSafeBurnBulk } from "./
 import type { TransWarpToken$Type } from "../artifacts/contracts/TransWarpToken.sol/artifacts.ts"
 import TransWarpTokenArtifact from '../artifacts/contracts/TransWarpToken.sol/TransWarpToken.json' with {"type": "json"};
 import { createRelayerInputs, hashAndProof, selectBurnAccountsForClaim, selectSmallFirst, signAndEncrypt } from "./proving.ts";
-import { getAllBurnAccounts, getCircuitSize, getContractConfig, getTransWarpTokenContract } from "./utils.ts";
+import { filterBurnAccounts, getCircuitSize, getContractConfig, getTransWarpTokenContract } from "./utils.ts";
 //import { findPoWNonceAsync } from "./hashingAsync.js";
 
 export const viemAccountNotSetErr = `viem wallet not created with account set. pls do: 
@@ -386,8 +386,8 @@ export class BurnWallet {
     }
 
 
-    async getBlockNumber(chainId:number) {
-        return await (await this.#getPublicClient({type:"full", chainId})).getBlockNumber()
+    async getBlockNumber(chainId: number) {
+        return await (await this.#getPublicClient({ type: "full", chainId })).getBlockNumber()
     }
 
     /** Not async so callers can destructure individual promises without awaiting everything.
@@ -555,7 +555,7 @@ export class BurnWallet {
     ): Promise<SelfRelayInputs>;
     async easyProof(
         tokenAddress: Address, recipient: Address, amount: bigint,
-        opts: Omit<CreateRelayerInputsOpts, "fullNode" | "powDifficulty" | "maxTreeDepth" | "chainId" | "circuitSizes" | "preSyncedTree" | "feeData" > & { signingEthAccount?: Address, chainId?: number, feeData?: FeeDataOptionals } = {}
+        opts: Omit<CreateRelayerInputsOpts, "fullNode" | "powDifficulty" | "maxTreeDepth" | "chainId" | "circuitSizes" | "preSyncedTree" | "feeData"> & { signingEthAccount?: Address, chainId?: number, feeData?: FeeDataOptionals } = {}
     ) {
         const signingEthAccount = opts.signingEthAccount ? opts.signingEthAccount : await this.defaultSigner()
         delete opts.signingEthAccount
@@ -686,9 +686,10 @@ export class BurnWallet {
         // if ("viewingKey" in burnAccount) return burnAccount as BurnAccount;
         // const { burnAddress } = burnAccount
         const difficulty = BigInt((await this.#getContractConfig(tokenAddress, chainId)).POW_DIFFICULTY)
-        const allBurnAccounts = getAllBurnAccounts(
-            this.burnViewKeyManager.privateData,
+        const allBurnAccounts = filterBurnAccounts(
+            this.burnViewKeyManager.privateData.burnAccounts,
             {
+                tokenAddresses:[tokenAddress],
                 difficulties: [difficulty],
                 chainIds: [BigInt(chainId)],
                 ethAccounts: undefined

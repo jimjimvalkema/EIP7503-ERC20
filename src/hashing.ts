@@ -80,13 +80,13 @@ export function hashRegularViewingKey(viewKeyRoot:bigint, viewingKeyIndex:bigint
 export function hashSingleUseViewingKey(
     viewKeyRoot: bigint,
     viewingKeyIndex: bigint,
-    contractAddress: Address,
+    tokenAddress: Address,
     chainId: bigint
 ): bigint {
     return poseidon2Hash([
         viewKeyRoot,
         viewingKeyIndex,
-        hexToBigInt(contractAddress as Hex),
+        hexToBigInt(tokenAddress as Hex),
         chainId,
     ])
 }

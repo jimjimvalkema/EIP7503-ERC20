@@ -8,7 +8,7 @@ import type { BurnAccount, PreSyncedTree, SyncedBurnAccount, TransWarpToken } fr
 import { poseidon2Hash } from "@zkpassport/poseidon2"
 import { hashNullifier } from "./hashing.ts"
 import { BurnViewKeyManager } from "./BurnViewKeyManager.ts"
-import { getAllBurnAccounts, getTransWarpTokenContract, transwarpTokenAbi } from "./utils.ts"
+import {  filterBurnAccounts, getTransWarpTokenContract, transwarpTokenAbi } from "./utils.ts"
 import pLimit from "p-limit"
 
 export const poseidon2IMTHashFunc: LeanIMTHashFunction = (a: bigint, b: bigint) => poseidon2Hash([a, b])
@@ -278,7 +278,7 @@ export async function syncMultipleBurnAccounts(
     { syncTillBlock, burnAddressesToSync, ethAccounts, maxNonce, chainId, concurrency = 5, onAccountSynced }: { syncTillBlock?: bigint, maxNonce?: bigint, ethAccounts?: Address[], burnAddressesToSync?: Address[], chainId?: Hex, concurrency?: number, onAccountSynced?: (burnAccount: BurnAccount) => void } = {}) {
     syncTillBlock ??= await archiveNode.getBlockNumber()
     const limit = pLimit(concurrency)
-    const allBurnAccounts = getAllBurnAccounts(burnViewKeyManager.privateData, { ethAccounts })
+    const allBurnAccounts = filterBurnAccounts(burnViewKeyManager.privateData.burnAccounts, { ethAccounts, singleUseAccounts:false })
     burnAddressesToSync = burnAddressesToSync ? burnAddressesToSync.map((a) => getAddress(a)) : allBurnAccounts.map((v) => getAddress(v.burnAddress))
     console.log(`syncing ${burnAddressesToSync.length} burn accounts with max concurrency: ${concurrency}`)
     const startTime = Date.now()

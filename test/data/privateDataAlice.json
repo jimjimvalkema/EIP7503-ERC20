@@ -1808,7 +1808,8 @@
                   "powNonce": "0x2b9c2a79de9835c66d2e804e232779d9bd444646b126bcba8f68c2339d9e1b4c"
                 }
               ],
-              "unknownBurnAccounts": []
+              "unknownBurnAccounts": [],
+              "singleUseBurnAccounts": {}
             }
           }
         }

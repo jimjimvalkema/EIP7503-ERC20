@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isHex, isAddress, getAddress } from "viem";
+import { isHex, isAddress, getAddress, type Address } from "viem";
 
 // --- zodified viem types  ---------------------------------------------------------------
 
@@ -58,13 +58,13 @@ export const BurnAccountImportableSyncFieldsSchema = BurnAccountSyncFieldsSchema
     minProvableBlock: true,
 });
 
-// chainId (hex) -> contractAddress -> sync data
+// chainId (hex) -> tokenAddress -> sync data
 export const BurnAccountSyncDataSchema = z.record(
     HexSchema,
     z.record(AddressSchema, BurnAccountSyncFieldsSchema)
 );
 
-// chainId (hex) -> contractAddress -> importable sync data (minimal)
+// chainId (hex) -> tokenAddress -> importable sync data (minimal)
 export const BurnAccountImportableSyncDataSchema = z.record(
     HexSchema,
     z.record(AddressSchema, BurnAccountImportableSyncFieldsSchema)
@@ -125,9 +125,9 @@ export const DerivedBurnAccountImportableSchema = DerivedBurnAccountRecoverableS
 export const DerivedBurnAccountSchema = BurnAccountBaseSchema.extend({ syncData: BurnAccountSyncDataSchema.optional() });
 
 // --- single-use family -------------------------------------------------------
-// Single-use accounts extend the derived base with contractAddress, which is
+// Single-use accounts extend the derived base with tokenAddress, which is
 // needed to re-derive the viewing key via hashSingleUseViewingKey.
-export const UnsyncedSingleUseBurnAccountSchema = BurnAccountBaseSchema.extend({ contractAddress: AddressSchema });
+export const UnsyncedSingleUseBurnAccountSchema = BurnAccountBaseSchema.extend({ tokenAddress: AddressSchema });
 export const SyncedSingleUseBurnAccountSchema = UnsyncedSingleUseBurnAccountSchema.extend({ syncData: BurnAccountSyncDataSchema });
 
 // --- unknown family ----------------------------------------------------------
@@ -334,7 +334,7 @@ export const ViewKeyDataSchema = <T extends z.ZodTypeAny>(burnAccountSchema: T) 
                     z.object({
                         derivedBurnAccounts: z.array(burnAccountSchema),
                         unknownBurnAccounts: keyValidatedRecord(AddressSchema, burnAccountSchema),
-                        singleUseBurnAccounts: keyValidatedRecord(AddressSchema, z.array(UnsyncedSingleUseBurnAccountSchema)).optional(),
+                        singleUseBurnAccounts: keyValidatedRecord(AddressSchema, z.array(UnsyncedSingleUseBurnAccountSchema)),
                     })
                 )
             ),
@@ -366,6 +366,7 @@ export type ExportedViewKeyData<T = BurnAccountImportable> = Omit<FullViewKeyDat
         burnAccounts: Record<import("viem").Hex, Record<import("viem").Hex, {
             derivedBurnAccounts: T[];
             unknownBurnAccounts: T[];
+            singleUseBurnAccounts: Record<Address,T[]>;
         }>>;
     }>;
 };

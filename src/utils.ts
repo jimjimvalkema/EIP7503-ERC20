@@ -89,28 +89,65 @@ export function hexToU8AsHexLen64(hex: Hex): U8sAsHexArrLen64 {
 }
 
 // ------ wallet utils ------
-function filterBurnAccounts(burnAccountsStorage: BurnAccountStorage, selectedDifficulties?: Hex[], selectedChainIds?: Hex[], ethAccounts?: Address[], detBurnAccount = true, nonDetBurnAccounts = true): BurnAccount[] {
-    ethAccounts = ethAccounts ? ethAccounts.map((a) => getAddress(a)) : Object.keys(burnAccountsStorage).map((a) => getAddress(a as Address))
-    selectedChainIds ??= ethAccounts.flatMap((addr) => Object.keys(burnAccountsStorage[addr].burnAccounts)) as Hex[]
+// function filterBurnAccounts(
+//     burnAccountsStorage: BurnAccountStorage, selectedDifficulties?: Hex[], selectedChainIds?: Hex[], ethAccounts?: Address[],tokenAddress?:Address, derivedBurnAccounts = true, unknownBurnAccounts = true, singleUseBurnAccounts = true): BurnAccount[] {
+export function filterBurnAccounts(
+    burnAccountsStorage: BurnAccountStorage,
+    { difficulties, chainIds, ethAccounts, tokenAddresses, derivedAccounts = true, unknownAccounts = true, singleUseAccounts = true }:
+        { tokenAddresses?: Address[], difficulties?: bigint[], chainIds?: bigint[], ethAccounts?: Address[], derivedAccounts?: boolean, unknownAccounts?: boolean, singleUseAccounts?: boolean } = {}
+): BurnAccount[] {
+    ethAccounts = ethAccounts ?
+        // format
+        ethAccounts.map((a) => getAddress(a)) :
+        // select all
+        Object.keys(burnAccountsStorage).map((a) => getAddress(a as Address))
+
+    const difficultiesHex = difficulties ?
+        // format
+        difficulties.map((diff) => toHex(diff, { size: 32 })) :
+        // select all
+        ethAccounts.flatMap((ethAccAddr) =>
+            Object.keys(burnAccountsStorage[ethAccAddr].burnAccounts).flatMap(
+                (chainId) => Object.keys(burnAccountsStorage[ethAccAddr].burnAccounts[chainId])
+            )
+        ) as Hex[];
+
+    const chainIdsHex = chainIds ?
+        // format
+        chainIds.map((chainId) => toHex(chainId)) :
+        // select all
+        ethAccounts.flatMap((addr) => Object.keys(burnAccountsStorage[addr].burnAccounts)) as Hex[];
+
+    tokenAddresses = tokenAddresses ?
+        // format
+        tokenAddresses.map((a) => getAddress(a)) :
+        // select all (done inside for loop since you need to do 3 keys until you can do Object.key(), cant use flatMap )
+        undefined;
 
     let burnAccounts: BurnAccount[] = []
     for (const ethAccount of ethAccounts) {
-        for (const chainId of selectedChainIds) {
-            // select all difficulties if selectedDifficulties was not set
-            // idk why but on one call ethAccount is a existing account, the other it's not
-            //throw new Error("aa")
-            // at syncMultipleBurnAccounts it works
-
+        for (const chainId of chainIdsHex) {
             if (burnAccountsStorage[ethAccount].burnAccounts[chainId]) {
-                const difficulties = selectedDifficulties ?? Object.keys(burnAccountsStorage[ethAccount].burnAccounts[chainId]) as Hex[];
-                for (const difficulty of difficulties) {
-                    if (detBurnAccount) {
-                        burnAccounts = [...burnAccounts, ...burnAccountsStorage[ethAccount].burnAccounts[chainId][difficulty].derivedBurnAccounts]
-                    }
-                    if (nonDetBurnAccounts) {
-                        burnAccounts = [...burnAccounts, ...Object.values(burnAccountsStorage[ethAccount].burnAccounts[chainId][difficulty].unknownBurnAccounts)] as UnknownBurnAccount[]
+                for (const difficulty of difficultiesHex) {
+                    const burnAccountsObj = burnAccountsStorage[ethAccount].burnAccounts[chainId][difficulty]
+                    if (burnAccountsObj) {
+                        if (derivedAccounts) {
+                            burnAccounts = [...burnAccounts, ...burnAccountsObj.derivedBurnAccounts]
+                        }
+                        if (singleUseAccounts && burnAccountsObj.singleUseBurnAccounts !== undefined) {
+                            const currentTokenAddresses = tokenAddresses ? tokenAddresses : Object.keys(burnAccountsObj.singleUseBurnAccounts)
+                            for (const tokenAddress of currentTokenAddresses) {
+                                if (burnAccountsObj.singleUseBurnAccounts[tokenAddress]) {
+                                    burnAccounts = [...burnAccounts, ...burnAccountsObj.singleUseBurnAccounts[tokenAddress]]
+                                }
+                            }
+                        }
+                        if (unknownAccounts) {
+                            burnAccounts = [...burnAccounts, ...Object.values(burnAccountsObj.unknownBurnAccounts)] as UnknownBurnAccount[]
+                        }
                     }
                 }
+
             } else {
                 console.warn(`burnAccountsStorage[ethAccount].burnAccounts[chainId] was undefined TODO figure out if that is bug? ethAccount:${ethAccount}, chainId:${chainId}`)
             }
@@ -122,30 +159,6 @@ function filterBurnAccounts(burnAccountsStorage: BurnAccountStorage, selectedDif
     return burnAccounts.filter((ba) => ba !== undefined)
 }
 
-/**
- *
- * Retrieves stored burn accounts, with optional filtering by chain ID, difficulty,
- * and account type.
- *
- * @param options - Optional filter configuration.
- * @param options.difficulties - If provided, only returns accounts matching these PoW difficulties.
- *   Defaults to all difficulties.
- * @param options.chainIds - If provided, only returns accounts matching these chain IDs.
- *   Defaults to all chain IDs.
- * @param options.deterministicAccounts - Whether to include deterministic accounts. Defaults to `true`.
- * @param options.nonDeterministicAccounts - Whether to include non-deterministic accounts. Defaults to `true`.
- *
- * @returns A flat array of matching {@link BurnAccount} objects.
- */
-export function getAllBurnAccounts(privateData: FullViewKeyData,
-    { difficulties, chainIds, ethAccounts, deterministicAccounts = true, nonDeterministicAccounts = true }:
-        { difficulties?: bigint[], chainIds?: bigint[], ethAccounts?: Address[], deterministicAccounts?: boolean, nonDeterministicAccounts?: boolean } = {}
-): BurnAccount[] {
-    const difficultiesHex = difficulties !== undefined ? difficulties.map((diff) => toHex(diff, { size: 32 })) : undefined;
-    const chainIdsHex = chainIds !== undefined ? chainIds.map((chainId) => toHex(chainId)) : undefined;
-
-    return filterBurnAccounts(privateData.burnAccounts, difficultiesHex, chainIdsHex, ethAccounts, deterministicAccounts, nonDeterministicAccounts)
-}
 
 // TODO move this into BurnViewKeyManager
 // it requires every function that requires a class as input, should just use `this` instead
@@ -157,11 +170,6 @@ export function getDeterministicBurnAccounts(
     const chainIdHex = toHex(chainId)
     return burnWallet.privateData.burnAccounts[ethAccount].burnAccounts[chainIdHex][difficultyPadded].derivedBurnAccounts
 }
-
-// TODO
-// export async function getFreshBurnAccount(BurnViewKeyManager: BurnViewKeyManager, transwarpToken: TransWarpTokenTest | TransWarpToken) {
-//     const neverUsedBurnAccounts = getAllBurnAccounts(BurnViewKeyManager.privateData, ethAccount).filter(async (b) => await transwarpToken.read.balanceOf([b.burnAddress]) === 0n)
-// }
 
 export async function getCircuitSizesFromContract(address: Address, publicClient: PublicClient): Promise<number[]> {
     const base = { address, abi: transwarpTokenAbi } as const
@@ -319,14 +327,14 @@ export async function getContractConfig(address: Address, fullNode: PublicClient
 }
 
 
-export async function signViewKeyMessage(wallet:WalletClient, ethAccount?:Address, message=VIEWING_KEY_SIG_MESSAGE) {
+export async function signViewKeyMessage(wallet: WalletClient, ethAccount?: Address, message = VIEWING_KEY_SIG_MESSAGE) {
     if (wallet.account === undefined) throw new Error(viemAccountNotSetErr)
     ethAccount = wallet.account.address
     const signature = await wallet.signMessage({ message: message, account: ethAccount })
-    return {signature, message}
+    return { signature, message }
 }
 
-export function getBurnState(account: SyncedBurnAccount, chainId: number, tokenAddress:Address):BurnAccountSyncFields{
+export function getBurnState(account: SyncedBurnAccount, chainId: number, tokenAddress: Address): BurnAccountSyncFields {
     tokenAddress = getAddress(tokenAddress)
     const chainIdHex = toHex(chainId)
     return account.syncData[chainIdHex]?.[tokenAddress] ?? EMPTY_SYNC_FIELDS

@@ -161,13 +161,13 @@ export class BurnViewKeyManager {
         ethAccount = getAddress(ethAccount)
         this.privateData.burnAccounts[ethAccount] ??= { pubKey: undefined, detViewKeyCounter: 0, singleUseViewKeyCounter: 0, burnAccounts: {}, detViewKeyRoot: undefined };
         this.privateData.burnAccounts[ethAccount].burnAccounts[chainIdHex] ??= {};
-        this.privateData.burnAccounts[ethAccount].burnAccounts[chainIdHex][difficultyHex] ??= { derivedBurnAccounts: [], unknownBurnAccounts: {} };
+        this.privateData.burnAccounts[ethAccount].burnAccounts[chainIdHex][difficultyHex] ??= { derivedBurnAccounts: [], unknownBurnAccounts: {}, singleUseBurnAccounts: {} };
     }
 
     #addSingleUseBurnAccount(burnAccount: UnsyncedSingleUseBurnAccount) {
         const difficultyPadded = padHex(burnAccount.difficulty, { size: 32 })
         const ethAccount = getAddress(burnAccount.ethAccount)
-        const contractAddress = getAddress(burnAccount.contractAddress)
+        const contractAddress = getAddress(burnAccount.tokenAddress)
         this.#createBurnAccountsKeysHex({ chainIdHex: burnAccount.chainId, difficultyHex: difficultyPadded, ethAccount })
         const burnAccounts = this.privateData.burnAccounts[ethAccount].burnAccounts[burnAccount.chainId][difficultyPadded]
         burnAccounts.singleUseBurnAccounts ??= {}
@@ -327,7 +327,7 @@ export class BurnViewKeyManager {
 
         const viewingKey = hashSingleUseViewingKey(viewKeyRoot, BigInt(viewingKeyIndex), tokenAddress, BigInt(chainId))
         const base = await createBurnAccountFromViewingKey(true, resolvedPubKeyX, viewKeyMessage, chainId, difficulty, signingEthAccount, viewingKeyIndex, viewingKey, { powNonce, async })
-        const burnAccount: UnsyncedSingleUseBurnAccount = { ...base as UnsyncedDerivedBurnAccount, contractAddress: getAddress(tokenAddress) }
+        const burnAccount: UnsyncedSingleUseBurnAccount = { ...base as UnsyncedDerivedBurnAccount, tokenAddress: getAddress(tokenAddress) }
         this.#addSingleUseBurnAccount(burnAccount)
         return burnAccount
     }
@@ -421,9 +421,9 @@ export class BurnViewKeyManager {
     }
 
     // export
-    exportBurnAccounts(ethAccount: Address, chainId: number, difficulty: Hex, opts: { paranoidMode: true }): { derived: BurnAccountRecoverable[], unknown: BurnAccountRecoverable[] };
-    exportBurnAccounts(ethAccount: Address, chainId: number, difficulty: Hex, opts?: { paranoidMode?: false }): { derived: (BurnAccountRecoverable | BurnAccountImportable)[], unknown: (BurnAccountRecoverable | BurnAccountImportable)[] };
-    exportBurnAccounts(ethAccount: Address, chainId: number, difficulty: Hex, opts?: { paranoidMode: boolean }): { derived: (BurnAccountRecoverable | BurnAccountImportable)[], unknown: (BurnAccountRecoverable | BurnAccountImportable)[] };
+    exportBurnAccounts(ethAccount: Address, chainId: number, difficulty: Hex, opts: { paranoidMode: true }): { derived: BurnAccountRecoverable[], unknown: BurnAccountRecoverable[], singleUse: Record<Address, DerivedBurnAccountRecoverable[]> };
+    exportBurnAccounts(ethAccount: Address, chainId: number, difficulty: Hex, opts?: { paranoidMode?: false }): { derived: (BurnAccountRecoverable | BurnAccountImportable)[], unknown: (BurnAccountRecoverable | BurnAccountImportable)[], singleUse: Record<Address, (DerivedBurnAccountRecoverable | DerivedBurnAccountImportable)[]> };
+    exportBurnAccounts(ethAccount: Address, chainId: number, difficulty: Hex, opts?: { paranoidMode: boolean }): { derived: (BurnAccountRecoverable | BurnAccountImportable)[], unknown: (BurnAccountRecoverable | BurnAccountImportable)[], singleUse: Record<Address, (DerivedBurnAccountRecoverable | DerivedBurnAccountImportable)[]> };
     /**
      * @param ethAccount 
      * @param chainId 
@@ -432,17 +432,28 @@ export class BurnViewKeyManager {
      */
     exportBurnAccounts(
         ethAccount: Address, chainId: number, difficulty: Hex, { paranoidMode = false } = {}
-    ): { derived: (DerivedBurnAccountRecoverable | DerivedBurnAccountImportable)[], unknown: (UnknownBurnAccountRecoverable | UnknownBurnAccountImportable)[] } {
+    ): { derived: (DerivedBurnAccountRecoverable | DerivedBurnAccountImportable)[], unknown: (UnknownBurnAccountRecoverable | UnknownBurnAccountImportable)[], singleUse: Record<Address, (DerivedBurnAccountRecoverable | DerivedBurnAccountImportable)[]> } {
         ethAccount = getAddress(ethAccount)
         const difficultyPadded = padHex(difficulty, { size: 32 });
         const chainIdHex = toHex(chainId)
-        const derived = this.privateData.burnAccounts[ethAccount].burnAccounts[chainIdHex][difficultyPadded].derivedBurnAccounts.map(
+        const burnAccountsObj = this.privateData.burnAccounts[ethAccount].burnAccounts[chainIdHex][difficultyPadded]
+        const derived = burnAccountsObj.derivedBurnAccounts.map(
             (b) => paranoidMode === false ? toImportableDerivedBurnAccount(b) : toRecoverableDerivedBurnAccount(b)
         );
-        const unknown = Object.values(this.privateData.burnAccounts[ethAccount].burnAccounts[chainIdHex][difficultyPadded].unknownBurnAccounts).map(
+        const unknown = Object.values(burnAccountsObj.unknownBurnAccounts).map(
             (b) => paranoidMode === false ? toImportableUnknownBurnAccount(b) : toRecoverableUnknownBurnAccount(b)
         );
-        return { derived, unknown };
+        const singleUse = Object.fromEntries(
+            Object.keys(burnAccountsObj.singleUseBurnAccounts).map(
+                (tokenAddress) =>
+                    [tokenAddress,
+                        burnAccountsObj.singleUseBurnAccounts[tokenAddress].map(
+                            (b) => paranoidMode === false ? toImportableDerivedBurnAccount(b) : toRecoverableDerivedBurnAccount(b)
+                        )
+                    ]
+            )
+        ) //as Record<Address, (DerivedBurnAccountRecoverable | DerivedBurnAccountImportable)[]>;
+        return { derived, unknown, singleUse };
     }
 
     exportAllBurnAccounts(paranoidMode: true): BurnAccountRecoverable[];
@@ -470,10 +481,11 @@ export class BurnViewKeyManager {
             for (const chainId of Object.keys(ethData.burnAccounts) as Hex[]) {
                 burnAccounts[ethAccount].burnAccounts[chainId] = {};
                 for (const difficulty of Object.keys(ethData.burnAccounts[chainId]) as Hex[]) {
-                    const { derived, unknown } = this.exportBurnAccounts(ethAccount, Number(chainId as Hex), difficulty, { paranoidMode: paranoidMode });
+                    const { derived, unknown, singleUse } = this.exportBurnAccounts(ethAccount, Number(chainId as Hex), difficulty, { paranoidMode: paranoidMode });
                     burnAccounts[ethAccount].burnAccounts[chainId][difficulty] = {
                         derivedBurnAccounts: derived,
-                        unknownBurnAccounts: unknown
+                        unknownBurnAccounts: unknown,
+                        singleUseBurnAccounts: singleUse
                     };
                 }
             }
