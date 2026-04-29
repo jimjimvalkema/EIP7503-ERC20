@@ -363,6 +363,7 @@ export type FullViewKeyData = z.infer<typeof FullViewKeyDataSchema>;
 export type ExportedViewKeyData<T = BurnAccountImportable> = Omit<FullViewKeyData, 'burnAccounts'> & {
     burnAccounts: Record<import("viem").Address, {
         detViewKeyCounter: number;
+        singleUseViewKeyCounter: number;
         burnAccounts: Record<import("viem").Hex, Record<import("viem").Hex, {
             derivedBurnAccounts: T[];
             unknownBurnAccounts: T[];

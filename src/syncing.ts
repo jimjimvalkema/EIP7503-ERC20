@@ -278,7 +278,10 @@ export async function syncMultipleBurnAccounts(
     { syncTillBlock, burnAddressesToSync, ethAccounts, maxNonce, chainId, concurrency = 5, onAccountSynced }: { syncTillBlock?: bigint, maxNonce?: bigint, ethAccounts?: Address[], burnAddressesToSync?: Address[], chainId?: Hex, concurrency?: number, onAccountSynced?: (burnAccount: BurnAccount) => void } = {}) {
     syncTillBlock ??= await archiveNode.getBlockNumber()
     const limit = pLimit(concurrency)
-    const allBurnAccounts = filterBurnAccounts(burnViewKeyManager.privateData.burnAccounts, { ethAccounts, singleUseAccounts:false })
+    const allBurnAccounts = filterBurnAccounts(burnViewKeyManager.privateData.burnAccounts, {
+        ethAccounts, 
+        //singleUseAccounts:false TODO. these accounts practically only need to sync once, after their first use. either ignore syncing on these, when balance !== 0n. or ignore them by default (might break ui)
+    })
     burnAddressesToSync = burnAddressesToSync ? burnAddressesToSync.map((a) => getAddress(a)) : allBurnAccounts.map((v) => getAddress(v.burnAddress))
     console.log(`syncing ${burnAddressesToSync.length} burn accounts with max concurrency: ${concurrency}`)
     const startTime = Date.now()

@@ -170,7 +170,6 @@ export class BurnViewKeyManager {
         const contractAddress = getAddress(burnAccount.tokenAddress)
         this.#createBurnAccountsKeysHex({ chainIdHex: burnAccount.chainId, difficultyHex: difficultyPadded, ethAccount })
         const burnAccounts = this.privateData.burnAccounts[ethAccount].burnAccounts[burnAccount.chainId][difficultyPadded]
-        burnAccounts.singleUseBurnAccounts ??= {}
         burnAccounts.singleUseBurnAccounts[contractAddress] ??= []
         burnAccounts.singleUseBurnAccounts[contractAddress][burnAccount.viewingKeyIndex] = burnAccount
     }
@@ -477,7 +476,7 @@ export class BurnViewKeyManager {
         for (const rawEthAccount of Object.keys(this.privateData.burnAccounts) as Address[]) {
             const ethAccount = getAddress(rawEthAccount)
             const ethData = this.privateData.burnAccounts[ethAccount];
-            burnAccounts[ethAccount] = { detViewKeyCounter: ethData.detViewKeyCounter, burnAccounts: {} };
+            burnAccounts[ethAccount] = { singleUseViewKeyCounter: ethData.singleUseViewKeyCounter, detViewKeyCounter: ethData.detViewKeyCounter, burnAccounts: {} };
             for (const chainId of Object.keys(ethData.burnAccounts) as Hex[]) {
                 burnAccounts[ethAccount].burnAccounts[chainId] = {};
                 for (const difficulty of Object.keys(ethData.burnAccounts[chainId]) as Hex[]) {
@@ -494,8 +493,14 @@ export class BurnViewKeyManager {
         return vieKeyData
     }
 
-    // import
-    // TODO add single use burnAccounts imports
+    /**
+     * @TODO fix readability. Hard to read after claude dug in here
+     * 
+     * @param importedViewKeyData 
+     * @param tokenAddress 
+     * @param archiveNode 
+     * @param param3 
+     */
     async importViewKeyWalletData(
         importedViewKeyData: ExportedViewKeyData<BurnAccountImportable | BurnAccountRecoverable>, tokenAddress: Address, archiveNode: PublicClient,
         { fullSync = true, syncTillBlock, forceReSign = false, forceReHashViewKey = true, forcePow = false, async = false, fullNode, onlySignInWith, concurrency = 10, onAccountImported }: { fullSync?: boolean, syncTillBlock?: bigint, forceReSign?: boolean, forceReHashViewKey?: boolean, forcePow?: boolean, async?: boolean, fullNode?: PublicClient, onlySignInWith?: Address, concurrency?: number, onAccountImported?: () => void } = {}
@@ -504,20 +509,29 @@ export class BurnViewKeyManager {
         syncTillBlock ??= BigInt(await fullNode.getBlockNumber())
         const limit = pLimit(concurrency)
         const allBurnAccounts = BurnAccountToFlatArrExportedData(importedViewKeyData).filter(n => n)
+        // TODO onlySignInWith not a list of addresses?
+        const normalizedOnlySignInWith = onlySignInWith ? getAddress(onlySignInWith) : undefined
+        const ethAccountsToImport = (Object.keys(importedViewKeyData.burnAccounts) as Address[]).map(
+            (a) => getAddress(a)
+        ).filter(
+            (a) => normalizedOnlySignInWith === undefined || a === normalizedOnlySignInWith
+        )
         console.log(`importing ${allBurnAccounts.length} burn accounts with max concurrency: ${concurrency}`)
         const startTime = Date.now()
 
         // ---------- sign in before import -------------
         // so the user only gets one request per ethAccount+message combo
 
+        // seen? seen what?
         const seen = new Set<string>();
+        // TODO why not use normalizedOnlySignInWith instead??
         const toConnect = allBurnAccounts.filter((b) => {
             if (onlySignInWith && b.ethAccount !== onlySignInWith) return false;
             const key = `${b.ethAccount}:${"viewKeySigMessage" in b ? b.viewKeySigMessage : ""}`;
             return !seen.has(key) && !!seen.add(key);
         });
 
-        // try and connect all ethAccount+message combos, only only once, no every burn account (what `(accountsToImport.map((b) => this.importBurnAccount())` would do)
+        // try and connect all ethAccount+message combos, only only once, not every burn account (what `(accountsToImport.map((b) => this.importBurnAccount())` would do)
         const results = await Promise.allSettled(
             toConnect.map((b) => this.#connect(b.ethAccount, "viewKeySigMessage" in b ? b.viewKeySigMessage : undefined))
         );
@@ -531,21 +545,19 @@ export class BurnViewKeyManager {
         if (rejectedKeys.size > 0) console.warn(`Some accounts not imported since user rejected the request: ${[...rejectedKeys]}`);
 
         // remove burnAccounts with that rejected ethAccount+message combo and filter by onlySignInWith
-        const accountsToImport = allBurnAccounts.filter((b) => {
+        const burnAccountsToImport = allBurnAccounts.filter((b) => {
             if (onlySignInWith && b.ethAccount !== onlySignInWith) return false;
             const key = `${b.ethAccount}:${"viewKeySigMessage" in b ? b.viewKeySigMessage : ""}`;
             return !rejectedKeys.has(key);
         });
 
-        await Promise.all(accountsToImport.map((b) => limit(async () => {
+        await Promise.all(burnAccountsToImport.map((b) => limit(async () => {
             await this.importBurnAccount(b, tokenAddress, archiveNode, { fullSync, syncTillBlock, forceReSign, forceReHashViewKey, forcePow, async, fullNode })
             onAccountImported?.()
         })));
 
-        const normalizedOnlySignInWith = onlySignInWith ? getAddress(onlySignInWith) : undefined
-        const ethAccountsToImport = (Object.keys(importedViewKeyData.burnAccounts) as Address[])
-            .map((a) => getAddress(a))
-            .filter((a) => normalizedOnlySignInWith === undefined || a === normalizedOnlySignInWith)
+        // can that    const toConnect = allBurnAccounts.filter line be done here?
+        // needs to stay async tho
         for (const ethAccount of ethAccountsToImport) {
             // find the source entry by case-insensitive match in case the imported JSON used a different casing
             const sourceKey = (Object.keys(importedViewKeyData.burnAccounts) as Address[])
@@ -556,7 +568,7 @@ export class BurnViewKeyManager {
                 detViewKeyRoot: undefined,
                 pubKey: undefined,
                 detViewKeyCounter: source.detViewKeyCounter,
-                singleUseViewKeyCounter: 0,
+                singleUseViewKeyCounter: source.singleUseViewKeyCounter,
                 burnAccounts: {}
             }
             if (this.privateData.burnAccounts[ethAccount].detViewKeyCounter < source.detViewKeyCounter) {

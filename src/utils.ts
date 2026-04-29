@@ -224,9 +224,10 @@ export function toRecoverableBurnAccount(account: AnyBurnAccount): BurnAccountRe
 export function BurnAccountToFlatArr(data: FullViewKeyData): BurnAccount[] {
     return Object.values(data.burnAccounts).flatMap(ethData =>
         Object.values(ethData.burnAccounts).flatMap(byChain =>
-            Object.values(byChain).flatMap(({ derivedBurnAccounts, unknownBurnAccounts }) => [
+            Object.values(byChain).flatMap(({ derivedBurnAccounts, unknownBurnAccounts, singleUseBurnAccounts }) => [
                 ...derivedBurnAccounts,
                 ...Object.values(unknownBurnAccounts),
+                ...Object.keys(singleUseBurnAccounts).flatMap((tokenAddress)=>singleUseBurnAccounts[tokenAddress])
             ])
         )
     );
@@ -235,9 +236,10 @@ export function BurnAccountToFlatArr(data: FullViewKeyData): BurnAccount[] {
 export function BurnAccountToFlatArrExportedData<T>(data: ExportedViewKeyData<T>): T[] {
     return Object.values(data.burnAccounts).flatMap(ethData =>
         Object.values(ethData.burnAccounts).flatMap(byChain =>
-            Object.values(byChain).flatMap(({ derivedBurnAccounts, unknownBurnAccounts }) => [
+            Object.values(byChain).flatMap(({ derivedBurnAccounts, unknownBurnAccounts, singleUseBurnAccounts }) => [
                 ...derivedBurnAccounts,
                 ...Object.values(unknownBurnAccounts),
+                ...Object.keys(singleUseBurnAccounts).flatMap((tokenAddress)=>singleUseBurnAccounts[tokenAddress as Address])
             ])
         )
     );
