@@ -7,6 +7,7 @@ import type {
     TranswarpContractConfig,
     BurnAccountSyncData,
     BurnAccountSyncFields,
+    FeeData,
 } from "./types.ts";
 import type { BurnViewKeyManager } from "./BurnViewKeyManager.ts";
 import { FIELD_MODULUS, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
@@ -127,7 +128,7 @@ export function filterBurnAccounts(
     let burnAccounts: BurnAccount[] = []
     for (const ethAccount of ethAccounts) {
         for (const chainId of chainIdsHex) {
-            if (burnAccountsStorage[ethAccount].burnAccounts[chainId]) {
+            if (burnAccountsStorage[ethAccount] && "burnAccounts" in  burnAccountsStorage[ethAccount] && burnAccountsStorage[ethAccount].burnAccounts[chainId]) {
                 for (const difficulty of difficultiesHex) {
                     const burnAccountsObj = burnAccountsStorage[ethAccount].burnAccounts[chainId][difficulty]
                     if (burnAccountsObj) {
@@ -336,8 +337,25 @@ export async function signViewKeyMessage(wallet: WalletClient, ethAccount?: Addr
     return { signature, message }
 }
 
+export function randomAddress(): Address {
+    return getAddress(bytesToHex(crypto.getRandomValues(new Uint8Array(20))))
+}
+
 export function getBurnState(account: SyncedBurnAccount, chainId: number, tokenAddress: Address): BurnAccountSyncFields {
     tokenAddress = getAddress(tokenAddress)
     const chainIdHex = toHex(chainId)
     return account.syncData[chainIdHex]?.[tokenAddress] ?? EMPTY_SYNC_FIELDS
+}
+
+export function zeroFeeData(refundAddress: Address, relayerAddress: Address): FeeData {
+    return {
+        tokensPerEthPrice: toHex(0n),
+        maxFee: toHex(0n),
+        amountForRecipient: toHex(0n),
+        relayerBonus: toHex(0n),
+        estimatedGasCost: toHex(0n),
+        estimatedPriorityFee: toHex(0n),
+        refundAddress,
+        relayerAddress,
+    }
 }

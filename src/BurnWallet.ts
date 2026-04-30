@@ -2,20 +2,20 @@
 
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
 import { createPublicClient, custom, getAddress, getContract, padHex, toHex } from "viem";
-import type { BurnAccount, PreSyncedTreeStringifyable, PreSyncedTree, ExportedViewKeyData, TransWarpToken, SelfRelayInputs, RelayInputs, CreateRelayerInputsOpts, FeeData, ClientPerChainId, TranswarpContractConfig, FeeDataOptionals, SpendableBurnAccount, BackendPerSize, BurnAccountSelector, SignatureInputs, SignatureData, BurnAccountSelectionForSpend, SignedProofInputs } from "./types.ts"
-import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_MINTED_PADDING, RE_MINT_RELAYER_GAS, RE_MINT_RELAYER_GAS_DEFAULT_L1, SLOWEST_PROOF_PADDING, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
+import type { BurnAccount, PreSyncedTreeStringifyable, PreSyncedTree, ExportedViewKeyData, TransWarpToken, SelfRelayInputs, RelayInputs, CreateRelayerInputsOpts, FeeData, ClientPerChainId, TranswarpContractConfig, FeeDataOptionals, SpendableBurnAccount, BackendPerSize, BurnAccountSelector, SignatureInputs, SignatureData, BurnAccountSelectionForSpend, SignedProofInputs, RelayType } from "./types.ts"
+import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_MINTED_PADDING, GAS_LIMIT_TX, RE_MINT_RELAYER_GAS, RE_MINT_RELAYER_GAS_DEFAULT_L1, SLOWEST_PROOF_PADDING, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { BurnViewKeyManager } from "./BurnViewKeyManager.ts";
 import { LeanIMT } from "@zk-kit/lean-imt";
 import { getSyncedMerkleTree, poseidon2IMTHashFunc, syncMultipleBurnAccounts } from "./syncing.ts";
 import { ExportedMerkleTreesSchema, PreSyncedTreeStringifyableSchema, type ExportedMerkleTrees } from "./schemas.ts";
-import { burn, relayTx, selfRelayTx, superSafeBurn, superSafeBurnBulk } from "./transact.ts";
+import { burn, createFakeRelayInputs, formatReMintArgs, formatReMintRelayerArgs, relayTx, selfRelayTx, superSafeBurn, superSafeBurnBulk } from "./transact.ts";
 import type { TransWarpToken$Type } from "../artifacts/contracts/TransWarpToken.sol/artifacts.ts"
 import TransWarpTokenArtifact from '../artifacts/contracts/TransWarpToken.sol/TransWarpToken.json' with {"type": "json"};
 import { createRelayerInputs, hashAndProof, selectBurnAccountsForClaim, selectSmallFirst, signAndEncrypt } from "./proving.ts";
 import { filterBurnAccounts, getCircuitSize, getContractConfig, getTransWarpTokenContract } from "./utils.ts";
 //import { findPoWNonceAsync } from "./hashingAsync.js";
 
-export const viemAccountNotSetErr = `viem wallet not created with account set. pls do: 
+export const viemAccountNotSetErr = `viem wallet not created with account set. pls do:
             const wallet = createWalletClient({
                 account, // <-- this sets viemWallet.account
                 chain: mainnet,
@@ -30,6 +30,7 @@ export class BurnWallet {
     readonly fullNodes: ClientPerChainId
     readonly contractConfig: { [chainId: Hex]: { [Address: Address]: TranswarpContractConfig } } = {};
     readonly merkleTrees: { [chainId: Hex]: { [Address: Address]: PreSyncedTree } } = {};
+    readonly fakeProofs: { [chainId: number]: { [contractAddress: Address]: Partial<Record<RelayType, SelfRelayInputs | RelayInputs>> } } = {};
 
     /**
      * @notice if a user switches their chain, archiveNode and fullNode wont switch with it
@@ -522,8 +523,12 @@ export class BurnWallet {
     ): Promise<RelayInputs>;
     async proof(
         signedProofInputs: SignedProofInputs,
-        opts?: { chainId?: number, syncedTree?: PreSyncedTree, circuitSize?: number, feeData?: undefined, backends?: BackendPerSize, threads?: number }
+        opts?: { chainId?: number, syncedTree?: PreSyncedTree, circuitSize?: number, feeData: undefined, backends?: BackendPerSize, threads?: number }
     ): Promise<SelfRelayInputs>;
+    async proof(
+        signedProofInputs: SignedProofInputs,
+        opts?: { chainId?: number, syncedTree?: PreSyncedTree, circuitSize?: number, feeData: FeeData | undefined, backends?: BackendPerSize, threads?: number }
+    ): Promise<SelfRelayInputs | RelayInputs>;
     async proof(
         signedProofInputs: SignedProofInputs,
         { chainId, syncedTree, circuitSize, feeData, backends, threads }:
@@ -689,7 +694,7 @@ export class BurnWallet {
         const allBurnAccounts = filterBurnAccounts(
             this.burnViewKeyManager.privateData.burnAccounts,
             {
-                tokenAddresses:[tokenAddress],
+                tokenAddresses: [tokenAddress],
                 difficulties: [difficulty],
                 chainIds: [BigInt(chainId)],
                 ethAccounts: undefined
@@ -729,6 +734,50 @@ export class BurnWallet {
             maxTreeDepth: Number(contractConfig.MAX_TREE_DEPTH),
             acceptedChainIds: contractConfig.ACCEPTED_CHAIN_IDS
         })
+    }
+
+    /**
+     * Generates a zero-amount fake proof for `relayType` (if not already cached) and returns
+     * a gas estimate via `eth_estimateGas`. Cached proofs are reused on subsequent calls —
+     * old Merkle roots stay valid on-chain indefinitely so re-estimation is always safe.
+     *
+     * @note Tree depth affects gas but is not compensated here yet.
+     */
+    async estimateGas(
+        tokenAddress: Address,
+        relayType: RelayType,
+        { signingEthAccount, chainId, threads }: { signingEthAccount?: Address, chainId?: number, threads?: number } = {}
+    ): Promise<bigint> {
+        tokenAddress = getAddress(tokenAddress)
+        chainId ??= await this.viemWallet.getChainId()
+        signingEthAccount ??= await this.defaultSigner()
+
+        const [archiveNode, contractConfig] = await Promise.all([
+            this.#getPublicClient({ type: "archive", chainId }),
+            this.#getContractConfig(tokenAddress, chainId),
+        ])
+        const contract = getTransWarpTokenContract(tokenAddress, { public: archiveNode, wallet:this.viemWallet })
+        const circuitSize = contractConfig.VERIFIER_SIZES[0]
+
+        this.fakeProofs[chainId] ??= {}
+        this.fakeProofs[chainId][tokenAddress] ??= {}
+        const fakeProofCache = this.fakeProofs[chainId][tokenAddress]
+
+        fakeProofCache[relayType] ??= await createFakeRelayInputs(relayType, chainId, tokenAddress, archiveNode, circuitSize, { threads })
+
+
+
+        if (relayType === "selfRelay") {
+            return contract.estimateGas.reMint(
+                formatReMintArgs(fakeProofCache[relayType] as SelfRelayInputs),
+                { account: signingEthAccount, gas: GAS_LIMIT_TX },
+            )
+        } else {
+            return contract.estimateGas.reMintRelayer(
+                formatReMintRelayerArgs(fakeProofCache[relayType] as RelayInputs),
+                { account: signingEthAccount, gas: GAS_LIMIT_TX },
+            )
+        }
     }
 
     async superSafeBurnBulk(

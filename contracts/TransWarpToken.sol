@@ -409,8 +409,8 @@ contract TransWarpToken is ERC20WithTransWarpMerkleTree, EIP712, ReentrancyGuard
     function _calculateFee(FeeData calldata _feeData, uint256 _amountToReMint) public view returns(uint256,uint256) {
         uint256 _feeInWei =  _feeData.estimatedGasCost * (block.basefee + _feeData.estimatedPriorityFee);
         uint256 _fee = ((_feeInWei * _feeData.tokensPerEthPrice) / 10**decimalsTokenPrice) + _feeData.relayerBonus;
-        require(_fee < _feeData.maxFee, "relayer fee is too high");
-        require(_amountToReMint > _fee, "fee is more then amount being reMinted");
+        require(_fee <= _feeData.maxFee, "relayer fee is too high");
+        require(_amountToReMint >= _fee, "fee is more then amount being reMinted");
         require((_amountToReMint - _fee) >= _feeData.amountForRecipient , "not enough left after fees for recipient");
         uint256 _refundAmount = _feeData.maxFee - _fee;
         require(_fee + _refundAmount + _feeData.amountForRecipient <= _amountToReMint, "total amount send exceeds _amountToReMint from proof");

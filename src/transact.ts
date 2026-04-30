@@ -1,13 +1,14 @@
 import type { Address, Hex, PublicClient, WalletClient } from "viem";
-import { getAddress, toHex } from "viem";
-import type { BackendPerSize, BurnAccount, PreSyncedTree, RelayInputs, SelfRelayInputs, UnsyncedBurnAccount, TransWarpToken } from "./types.ts";
+import { bytesToHex, createWalletClient, custom, getAddress, toHex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import type { BackendPerSize, BurnAccount, PreSyncedTree, RelayInputs, SelfRelayInputs, UnsyncedBurnAccount, TransWarpToken, FeeData, RelayType } from "./types.ts";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { getBurnAddressSafe, hashBlindedAddressData, hashPow, isValidPowNonce } from "./hashing.ts";
 import { BurnViewKeyManager } from "./BurnViewKeyManager.ts";
 import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_MINTED_PADDING, GAS_ESTIMATE_BUFFER_PERCENT, GAS_LIMIT_TX } from "./constants.ts";
 import { createRelayerInputs } from "./proving.ts";
 import type { BurnWallet } from "./BurnWallet.ts";
-import { getAcceptedChainIdFromContract, getTransWarpTokenContract } from "./utils.ts";
+import { getAcceptedChainIdFromContract, getTransWarpTokenContract, randomAddress, zeroFeeData } from "./utils.ts";
 import type { NotOwnedBurnAccount } from "./schemas.ts";
 
 
@@ -327,33 +328,57 @@ export async function proofAndSelfRelay(
  * @param wallet                - Viem WalletClient that signs and sends the transaction.
  * @param transwarpTokenContract - TransWarpToken contract instance with write access.
  */
+export function formatReMintArgs(inputs: SelfRelayInputs) {
+    return [
+        BigInt(inputs.publicInputs.root),
+        BigInt(inputs.publicInputs.chain_id),
+        inputs.publicInputs.burn_data_public.map((v) => BigInt(v.total_minted_leaf)),
+        inputs.publicInputs.burn_data_public.map((v) => BigInt(v.nullifier)),
+        inputs.proof,
+        {
+            amountToReMint: BigInt(inputs.signatureInputs.amountToReMint),
+            recipient: inputs.signatureInputs.recipient,
+            callData: inputs.signatureInputs.callData,
+            encryptedTotalMinted: inputs.signatureInputs.encryptedTotalMinted,
+            callCanFail: inputs.signatureInputs.callCanFail,
+            callValue: BigInt(inputs.signatureInputs.callValue),
+        },
+    ] as const
+}
+
+export function formatReMintRelayerArgs(inputs: RelayInputs) {
+    return [
+        BigInt(inputs.publicInputs.root),
+        BigInt(inputs.publicInputs.chain_id),
+        inputs.publicInputs.burn_data_public.map((v) => BigInt(v.total_minted_leaf)),
+        inputs.publicInputs.burn_data_public.map((v) => BigInt(v.nullifier)),
+        inputs.proof,
+        {
+            amountToReMint: BigInt(inputs.signatureInputs.amountToReMint),
+            recipient: inputs.signatureInputs.recipient,
+            callData: inputs.signatureInputs.callData,
+            encryptedTotalMinted: inputs.signatureInputs.encryptedTotalMinted,
+            callCanFail: inputs.signatureInputs.callCanFail,
+            callValue: BigInt(inputs.signatureInputs.callValue),
+        },
+        {
+            tokensPerEthPrice: BigInt(inputs.signatureInputs.feeData.tokensPerEthPrice),
+            maxFee: BigInt(inputs.signatureInputs.feeData.maxFee),
+            amountForRecipient: BigInt(inputs.signatureInputs.feeData.amountForRecipient),
+            relayerBonus: BigInt(inputs.signatureInputs.feeData.relayerBonus),
+            estimatedGasCost: BigInt(inputs.signatureInputs.feeData.estimatedGasCost),
+            estimatedPriorityFee: BigInt(inputs.signatureInputs.feeData.estimatedPriorityFee),
+            refundAddress: inputs.signatureInputs.feeData.refundAddress,
+            relayerAddress: inputs.signatureInputs.feeData.relayerAddress,
+        },
+    ] as const
+}
+
 export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: WalletClient) {
     const transwarpTokenContract = getTransWarpTokenContract(selfRelayInputs.signatureInputs.contract, { wallet: wallet })
-    const _totalMintedLeafs = selfRelayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.total_minted_leaf))
-    const _nullifiers = selfRelayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.nullifier))
-    const _root = BigInt(selfRelayInputs.publicInputs.root)
-    const _snarkProof = selfRelayInputs.proof
-    const _chainId = BigInt(selfRelayInputs.publicInputs.chain_id)
     // TODO not true. Is crossChain can be set to false. So this check can only live in BurnWallet ?
     // if(wallet.chain?.id && wallet.chain?.id !== Number(_chainId)) {throw new Error(`this proof can only be relayed in chainId ${Number(_chainId)}`)}
-    const _signatureInputs =
-    {
-        amountToReMint: BigInt(selfRelayInputs.signatureInputs.amountToReMint),
-        recipient: selfRelayInputs.signatureInputs.recipient,
-        callData: selfRelayInputs.signatureInputs.callData,
-        encryptedTotalMinted: selfRelayInputs.signatureInputs.encryptedTotalMinted,
-        callCanFail: selfRelayInputs.signatureInputs.callCanFail,
-        callValue: BigInt(selfRelayInputs.signatureInputs.callValue)
-
-    }
-    const reMintArgs = [
-        _root,
-        _chainId,
-        _totalMintedLeafs,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_minted+amount, prev_account_nonce, viewing_key)
-        _nullifiers,               // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
-        _snarkProof,
-        _signatureInputs,
-    ] as const
+    const reMintArgs = formatReMintArgs(selfRelayInputs)
     const accountAddress = wallet.account?.address as Address
     const gas = await estimateGasCapped(() =>
         transwarpTokenContract.estimateGas.reMint(reMintArgs, { account: accountAddress, gas: GAS_LIMIT_TX })
@@ -375,43 +400,9 @@ export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: Wall
  */
 export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, account?: Address) {
     const transwarpTokenContract = getTransWarpTokenContract(relayInputs.signatureInputs.contract, { wallet: wallet })
-    const _totalMintedLeafs = relayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.total_minted_leaf))
-    const _nullifiers = relayInputs.publicInputs.burn_data_public.map((v) => BigInt(v.nullifier))
-    const _root = BigInt(relayInputs.publicInputs.root)
-    const _snarkProof = relayInputs.proof
-    const _chainId = BigInt(relayInputs.publicInputs.chain_id)
     // TODO not true. Is crossChain can be set to false. So this check can only live in BurnWallet ?
     // if(wallet.chain?.id && wallet.chain?.id !== Number(_chainId)) {throw new Error(`this proof can only be relayed in chainId ${Number(_chainId)}`)}
-    const _signatureInputs =
-    {
-        amountToReMint: BigInt(relayInputs.signatureInputs.amountToReMint),
-        recipient: relayInputs.signatureInputs.recipient,
-        callData: relayInputs.signatureInputs.callData,
-        encryptedTotalMinted: relayInputs.signatureInputs.encryptedTotalMinted,
-        callCanFail: relayInputs.signatureInputs.callCanFail,
-        callValue: BigInt(relayInputs.signatureInputs.callValue)
-
-    }
-    const _feeData = {
-        tokensPerEthPrice: BigInt(relayInputs.signatureInputs.feeData.tokensPerEthPrice),
-        maxFee: BigInt(relayInputs.signatureInputs.feeData.maxFee),
-        amountForRecipient: BigInt(relayInputs.signatureInputs.feeData.amountForRecipient),
-        relayerBonus: BigInt(relayInputs.signatureInputs.feeData.relayerBonus),
-        estimatedGasCost: BigInt(relayInputs.signatureInputs.feeData.estimatedGasCost),
-        estimatedPriorityFee: BigInt(relayInputs.signatureInputs.feeData.estimatedPriorityFee),
-        refundAddress: relayInputs.signatureInputs.feeData.refundAddress,
-        relayerAddress: relayInputs.signatureInputs.feeData.relayerAddress,
-
-    }
-    const reMintRelayerArgs = [
-        _root,
-        _chainId,
-        _totalMintedLeafs,         // a commitment inserted in the merkle tree, tracks how much is spend after this transfer hash(prev_total_minted+amount, prev_account_nonce, viewing_key)
-        _nullifiers,               // nullifies the previous account_note.  hash(prev_account_nonce, viewing_key)
-        _snarkProof,
-        _signatureInputs,
-        _feeData
-    ] as const
+    const reMintRelayerArgs = formatReMintRelayerArgs(relayInputs)
     const relayerAccount = account ?? wallet.account?.address ?? (await wallet.getAddresses())[0]
     const gas = await estimateGasCapped(() =>
         transwarpTokenContract.estimateGas.reMintRelayer(reMintRelayerArgs, { account: relayerAccount, gas: GAS_LIMIT_TX })
@@ -435,5 +426,44 @@ async function estimateGasCapped(estimate: () => Promise<bigint>): Promise<bigin
         const message = err instanceof Error ? err.message : String(err)
         if (message.includes("cap")) return GAS_LIMIT_TX
         throw err
+    }
+}
+
+export async function createFakeRelayInputs(
+    relayType: RelayType,
+    chainId: number,
+    tokenAddress: Address,
+    archiveNode: PublicClient,
+    circuitSize: number,
+    { threads = 1 }: { threads?: number } = {},
+) {
+    const account = privateKeyToAccount(bytesToHex(crypto.getRandomValues(new Uint8Array(32))) as Hex)
+    const viemWallet = createWalletClient({ account, transport: custom(archiveNode) })
+    const fakeBurnViewKeyManager = new BurnViewKeyManager(viemWallet, {
+        acceptedChainIds: [chainId],
+    })
+    const signingEthAccount = account.address;
+    const recipient = signingEthAccount
+    if (relayType === "selfRelay") {
+        const result = await createRelayerInputs(
+            recipient, 0n, fakeBurnViewKeyManager,
+            tokenAddress, archiveNode, signingEthAccount,
+            { threads, circuitSize },
+        )
+        return result.relayInputs
+    } else {
+        let feeData: FeeData
+        if (relayType === "relayRefundSeparate") {
+            feeData = zeroFeeData(randomAddress(), randomAddress())
+        } else if (relayType === "relayRefundSameAsRecipient") {
+            feeData = zeroFeeData(recipient, randomAddress())
+        } else { throw new Error(`"${relayType}" is an invalid relay type`) }
+
+        const result = await createRelayerInputs(
+            recipient, 0n, fakeBurnViewKeyManager,
+            tokenAddress, archiveNode, signingEthAccount,
+            { threads, circuitSize, feeData },
+        )
+        return result.relayInputs
     }
 }

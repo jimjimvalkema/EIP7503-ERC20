@@ -218,7 +218,7 @@ export type CreateRelayerInputsOpts = {
     maxTreeDepth?: number;
     eip712Name?: string;
     eip712Version?: string;
-    allowedChainIds?: Hex[]
+    allowedChainIds?: Hex[];
 };
 
 export interface BurnAccountProof {
@@ -253,3 +253,4 @@ export interface TranswarpContractConfig {
 }
 
 export type SpendableBurnAccount = { burnAccount: SyncedBurnAccount, chainId: Hex, contract: Address, amount: bigint } 
+export type RelayType = "selfRelay" | "relayRefundSeparate" | "relayRefundSameAsRecipient"
