@@ -180,7 +180,7 @@ describe("Relay gas benchmark", async function () {
                     gasReport.record(`reMint ${relayType} (size ${circuitSize}, depth ${treeDepth})`, receipt.gasUsed);
                     record(benchmarkData, targetDepth, circuitSize, relayType, receipt.gasUsed);
 
-                    const estimatedGas = await aliceBurnWallet.estimateGas(transwarpToken.address, relayType);
+                    const estimatedGas = await aliceBurnWallet.estimateGas(transwarpToken.address, relayType, circuitSize);
                     gasReport.record(`estimate ${relayType} (size ${circuitSize})`, estimatedGas);
                     record(benchmarkData, targetDepth, circuitSize, `${relayType}Estimate`, estimatedGas);
                     const diff = receipt.gasUsed - estimatedGas;

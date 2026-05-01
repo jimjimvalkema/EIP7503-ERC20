@@ -25,12 +25,12 @@ export const viemAccountNotSetErr = `viem wallet not created with account set. p
 
 export class BurnWallet {
     readonly burnViewKeyManager: BurnViewKeyManager
-    viemWallet: WalletClient & { account: Account};
+    viemWallet: WalletClient & { account: Account };
     readonly archiveNodes: ClientPerChainId;
     readonly fullNodes: ClientPerChainId
     readonly contractConfig: { [chainId: Hex]: { [Address: Address]: TranswarpContractConfig } } = {};
     readonly merkleTrees: { [chainId: Hex]: { [Address: Address]: PreSyncedTree } } = {};
-    readonly fakeProofs: { [chainId: number]: { [contractAddress: Address]: Partial<Record<RelayType, SelfRelayInputs | RelayInputs>> } } = {};
+    readonly fakeProofs: { [chainId: number]: { [contractAddress: Address]: Partial<Record<number, Partial<Record<RelayType, SelfRelayInputs | RelayInputs>>>> } } = {};
 
     /**
      * @notice if a user switches their chain, archiveNode and fullNode wont switch with it
@@ -46,7 +46,7 @@ export class BurnWallet {
      * @param options.fullNode - Defaults to archiveNode, if no archiveNode, defaults to viemWallets public client
      */
     constructor(
-        viemWallet: WalletClient & { account: Account},
+        viemWallet: WalletClient & { account: Account },
         { archiveNodes, fullNodes, merkleTrees, contractConfigs, viewKeySigMessage = VIEWING_KEY_SIG_MESSAGE, acceptedChainIds = [1], chainId }:
             { archiveNodes?: ClientPerChainId, fullNodes?: ClientPerChainId, merkleTrees?: { [chainId: Hex]: { [Address: Address]: PreSyncedTree } }, contractConfigs?: { [chainId: Hex]: { [Address: Address]: TranswarpContractConfig } }, walletDataImport?: string, viewKeySigMessage?: string, acceptedChainIds?: number[], chainId?: number } = {}
     ) {
@@ -87,7 +87,7 @@ export class BurnWallet {
     // this is because some wallets return the current selected account with (await this.viemWallet.getAddresses())[0]
     // but some don't. So defaultSigner detects that by doing this.viemWallet.account?.address !== (await this.viemWallet.getAddresses())[0]
     // then forces the user to tell it directly with a popup.
-    changeViemWallet(newWallet: WalletClient & {account:Account}) {
+    changeViemWallet(newWallet: WalletClient & { account: Account }) {
         if (newWallet.account === undefined) {
             throw new Error(`viem wallet not created with account set. pls do: 
             const wallet = createWalletClient({
@@ -203,14 +203,14 @@ export class BurnWallet {
         return contract as TransWarpToken
     }
 
-    async connect(walletClient?: WalletClient & {account:Account}) {
+    async connect(walletClient?: WalletClient & { account: Account }) {
         walletClient ??= this.viemWallet
         if (walletClient.account === undefined) throw new Error(viemAccountNotSetErr)
         this.viemWallet = walletClient
         return await this.burnViewKeyManager.connect(walletClient)
     }
 
-    async connectPreSigned(signature: Hex, message: string, walletClient?: WalletClient & {account:Account}) {
+    async connectPreSigned(signature: Hex, message: string, walletClient?: WalletClient & { account: Account }) {
         walletClient ??= this.viemWallet
         if (walletClient.account === undefined) throw new Error(viemAccountNotSetErr)
         this.viemWallet = walletClient
@@ -360,7 +360,7 @@ export class BurnWallet {
         }
 
         if (parsed.privateData && viewKeyData) {
-            await this.burnViewKeyManager.importViewKeyWalletData(parsed.privateData, tokenAddress, archiveNode, { fullSync, syncTillBlock, concurrency, fullNode, forceReSign, forceReHashViewKey, forcePow, onlySignInWith: onlySignInWith ? toAccount(onlySignInWith, this.viemWallet).address: undefined, onAccountImported })
+            await this.burnViewKeyManager.importViewKeyWalletData(parsed.privateData, tokenAddress, archiveNode, { fullSync, syncTillBlock, concurrency, fullNode, forceReSign, forceReHashViewKey, forcePow, onlySignInWith: onlySignInWith ? toAccount(onlySignInWith, this.viemWallet).address : undefined, onAccountImported })
         }
     }
 
@@ -745,35 +745,36 @@ export class BurnWallet {
     async estimateGas(
         tokenAddress: Address,
         relayType: RelayType,
+        circuitSize: number,
         { signingEthAccount, chainId, threads }: { signingEthAccount?: Account, chainId?: number, threads?: number } = {}
     ): Promise<bigint> {
         tokenAddress = getAddress(tokenAddress)
         chainId ??= await this.viemWallet.getChainId()
         signingEthAccount ??= await this.defaultAccount()
 
-        const [archiveNode, contractConfig] = await Promise.all([
-            this.#getPublicClient({ type: "archive", chainId }),
-            this.#getContractConfig(tokenAddress, chainId),
-        ])
-        const contract = getTransWarpTokenContract(tokenAddress, { public: archiveNode, wallet:this.viemWallet })
-        const circuitSize = contractConfig.VERIFIER_SIZES[0]
+        const archiveNode = await this.#getPublicClient({ type: "archive", chainId })
 
         this.fakeProofs[chainId] ??= {}
         this.fakeProofs[chainId][tokenAddress] ??= {}
         const fakeProofCache = this.fakeProofs[chainId][tokenAddress]
 
-        fakeProofCache[relayType] ??= await createFakeRelayInputs(relayType, chainId, tokenAddress, archiveNode, circuitSize, contractConfig, { threads })
+        fakeProofCache[circuitSize] ??= {}
+        if (fakeProofCache[circuitSize][relayType] === undefined) {
+            const contractConfig =  await this.#getContractConfig(tokenAddress, chainId)
+            fakeProofCache[circuitSize][relayType] = await createFakeRelayInputs(relayType, chainId, tokenAddress, archiveNode, circuitSize, contractConfig, { threads })
+        }
 
+        const contract = getTransWarpTokenContract(tokenAddress, { public: archiveNode, wallet: this.viemWallet })
 
 
         if (relayType === "selfRelay") {
             return contract.estimateGas.reMint(
-                formatReMintArgs(fakeProofCache[relayType] as SelfRelayInputs),
+                formatReMintArgs(fakeProofCache[circuitSize][relayType] as SelfRelayInputs),
                 { account: signingEthAccount, gas: GAS_LIMIT_TX },
             )
         } else {
             return contract.estimateGas.reMintRelayer(
-                formatReMintRelayerArgs(fakeProofCache[relayType] as RelayInputs),
+                formatReMintRelayerArgs(fakeProofCache[circuitSize][relayType] as RelayInputs),
                 { account: signingEthAccount, gas: GAS_LIMIT_TX },
             )
         }
