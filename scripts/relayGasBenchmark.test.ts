@@ -34,10 +34,10 @@ const AMOUNT_OF_BURN_ACCOUNTS = 2;
 const PROVING_THREADS = 1;
 const DECIMALS_TOKEN_PRICE = 8;
 
-const TARGET_DEPTHS = [3,]// 6, 10];
+const TARGET_DEPTHS = [3, 6, 10];
 
 type RelayType = "selfRelay" | "relayRefundSeparate" | "relayRefundSameAsRecipient";
-const CIRCUIT_SIZES = [3,]// 32, 100];
+const CIRCUIT_SIZES = [3, 32, 100];
 const RELAY_TYPES: RelayType[] = ["selfRelay", "relayRefundSeparate", "relayRefundSameAsRecipient"];
 
 describe("Relay gas benchmark", async function () {

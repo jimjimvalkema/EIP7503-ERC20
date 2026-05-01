@@ -159,7 +159,7 @@ describe("Token", async function () {
                     reMintAmount,
                     {
                         burnAddresses: claimableBurnAddress,
-                        signingEthAccount: alice.account.address,
+                        signingEthAccount: alice.account,
                         threads: provingThreads, // test breaks if we set this higher then 1, defaults to max
                         circuitSize: CIRCUIT_SIZE // forces to use that size, even if smaller circuits also work, defaults to lowest
                     }
@@ -253,7 +253,7 @@ describe("Token", async function () {
                     reMintAmount,
                     {
                         burnAddresses: claimableBurnAddress,
-                        signingEthAccount: alice.account.address,
+                        signingEthAccount: alice.account,
                         threads: provingThreads, // test breaks if we set this higher then 1, defaults to max
                         circuitSize: CIRCUIT_SIZE // forces to use that size, even if smaller circuits also work, defaults to lowest
                     }

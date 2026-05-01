@@ -73,9 +73,6 @@ export async function getSyncedMerkleTree(
         const timeBefore = Date.now()
         syncTillBlock ??= BigInt(await fullNode.getBlockNumber())
         console.log(`syncing merkle tree from ${firstSyncBlock} till ${syncTillBlock}`)
-        // TODO: queryEventInChunks has a bug where firstBlock === lastBlock produces 0 iterations.
-        // Adding 1n to lastBlock works around this since getLogs toBlock is inclusive anyway,
-        // and the extra block is either empty or not yet mined.
         const events = await queryEventInChunks({
             publicClient: archiveNode,
             contract: transwarpTokenArchive,

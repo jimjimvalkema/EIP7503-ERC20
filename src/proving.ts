@@ -1,5 +1,5 @@
 import { getAddress, toHex } from "viem"
-import type { Hex, Address, PublicClient } from "viem"
+import type { Account, Hex, Address, PublicClient } from "viem"
 import type { MerkleData, SpendableBalanceProof, PreSyncedTree, SignatureData, U1AsHexArr, U32AsHex, TransWarpToken, PublicProofInputs, BurnDataPublic, BurnDataPrivate, PrivateProofInputs, FakeBurnAccount, CreateRelayerInputsOpts, FeeData, SelfRelayInputs, SignatureInputs, SignatureInputsWithFee, BurnAccountProof, FakeBurnAccountProof, RelayInputs, SyncedBurnAccount, BackendPerSize, SpendableBurnAccount, BurnAccountSelector, ProofInputs, BurnAccount } from "./types.js"
 import { EAS_BYTE_LEN_OVERHEAD, EMPTY_UNFORMATTED_MERKLE_PROOF, ENCRYPTED_TOTAL_MINTED_PADDING } from "./constants.ts"
 import { hashTotalMintedLeaf, hashNullifier, hashTotalBurnedLeaf, hashFakeLeaf, hashFakeNullifier } from "./hashing.ts"
@@ -257,7 +257,7 @@ export async function selectBurnAccountsForClaim(
     burnAccountSelector: BurnAccountSelector,
     burnViewKeyManager: BurnViewKeyManager,
     tokenAddress: Address,
-    signingEthAccount: Address,
+    signingAddress: Address,
 
     chainId: bigint,
     allowedChainIds: Hex[],
@@ -267,13 +267,13 @@ export async function selectBurnAccountsForClaim(
     circuitSize?: number,
     burnAddresses?: Address[],
 ) {
-    tokenAddress = getAddress(tokenAddress)
-    signingEthAccount = getAddress(signingEthAccount)
+
+    signingAddress = getAddress(signingAddress)
     // TODO should be a minimum powDifficulty
     const allBurnAccounts = filterBurnAccounts(
         burnViewKeyManager.privateData.burnAccounts, 
         {
-            tokenAddresses:[tokenAddress], ethAccounts: [signingEthAccount], chainIds: [chainId], difficulties: [BigInt(powDifficulty)] 
+            tokenAddresses:[tokenAddress], ethAccounts: [signingAddress], chainIds: [chainId], difficulties: [BigInt(powDifficulty)] 
         }) as SyncedBurnAccount[]
     burnAddresses ??= allBurnAccounts.map((b) => b.burnAddress)
 
@@ -353,7 +353,7 @@ export function getPrivInputs(
 }
 
 export async function signAndEncrypt(
-    recipient: Address, amount: bigint, signingEthAccount: Address,
+    recipient: Address, amount: bigint, signerAccount: Account,
     burnViewKeyManager: BurnViewKeyManager, burnAccountsAndAmounts: SpendableBurnAccount[],
     circuitSize: number, encryptedBlobLen: number, chainId: bigint,
     callData: Hex, callValue: bigint, callCanFail: boolean,
@@ -383,7 +383,7 @@ export async function signAndEncrypt(
         signatureInputs,
         Number(chainId),
         tokenAddress,
-        signingEthAccount,
+        signerAccount,
         eip712Name,
         eip712Version
     )
@@ -398,7 +398,7 @@ export async function createRelayerInputs(
     burnViewKeyManager: BurnViewKeyManager,
     tokenAddress: Address,
     archiveNode: PublicClient,
-    signingEthAccount: Address,
+    signerAccount: Account,
     opts: CreateRelayerInputsOpts & { feeData: FeeData }
 ): Promise<{ relayInputs: SelfRelayInputs, syncedData: { lastSyncedBlock: bigint, syncedBurnAccounts: SyncedBurnAccount[], syncedTree: PreSyncedTree, burnViewKeyManager: BurnViewKeyManager } }>
 
@@ -409,7 +409,7 @@ export async function createRelayerInputs(
     burnViewKeyManager: BurnViewKeyManager,
     tokenAddress: Address,
     archiveNode: PublicClient,
-    signingEthAccount: Address,
+    signerAccount: Account,
     opts?: CreateRelayerInputsOpts | CreateRelayerInputsOpts & { feeData: undefined }
 ): Promise<{ relayInputs: RelayInputs, syncedData: { lastSyncedBlock: bigint, syncedBurnAccounts: SyncedBurnAccount[], syncedTree: PreSyncedTree, syncedPrivateWallet: BurnViewKeyManager } }>;
 /**
@@ -428,7 +428,7 @@ export async function createRelayerInputs(
  * @param burnViewKeyManager  - The caller's private wallet containing burn accounts and signing keys (required).
  * @param tokenAddress - Address of the TransWarpToken contract (required).
  * @param archiveNode         - Archive-node viem PublicClient used for syncing and log queries (required).
- * @param signingEthAccount   - Ethereum account used to sign the private transfer (required).
+ * @param signerAccount       - Account or address used to sign the private transfer (required).
  *
  * --- Defaults via RPC call if not set ---
  * @param powDifficulty       - Proof-of-work difficulty. Defaults to on-chain value from `transwarpToken.POW_DIFFICULTY()`.
@@ -461,13 +461,13 @@ export async function createRelayerInputs(
     burnViewKeyManager: BurnViewKeyManager,
     tokenAddress: Address,
     archiveNode: PublicClient,
-    signingEthAccount: Address,
+    signerAccount: Account,
     { burnAccountSelector = selectSmallFirst,syncTillBlock, allowedChainIds, fullNode, circuitSizes, threads, chainId, callData = "0x", callValue = 0n, callCanFail = false, feeData, burnAddresses, preSyncedTree, backends, deploymentBlock, blocksPerGetLogsReq, circuitSize, powDifficulty, reMintLimit, maxTreeDepth, eip712Name, eip712Version, encryptedBlobLen = ENCRYPTED_TOTAL_MINTED_PADDING + EAS_BYTE_LEN_OVERHEAD }:
         CreateRelayerInputsOpts & { feeData?: FeeData | undefined } = {}
 ): Promise<{ relayInputs: RelayInputs, syncedData: { lastSyncedBlock: bigint, syncedBurnAccounts: SyncedBurnAccount[], syncedTree: PreSyncedTree, syncedPrivateWallet: BurnViewKeyManager } } | { relayInputs: SelfRelayInputs, syncedData: { lastSyncedBlock: bigint, syncedBurnAccounts: SyncedBurnAccount[], syncedTree: PreSyncedTree, burnViewKeyManager: BurnViewKeyManager } }> {
     //------- set defaults ----------------
     tokenAddress = getAddress(tokenAddress)
-    signingEthAccount = getAddress(signingEthAccount)
+    const signingAddress = getAddress(signerAccount.address)
     fullNode ??= archiveNode
     syncTillBlock ??= await fullNode.getBlockNumber()
     const transwarpTokenFull = getTransWarpTokenContract(tokenAddress, { public: fullNode });
@@ -517,7 +517,7 @@ export async function createRelayerInputs(
 
     // -------------burn account sync, selection -----------------------
     const burnAccountsAndAmounts = await selectBurnAccountsForClaim(
-        amount, burnAccountSelector, burnViewKeyManager, tokenAddress, signingEthAccount,
+        amount, burnAccountSelector, burnViewKeyManager, tokenAddress, signingAddress,
         chainId, allowedChainIds, powDifficulty,
         circuitSizes, circuitSize,
         burnAddresses,
@@ -528,7 +528,7 @@ export async function createRelayerInputs(
 
     // ------------ sign and resolve merkle tree ------------------------
     const { signature: { signatureData, signatureHash }, signatureInputs } = await signAndEncrypt(
-        recipient, amount, signingEthAccount,
+        recipient, amount, signerAccount,
         burnViewKeyManager, burnAccountsAndAmounts,
         circuitSize, encryptedBlobLen, chainId,
         callData, callValue, callCanFail,
@@ -624,7 +624,7 @@ export async function hashAndProof(
     // final formatting proofs so noir can use them!
     const publicInputs = getPubInputs({
         amountToReMint: amount,
-        root: syncedTree.tree.root,
+        root: syncedTree.tree.root ?? 0n,
         chainId: chainId,
         signatureHash: signatureHash,
         nullifiers: nullifiers,

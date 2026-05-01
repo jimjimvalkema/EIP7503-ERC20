@@ -1,4 +1,4 @@
-import { bytesToHex, getAddress, getContract, hexToBytes, padHex, toHex, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
+import { bytesToHex, getAddress, getContract, hexToBytes, padHex, toHex, type Account, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 import type {
     BurnAccount, BurnAccountImportable, U8AsHex, U8sAsHexArrLen32, U8sAsHexArrLen64, TransWarpToken,
     AnyBurnAccount, SyncedBurnAccount, DerivedBurnAccountImportable, UnknownBurnAccountImportable,
@@ -150,7 +150,7 @@ export function filterBurnAccounts(
                 }
 
             } else {
-                console.warn(`burnAccountsStorage[ethAccount].burnAccounts[chainId] was undefined TODO figure out if that is bug? ethAccount:${ethAccount}, chainId:${chainId}`)
+                console.warn(`burnAccountsStorage[ethAccount].burnAccounts[chainId] was undefined TODO figure out if that is bug? Unless if this happened when creating the fake gas estimations proofs ofc. ethAccount:${ethAccount}, chainId:${chainId}`)
             }
 
         }
@@ -330,10 +330,8 @@ export async function getContractConfig(address: Address, fullNode: PublicClient
 }
 
 
-export async function signViewKeyMessage(wallet: WalletClient, ethAccount?: Address, message = VIEWING_KEY_SIG_MESSAGE) {
-    if (wallet.account === undefined) throw new Error(viemAccountNotSetErr)
-    ethAccount = wallet.account.address
-    const signature = await wallet.signMessage({ message: message, account: ethAccount })
+export async function signViewKeyMessage(wallet: WalletClient, account: Account, message = VIEWING_KEY_SIG_MESSAGE) {
+    const signature = await wallet.signMessage({ message, account })
     return { signature, message }
 }
 
@@ -358,4 +356,15 @@ export function zeroFeeData(refundAddress: Address, relayerAddress: Address): Fe
         refundAddress,
         relayerAddress,
     }
+}
+
+// Resolves an Address string to an Account object. Uses the wallet's own Account when addresses
+// match (local signing); falls back to a JSON-RPC account for provider-routed signing otherwise.
+export function toAccount(ethAccount: Account | Address, wallet: WalletClient): Account {
+    if (typeof ethAccount !== 'string') return ethAccount
+    const addr = getAddress(ethAccount)
+    if (wallet.account && getAddress(wallet.account.address) === addr) {
+        return wallet.account
+    }
+    return { address: addr, type: 'json-rpc' }
 }

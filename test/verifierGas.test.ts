@@ -133,7 +133,7 @@ describe("Verifier gas", async function () {
                 reMintAmount,
                 {
                     burnAddresses: claimableBurnAddress,
-                    signingEthAccount: alice.account.address,
+                    signingEthAccount: alice.account,
                     threads: provingThreads,
                     circuitSize,
                 },

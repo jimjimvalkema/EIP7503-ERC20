@@ -1,6 +1,6 @@
 // PrivateWallet is a wrapper that exposes some of viem's WalletClient functions and requires them to only ever use one ethAccount
 
-import type { Address, Hex, PublicClient, WalletClient } from "viem";
+import type { Account, Address, Hex, PublicClient, WalletClient } from "viem";
 import { createPublicClient, custom, getAddress, getContract, padHex, toHex } from "viem";
 import type { BurnAccount, PreSyncedTreeStringifyable, PreSyncedTree, ExportedViewKeyData, TransWarpToken, SelfRelayInputs, RelayInputs, CreateRelayerInputsOpts, FeeData, ClientPerChainId, TranswarpContractConfig, FeeDataOptionals, SpendableBurnAccount, BackendPerSize, BurnAccountSelector, SignatureInputs, SignatureData, BurnAccountSelectionForSpend, SignedProofInputs, RelayType } from "./types.ts"
 import { EAS_BYTE_LEN_OVERHEAD, ENCRYPTED_TOTAL_MINTED_PADDING, GAS_LIMIT_TX, RE_MINT_RELAYER_GAS, RE_MINT_RELAYER_GAS_DEFAULT_L1, SLOWEST_PROOF_PADDING, VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
@@ -12,7 +12,7 @@ import { burn, createFakeRelayInputs, formatReMintArgs, formatReMintRelayerArgs,
 import type { TransWarpToken$Type } from "../artifacts/contracts/TransWarpToken.sol/artifacts.ts"
 import TransWarpTokenArtifact from '../artifacts/contracts/TransWarpToken.sol/TransWarpToken.json' with {"type": "json"};
 import { createRelayerInputs, hashAndProof, selectBurnAccountsForClaim, selectSmallFirst, signAndEncrypt } from "./proving.ts";
-import { filterBurnAccounts, getCircuitSize, getContractConfig, getTransWarpTokenContract } from "./utils.ts";
+import { filterBurnAccounts, getCircuitSize, getContractConfig, getTransWarpTokenContract, toAccount } from "./utils.ts";
 //import { findPoWNonceAsync } from "./hashingAsync.js";
 
 export const viemAccountNotSetErr = `viem wallet not created with account set. pls do:
@@ -25,7 +25,7 @@ export const viemAccountNotSetErr = `viem wallet not created with account set. p
 
 export class BurnWallet {
     readonly burnViewKeyManager: BurnViewKeyManager
-    viemWallet: WalletClient;
+    viemWallet: WalletClient & { account: Account};
     readonly archiveNodes: ClientPerChainId;
     readonly fullNodes: ClientPerChainId
     readonly contractConfig: { [chainId: Hex]: { [Address: Address]: TranswarpContractConfig } } = {};
@@ -46,7 +46,7 @@ export class BurnWallet {
      * @param options.fullNode - Defaults to archiveNode, if no archiveNode, defaults to viemWallets public client
      */
     constructor(
-        viemWallet: WalletClient,
+        viemWallet: WalletClient & { account: Account},
         { archiveNodes, fullNodes, merkleTrees, contractConfigs, viewKeySigMessage = VIEWING_KEY_SIG_MESSAGE, acceptedChainIds = [1], chainId }:
             { archiveNodes?: ClientPerChainId, fullNodes?: ClientPerChainId, merkleTrees?: { [chainId: Hex]: { [Address: Address]: PreSyncedTree } }, contractConfigs?: { [chainId: Hex]: { [Address: Address]: TranswarpContractConfig } }, walletDataImport?: string, viewKeySigMessage?: string, acceptedChainIds?: number[], chainId?: number } = {}
     ) {
@@ -69,13 +69,13 @@ export class BurnWallet {
     async getBurnAccounts(
         tokenAddress: Address,
         { ethSigner, chainId, difficulty, type = "derived" }:
-            { ethSigner?: Address, chainId?: Hex, difficulty?: Hex, type?: "derived" | "unknown" } = {}
+            { ethSigner?: Account, chainId?: Hex, difficulty?: Hex, type?: "derived" | "unknown" } = {}
     ): Promise<BurnAccount[]> {
-        ethSigner ??= await this.defaultSigner()
+        ethSigner ??= await this.defaultAccount()
         chainId ??= toHex(await this.viemWallet.getChainId())
         const contractConfig = await this.getContractConfig(tokenAddress)
         difficulty = difficulty ? padHex(difficulty, { size: 32 }) : padHex(contractConfig.POW_DIFFICULTY, { size: 32 })
-        const burnAccounts = this.burnViewKeyManager.privateData.burnAccounts[ethSigner as string].burnAccounts[chainId as string][difficulty as string]
+        const burnAccounts = this.burnViewKeyManager.privateData.burnAccounts[ethSigner.address as string].burnAccounts[chainId as string][difficulty as string]
         if (type === "unknown") {
             return Object.values(burnAccounts.unknownBurnAccounts)
         } else {
@@ -87,7 +87,7 @@ export class BurnWallet {
     // this is because some wallets return the current selected account with (await this.viemWallet.getAddresses())[0]
     // but some don't. So defaultSigner detects that by doing this.viemWallet.account?.address !== (await this.viemWallet.getAddresses())[0]
     // then forces the user to tell it directly with a popup.
-    changeViemWallet(newWallet: WalletClient) {
+    changeViemWallet(newWallet: WalletClient & {account:Account}) {
         if (newWallet.account === undefined) {
             throw new Error(`viem wallet not created with account set. pls do: 
             const wallet = createWalletClient({
@@ -101,9 +101,8 @@ export class BurnWallet {
         this.burnViewKeyManager.viemWallet = newWallet;
     }
 
-    async defaultSigner() {
-        const staticAccount = this.viemWallet.account?.address as Address
-        return staticAccount
+    async defaultAccount(): Promise<Account> {
+        return this.viemWallet.account
     }
 
     async #getMerkleTree(address: Address, chainId?: number) {
@@ -204,14 +203,14 @@ export class BurnWallet {
         return contract as TransWarpToken
     }
 
-    async connect(walletClient?: WalletClient) {
+    async connect(walletClient?: WalletClient & {account:Account}) {
         walletClient ??= this.viemWallet
         if (walletClient.account === undefined) throw new Error(viemAccountNotSetErr)
         this.viemWallet = walletClient
         return await this.burnViewKeyManager.connect(walletClient)
     }
 
-    async connectPreSigned(signature: Hex, message: string, walletClient?: WalletClient) {
+    async connectPreSigned(signature: Hex, message: string, walletClient?: WalletClient & {account:Account}) {
         walletClient ??= this.viemWallet
         if (walletClient.account === undefined) throw new Error(viemAccountNotSetErr)
         this.viemWallet = walletClient
@@ -247,10 +246,10 @@ export class BurnWallet {
     async createBurnAccount(
         tokenAddress: Address,
         { chainId, signingEthAccount, viewingKeyIndex, async = false }:
-            { chainId?: number, signingEthAccount?: Address, isDeterministic?: boolean, viewingKeyIndex?: number, async?: boolean } = {}
+            { chainId?: number, signingEthAccount?: Account, isDeterministic?: boolean, viewingKeyIndex?: number, async?: boolean } = {}
     ) {
         [signingEthAccount, chainId] = await Promise.all([
-            signingEthAccount ?? this.defaultSigner(),
+            signingEthAccount ?? this.defaultAccount(),
             chainId ?? this.viemWallet.getChainId(),
         ])
         const contractConfig = await this.#getContractConfig(tokenAddress, chainId)
@@ -290,10 +289,10 @@ export class BurnWallet {
     async createBurnAccountsBulk(
         tokenAddress: Address, amountOfBurnAccounts: number,
         { signingEthAccount, startingViewKeyIndex, chainId, async = false }:
-            { signingEthAccount?: Address, startingViewKeyIndex?: number, async?: boolean, chainId?: number } = {}
+            { signingEthAccount?: Account, startingViewKeyIndex?: number, async?: boolean, chainId?: number } = {}
     ) {
         [signingEthAccount, chainId] = await Promise.all([
-            signingEthAccount ?? this.defaultSigner(),
+            signingEthAccount ?? this.defaultAccount(),
             chainId ?? this.viemWallet.getChainId(),
         ])
         const contractConfig = await this.#getContractConfig(tokenAddress, chainId)
@@ -346,11 +345,11 @@ export class BurnWallet {
     async importWallet(
         json: string,
         tokenAddress: Address,
-        { fullSync = true, syncTillBlock, concurrency = 10, merkleTrees = true, onlyImportSigner = false, viewKeyData = true, forceReHashViewKey = true, forceReSign = false, forcePow = false, chainId, onlySignInWith, onAccountImported }: { fullSync?: boolean, syncTillBlock?: bigint, concurrency?: number, onlyImportSigner?: boolean, forceReHashViewKey?: boolean, forceReSign?: boolean, forcePow?: boolean, merkleTrees?: boolean, viewKeyData?: boolean, chainId?: number, onlySignInWith?: Address, onAccountImported?: () => void } = {}
+        { fullSync = true, syncTillBlock, concurrency = 10, merkleTrees = true, onlyImportSigner = false, viewKeyData = true, forceReHashViewKey = true, forceReSign = false, forcePow = false, chainId, onlySignInWith, onAccountImported }: { fullSync?: boolean, syncTillBlock?: bigint, concurrency?: number, onlyImportSigner?: boolean, forceReHashViewKey?: boolean, forceReSign?: boolean, forcePow?: boolean, merkleTrees?: boolean, viewKeyData?: boolean, chainId?: number, onlySignInWith?: Account | Address, onAccountImported?: () => void } = {}
     ) {
         if (onlyImportSigner && onlySignInWith) { throw new Error(`please set onlyImportSigner:false when specifying onlySignInWith,  ex: BurnWaller.importWallet(json, ${tokenAddress}, {onlyImportSigner:false, onlySignInWith:[${onlySignInWith.toString()}]), ...yourOtherOptions}`) }
         if (onlyImportSigner) {
-            onlySignInWith = await this.defaultSigner();
+            onlySignInWith = await this.defaultAccount();
         }
         const parsed = JSON.parse(json) as { merkleTrees: ExportedMerkleTrees, privateData: ExportedViewKeyData }
         const archiveNode = await this.#getPublicClient({ type: "archive", chainId })
@@ -361,7 +360,7 @@ export class BurnWallet {
         }
 
         if (parsed.privateData && viewKeyData) {
-            await this.burnViewKeyManager.importViewKeyWalletData(parsed.privateData, tokenAddress, archiveNode, { fullSync, syncTillBlock, concurrency, fullNode, forceReSign, forceReHashViewKey, forcePow, onlySignInWith, onAccountImported })
+            await this.burnViewKeyManager.importViewKeyWalletData(parsed.privateData, tokenAddress, archiveNode, { fullSync, syncTillBlock, concurrency, fullNode, forceReSign, forceReHashViewKey, forcePow, onlySignInWith: onlySignInWith ? toAccount(onlySignInWith, this.viemWallet).address: undefined, onAccountImported })
         }
     }
 
@@ -407,7 +406,7 @@ export class BurnWallet {
     sync(
         tokenAddress: Address,
         { concurrency = 10, syncTillBlock, chainId, deploymentBlock, blocksPerGetLogsReq, burnAddressesToSync, signingEthAccount, maxNonce }:
-            { concurrency?: number, syncTillBlock?: bigint, chainId?: number, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, burnAddressesToSync?: Address[], signingEthAccount?: Address, maxNonce?: bigint } = {}
+            { concurrency?: number, syncTillBlock?: bigint, chainId?: number, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, burnAddressesToSync?: Address[], signingEthAccount?: Account, maxNonce?: bigint } = {}
     ) {
         const syncedTillBlock = syncTillBlock
             ? Promise.resolve(syncTillBlock)
@@ -437,14 +436,14 @@ export class BurnWallet {
         return syncedTree
     }
 
-    async syncBurnAccounts(tokenAddress: Address, { concurrency = 10, chainId, burnAddressesToSync, signingEthAccount, maxNonce, syncTillBlock, onAccountSynced }: { concurrency?: number, syncTillBlock?: bigint, chainId?: number, burnAddressesToSync?: Address[], signingEthAccount?: Address, maxNonce?: bigint, onAccountSynced?: (burnAccount: BurnAccount) => void } = {}) {
+    async syncBurnAccounts(tokenAddress: Address, { concurrency = 10, chainId, burnAddressesToSync, signingEthAccount, maxNonce, syncTillBlock, onAccountSynced }: { concurrency?: number, syncTillBlock?: bigint, chainId?: number, burnAddressesToSync?: Address[], signingEthAccount?: Account, maxNonce?: bigint, onAccountSynced?: (burnAccount: BurnAccount) => void } = {}) {
         [chainId, signingEthAccount, syncTillBlock] = await Promise.all([
             chainId ?? this.viemWallet.getChainId(),
-            signingEthAccount ?? this.defaultSigner(),
+            signingEthAccount ?? this.defaultAccount(),
             syncTillBlock ?? await (await this.#getPublicClient({ type: "full", chainId })).getBlockNumber()
         ])
         const archiveNode = await this.#getPublicClient({ type: "archive", chainId })
-        const syncedBurnAccountData = await syncMultipleBurnAccounts(this.burnViewKeyManager, tokenAddress, archiveNode, { concurrency, syncTillBlock, burnAddressesToSync, maxNonce, ethAccounts: [signingEthAccount], chainId: toHex(chainId), onAccountSynced })
+        const syncedBurnAccountData = await syncMultipleBurnAccounts(this.burnViewKeyManager, tokenAddress, archiveNode, { concurrency, syncTillBlock, burnAddressesToSync, maxNonce, ethAccounts: [signingEthAccount.address], chainId: toHex(chainId), onAccountSynced })
         return syncedBurnAccountData
     }
 
@@ -474,15 +473,15 @@ export class BurnWallet {
     async selectBurnAccountsForSpend(
         tokenAddress: Address, amount: bigint,
         { chainId, signingEthAccount, burnAccountSelector = selectSmallFirst, circuitSize, burnAddresses }:
-            { chainId?: number, signingEthAccount?: Address, burnAccountSelector?: BurnAccountSelector, circuitSize?: number, burnAddresses?: Address[] } = {}
+            { chainId?: number, signingEthAccount?: Account, burnAccountSelector?: BurnAccountSelector, circuitSize?: number, burnAddresses?: Address[] } = {}
     ): Promise<BurnAccountSelectionForSpend> {
         [chainId, signingEthAccount] = await Promise.all([
             chainId ?? this.viemWallet.getChainId(),
-            signingEthAccount ?? this.defaultSigner(),
+            signingEthAccount ?? this.defaultAccount(),
         ])
         const contractConfig = await this.#getContractConfig(tokenAddress, chainId)
         const burnAccountsAndAmounts = await selectBurnAccountsForClaim(
-            amount, burnAccountSelector, this.burnViewKeyManager, tokenAddress, signingEthAccount,
+            amount, burnAccountSelector, this.burnViewKeyManager, tokenAddress, signingEthAccount.address,
             BigInt(chainId), contractConfig.ACCEPTED_CHAIN_IDS, contractConfig.POW_DIFFICULTY,
             contractConfig.VERIFIER_SIZES, circuitSize, burnAddresses,
         )
@@ -492,12 +491,12 @@ export class BurnWallet {
     async signReMint(
         recipient: Address, burnAccountSelectionForSpend: BurnAccountSelectionForSpend,
         { chainId, signingEthAccount, circuitSize, encryptedBlobLen = ENCRYPTED_TOTAL_MINTED_PADDING + EAS_BYTE_LEN_OVERHEAD, callData = "0x", callValue = 0n, callCanFail = false, feeData }:
-            { chainId?: number, signingEthAccount?: Address, circuitSize?: number, encryptedBlobLen?: number, callData?: Hex, callValue?: bigint, callCanFail?: boolean, feeData?: FeeData } = {}
+            { chainId?: number, signingEthAccount?: Account, circuitSize?: number, encryptedBlobLen?: number, callData?: Hex, callValue?: bigint, callCanFail?: boolean, feeData?: FeeData } = {}
     ): Promise<SignedProofInputs> {
         const { amount, tokenAddress, burnAccountsAndAmounts } = burnAccountSelectionForSpend;
         [chainId, signingEthAccount] = await Promise.all([
             chainId ?? this.viemWallet.getChainId(),
-            signingEthAccount ?? this.defaultSigner(),
+            signingEthAccount ?? this.defaultAccount(),
         ])
         const contractConfig = await this.#getContractConfig(tokenAddress, chainId)
         circuitSize ??= getCircuitSize(burnAccountsAndAmounts.length, contractConfig.VERIFIER_SIZES)
@@ -552,17 +551,17 @@ export class BurnWallet {
     // TODO cache proof backend
     async easyProof(
         tokenAddress: Address, recipient: Address, amount: bigint,
-        opts: Omit<CreateRelayerInputsOpts, "fullNode" | "powDifficulty" | "maxTreeDepth" | "chainId" | "circuitSizes" | "preSyncedTree" | "feeData"> & { signingEthAccount?: Address, chainId?: number, feeData: FeeData }
+        opts: Omit<CreateRelayerInputsOpts, "fullNode" | "powDifficulty" | "maxTreeDepth" | "chainId" | "circuitSizes" | "preSyncedTree" | "feeData"> & { signingEthAccount?: Account, chainId?: number, feeData: FeeData }
     ): Promise<RelayInputs>;
     async easyProof(
         tokenAddress: Address, recipient: Address, amount: bigint,
-        opts?: Omit<CreateRelayerInputsOpts, "fullNode" | "powDifficulty" | "maxTreeDepth" | "chainId" | "circuitSizes" | "preSyncedTree" | "feeData"> & { signingEthAccount?: Address, chainId?: number, feeData?: undefined }
+        opts?: Omit<CreateRelayerInputsOpts, "fullNode" | "powDifficulty" | "maxTreeDepth" | "chainId" | "circuitSizes" | "preSyncedTree" | "feeData"> & { signingEthAccount?: Account, chainId?: number, feeData?: undefined }
     ): Promise<SelfRelayInputs>;
     async easyProof(
         tokenAddress: Address, recipient: Address, amount: bigint,
-        opts: Omit<CreateRelayerInputsOpts, "fullNode" | "powDifficulty" | "maxTreeDepth" | "chainId" | "circuitSizes" | "preSyncedTree" | "feeData"> & { signingEthAccount?: Address, chainId?: number, feeData?: FeeDataOptionals } = {}
+        opts: Omit<CreateRelayerInputsOpts, "fullNode" | "powDifficulty" | "maxTreeDepth" | "chainId" | "circuitSizes" | "preSyncedTree" | "feeData"> & { signingEthAccount?: Account, chainId?: number, feeData?: FeeDataOptionals } = {}
     ) {
-        const signingEthAccount = opts.signingEthAccount ? opts.signingEthAccount : await this.defaultSigner()
+        const signingEthAccount = opts.signingEthAccount ? opts.signingEthAccount : await this.defaultAccount()
         delete opts.signingEthAccount
         const chainId = opts.chainId ?? await this.viemWallet.getChainId()
         opts.syncTillBlock ??= await this.getBlockNumber(chainId)
@@ -638,9 +637,9 @@ export class BurnWallet {
      * @param param2
      * @returns
      */
-    async getFreshBurnAccount(tokenAddress: Address, { signingEthAccount, chainId }: { signingEthAccount?: Address, chainId?: number } = {}) {
+    async getFreshBurnAccount(tokenAddress: Address, { signingEthAccount, chainId }: { signingEthAccount?: Account, chainId?: number } = {}) {
         [signingEthAccount, chainId] = await Promise.all([
-            signingEthAccount ?? this.defaultSigner(),
+            signingEthAccount ?? this.defaultAccount(),
             chainId ?? this.viemWallet.getChainId(),
         ])
         return await this.burnViewKeyManager.getFreshBurnAccount(
@@ -656,9 +655,9 @@ export class BurnWallet {
      * The viewing key derivation includes both the contract address and chain ID,
      * so freshness can be verified by checking only this token's balance.
      */
-    async createSingleUseBurnAccount(tokenAddress: Address, { signingEthAccount, chainId, viewingKeyIndex, async: async }: { signingEthAccount?: Address, chainId?: number, viewingKeyIndex?: number, async?: boolean } = {}) {
+    async createSingleUseBurnAccount(tokenAddress: Address, { signingEthAccount, chainId, viewingKeyIndex, async: async }: { signingEthAccount?: Account, chainId?: number, viewingKeyIndex?: number, async?: boolean } = {}) {
         [signingEthAccount, chainId] = await Promise.all([
-            signingEthAccount ?? this.defaultSigner(),
+            signingEthAccount ?? this.defaultAccount(),
             chainId ?? this.viemWallet.getChainId(),
         ])
         const difficulty = (await this.#getContractConfig(tokenAddress, chainId)).POW_DIFFICULTY
@@ -670,9 +669,9 @@ export class BurnWallet {
      * Prefer this over `getFreshBurnAccount` when receiving relayer fee refunds —
      * the contract-specific derivation means a single balance check is sufficient.
      */
-    async getFreshSingleUseBurnAccount(tokenAddress: Address, { signingEthAccount, chainId }: { signingEthAccount?: Address, chainId?: number } = {}) {
+    async getFreshSingleUseBurnAccount(tokenAddress: Address, { signingEthAccount, chainId }: { signingEthAccount?: Account, chainId?: number } = {}) {
         [signingEthAccount, chainId] = await Promise.all([
-            signingEthAccount ?? this.defaultSigner(),
+            signingEthAccount ?? this.defaultAccount(),
             chainId ?? this.viemWallet.getChainId(),
         ])
         return await this.burnViewKeyManager.getFreshSingleUseBurnAccount(
@@ -715,7 +714,7 @@ export class BurnWallet {
      */
     async superSafeBurn(
         tokenAddress: Address, amount: bigint, burnAccount?: BurnAccount | { burnAddress: Address },
-        { chainId, signingEthAccount }: { chainId?: number, signingEthAccount?: Address } = {}
+        { chainId, signingEthAccount }: { chainId?: number, signingEthAccount?: Account } = {}
     ) {
         chainId ??= await this.viemWallet.getChainId()
         burnAccount ??= await this.getFreshBurnAccount(tokenAddress, { signingEthAccount, chainId })
@@ -726,7 +725,7 @@ export class BurnWallet {
             this.#getContractConfig(tokenAddress, chainId),
             this.#getPublicClient({ type: "full" }),
         ])
-        signingEthAccount ??= await this.defaultSigner()
+        signingEthAccount ??= await this.defaultAccount()
 
         return await superSafeBurn(fullBurnAccount, amount, tokenAddress, this.viemWallet, fullNode, signingEthAccount, {
             difficulty: BigInt(contractConfig.POW_DIFFICULTY),
@@ -746,11 +745,11 @@ export class BurnWallet {
     async estimateGas(
         tokenAddress: Address,
         relayType: RelayType,
-        { signingEthAccount, chainId, threads }: { signingEthAccount?: Address, chainId?: number, threads?: number } = {}
+        { signingEthAccount, chainId, threads }: { signingEthAccount?: Account, chainId?: number, threads?: number } = {}
     ): Promise<bigint> {
         tokenAddress = getAddress(tokenAddress)
         chainId ??= await this.viemWallet.getChainId()
-        signingEthAccount ??= await this.defaultSigner()
+        signingEthAccount ??= await this.defaultAccount()
 
         const [archiveNode, contractConfig] = await Promise.all([
             this.#getPublicClient({ type: "archive", chainId }),
@@ -763,7 +762,7 @@ export class BurnWallet {
         this.fakeProofs[chainId][tokenAddress] ??= {}
         const fakeProofCache = this.fakeProofs[chainId][tokenAddress]
 
-        fakeProofCache[relayType] ??= await createFakeRelayInputs(relayType, chainId, tokenAddress, archiveNode, circuitSize, { threads })
+        fakeProofCache[relayType] ??= await createFakeRelayInputs(relayType, chainId, tokenAddress, archiveNode, circuitSize, contractConfig, { threads })
 
 
 
@@ -782,7 +781,7 @@ export class BurnWallet {
 
     async superSafeBurnBulk(
         tokenAddress: Address, recipientsAndAmounts: { burnAccount: BurnAccount | { burnAddress: Address }, amount: bigint }[],
-        { chainId, signingEthAccount }: { chainId?: number, signingEthAccount?: Address } = {}
+        { chainId, signingEthAccount }: { chainId?: number, signingEthAccount?: Account } = {}
     ) {
         chainId ??= await this.viemWallet.getChainId()
 
@@ -793,7 +792,7 @@ export class BurnWallet {
                 ("viewingKey" in item.burnAccount) ? item.burnAccount : this.#resolveBurnAccount(item.burnAccount.burnAddress, tokenAddress, chainId)
             ),
         ])
-        signingEthAccount ??= await this.defaultSigner()
+        signingEthAccount ??= await this.defaultAccount()
 
         const resolvedItems = recipientsAndAmounts.map((item, i) => ({
             burnAccount: fullBurnAccounts[i] as BurnAccount,

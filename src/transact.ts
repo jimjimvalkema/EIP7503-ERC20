@@ -1,7 +1,7 @@
-import type { Address, Hex, PublicClient, WalletClient } from "viem";
+import type { Account, Address, Hex, PublicClient, WalletClient } from "viem";
 import { bytesToHex, createWalletClient, custom, getAddress, toHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import type { BackendPerSize, BurnAccount, PreSyncedTree, RelayInputs, SelfRelayInputs, UnsyncedBurnAccount, TransWarpToken, FeeData, RelayType } from "./types.ts";
+import type { BackendPerSize, BurnAccount, PreSyncedTree, RelayInputs, SelfRelayInputs, UnsyncedBurnAccount, TransWarpToken, FeeData, RelayType, TranswarpContractConfig } from "./types.ts";
 import { UltraHonkBackend } from "@aztec/bb.js";
 import { getBurnAddressSafe, hashBlindedAddressData, hashPow, isValidPowNonce } from "./hashing.ts";
 import { BurnViewKeyManager } from "./BurnViewKeyManager.ts";
@@ -27,7 +27,7 @@ export async function burnCheck(burnAddress: Address, amount: bigint, tokenAddre
     if (newBurnBalance >= reMintLimit) { throw new Error(`This transfer will cause the balance to go over the RE_MINT_LIMIT. This wil result in LOSS OF ALL FUNDS OVER THE LIMIT!! DO NOT SEND THIS TRANSACTION!!\n new balance: ${newBurnBalance} \n limit:       ${reMintLimit}`) }
 }
 
-export async function burnCheckSafe(burnAccount: NotOwnedBurnAccount, amount: bigint, tokenAddress: Address, fullNode: PublicClient, signingEthAccount: Address,
+export async function burnCheckSafe(burnAccount: NotOwnedBurnAccount, amount: bigint, tokenAddress: Address, fullNode: PublicClient, signingEthAccount: Account,
     { reMintLimit, maxTreeDepth, acceptedChainIds, isCrossChain, difficulty }: { isCrossChain: boolean, difficulty: bigint, reMintLimit: bigint, maxTreeDepth: number, acceptedChainIds?: Hex[] }
 ) {
     const transwarpTokenFull = getTransWarpTokenContract(tokenAddress, { public: fullNode })
@@ -45,7 +45,7 @@ export async function burnCheckSafe(burnAccount: NotOwnedBurnAccount, amount: bi
     await burnCheck(burnAccount.burnAddress, amount, tokenAddress, fullNode, { maxTreeDepth, reMintLimit })
 }
 
-export async function burnCheckSuperSafe(burnAccount: BurnAccount, amount: bigint, tokenAddress: Address, fullNode: PublicClient, signingEthAccount: Address,
+export async function burnCheckSuperSafe(burnAccount: BurnAccount, amount: bigint, tokenAddress: Address, fullNode: PublicClient, signingEthAccount: Account,
     { reMintLimit, maxTreeDepth, acceptedChainIds, isCrossChain, difficulty }: { isCrossChain: boolean, difficulty: bigint, reMintLimit: bigint, maxTreeDepth: number, acceptedChainIds?: Hex[] }
 ) {
     const blindedAddressDataHash = hashBlindedAddressData({ spendingPubKeyX: burnAccount.spendingPubKeyX, viewingKey: BigInt(burnAccount.viewingKey), chainId: BigInt(burnAccount.chainId) })
@@ -57,7 +57,7 @@ export async function burnCheckSuperSafe(burnAccount: BurnAccount, amount: bigin
     )
 }
 
-async function unsafeBurn(tokenAddress: Address, burnAddress: Address, amount: bigint, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Address) {
+async function unsafeBurn(tokenAddress: Address, burnAddress: Address, amount: bigint, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Account) {
     const transwarpTokenFull = getTransWarpTokenContract(tokenAddress, { wallet, public: fullNode })
     const estimatedGas = await transwarpTokenFull.estimateGas.transfer([burnAddress, amount], { account: signingEthAccount })
     return await transwarpTokenFull.write.transfer([burnAddress, amount], { account: signingEthAccount, chain: null, gas: estimatedGas * GAS_ESTIMATE_BUFFER_PERCENT / 100n })
@@ -75,7 +75,7 @@ async function unsafeBurn(tokenAddress: Address, burnAddress: Address, amount: b
  * @returns 
  */
 export async function burn(
-    burnAddress: Address, amount: bigint, tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Address,
+    burnAddress: Address, amount: bigint, tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Account,
     { reMintLimit, maxTreeDepth }: { reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     const transwarpTokenFull = getTransWarpTokenContract(tokenAddress, { wallet, public: fullNode })
@@ -102,7 +102,7 @@ export async function burn(
  * @returns
  */
 export async function safeBurn(
-    burnAccount: NotOwnedBurnAccount, amount: bigint, tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Address,
+    burnAccount: NotOwnedBurnAccount, amount: bigint, tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Account,
     { reMintLimit, maxTreeDepth, acceptedChainIds, isCrossChain, difficulty }: { isCrossChain?: boolean, difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number, acceptedChainIds?: Hex[] } = {}
 ) {
     const transwarpTokenFull = getTransWarpTokenContract(tokenAddress, { wallet, public: fullNode })
@@ -137,7 +137,7 @@ export async function safeBurn(
  * @returns
  */
 export async function superSafeBurn(
-    burnAccount: BurnAccount, amount: bigint, tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Address,
+    burnAccount: BurnAccount, amount: bigint, tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Account,
     { difficulty, reMintLimit, maxTreeDepth, acceptedChainIds, isCrossChain }: { isCrossChain?: boolean, difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number, acceptedChainIds?: Hex[] } = {}
 ) {
     const transwarpTokenFull = getTransWarpTokenContract(tokenAddress, { wallet, public: fullNode })
@@ -161,7 +161,7 @@ export async function superSafeBurn(
 
 // ── Bulk burn functions (one transferBulk tx) ────────────────────────
 
-async function unsafeBurnBulk(recipientsAndAmounts: { burnAddress: Address, amount: bigint }[], tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Address) {
+async function unsafeBurnBulk(recipientsAndAmounts: { burnAddress: Address, amount: bigint }[], tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Account) {
     const transwarpTokenFull = getTransWarpTokenContract(tokenAddress, { wallet, public: fullNode })
     const burnAddresses = recipientsAndAmounts.map((item) => item.burnAddress)
     const amounts = recipientsAndAmounts.map((item) => item.amount)
@@ -170,7 +170,7 @@ async function unsafeBurnBulk(recipientsAndAmounts: { burnAddress: Address, amou
 }
 
 export async function burnBulk(
-    recipientsAndAmounts: { burnAddress: Address, amount: bigint }[], tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Address,
+    recipientsAndAmounts: { burnAddress: Address, amount: bigint }[], tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Account,
     { reMintLimit, maxTreeDepth }: { reMintLimit?: bigint, maxTreeDepth?: number } = {}
 ) {
     if (recipientsAndAmounts.length === 0) { throw new Error("burnBulk requires at least one item") }
@@ -189,7 +189,7 @@ export async function burnBulk(
 }
 
 export async function safeBurnBulk(
-    recipientsAndAmounts: { burnAccount: NotOwnedBurnAccount, amount: bigint }[], tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Address,
+    recipientsAndAmounts: { burnAccount: NotOwnedBurnAccount, amount: bigint }[], tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Account,
     { reMintLimit, maxTreeDepth, acceptedChainIds, isCrossChain, difficulty }: { isCrossChain?: boolean, difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number, acceptedChainIds?: Hex[] } = {}
 ) {
     if (recipientsAndAmounts.length === 0) { throw new Error("safeBurnBulk requires at least one item") }
@@ -216,7 +216,7 @@ export async function safeBurnBulk(
 }
 
 export async function superSafeBurnBulk(
-    recipientsAndAmounts: { burnAccount: BurnAccount, amount: bigint }[], tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Address,
+    recipientsAndAmounts: { burnAccount: BurnAccount, amount: bigint }[], tokenAddress: Address, wallet: WalletClient, fullNode: PublicClient, signingEthAccount: Account,
     { difficulty, reMintLimit, maxTreeDepth, acceptedChainIds, isCrossChain }: { isCrossChain?: boolean, difficulty?: bigint, reMintLimit?: bigint, maxTreeDepth?: number, acceptedChainIds?: Hex[] } = {}
 ) {
     if (recipientsAndAmounts.length === 0) { throw new Error("superSafeBurnBulk requires at least one item") }
@@ -282,7 +282,7 @@ export async function proofAndSelfRelay(
     burnViewKeyManager: BurnViewKeyManager,
     transwarpToken: TransWarpToken,
     archiveNode: PublicClient,
-    signingEthAccount: Address,
+    signingEthAccount: Account,
     { burnAddresses, threads, callData = "0x", callValue = 0n, callCanFail = false, preSyncedTree, backends, deploymentBlock, blocksPerGetLogsReq, circuitSize, maxTreeDepth, encryptedBlobLen = ENCRYPTED_TOTAL_MINTED_PADDING + EAS_BYTE_LEN_OVERHEAD, powDifficulty, reMintLimit }:
         { burnAddresses?: Address[], threads?: number, callData?: Hex, callCanFail?: boolean, callValue?: bigint, preSyncedTree?: PreSyncedTree, backends?: BackendPerSize, deploymentBlock?: bigint, blocksPerGetLogsReq?: bigint, circuitSize?: number, maxTreeDepth?: number, encryptedBlobLen?: number, powDifficulty?: Hex, reMintLimit?: Hex } = {}
 ) {
@@ -435,20 +435,31 @@ export async function createFakeRelayInputs(
     tokenAddress: Address,
     archiveNode: PublicClient,
     circuitSize: number,
-    { threads = 1 }: { threads?: number } = {},
+    contractConfig: TranswarpContractConfig,
+    { threads = 1}: { threads?: number} = {},
 ) {
     const account = privateKeyToAccount(bytesToHex(crypto.getRandomValues(new Uint8Array(32))) as Hex)
     const viemWallet = createWalletClient({ account, transport: custom(archiveNode) })
     const fakeBurnViewKeyManager = new BurnViewKeyManager(viemWallet, {
         acceptedChainIds: [chainId],
     })
-    const signingEthAccount = account.address;
-    const recipient = signingEthAccount
+    const recipient = account.address
     if (relayType === "selfRelay") {
         const result = await createRelayerInputs(
             recipient, 0n, fakeBurnViewKeyManager,
-            tokenAddress, archiveNode, signingEthAccount,
-            { threads, circuitSize },
+            tokenAddress, archiveNode, account,
+            { 
+                threads, circuitSize,
+
+                // defaults
+                circuitSizes:contractConfig.VERIFIER_SIZES, powDifficulty:contractConfig.POW_DIFFICULTY, 
+                allowedChainIds:contractConfig.ACCEPTED_CHAIN_IDS, reMintLimit:contractConfig.RE_MINT_LIMIT, 
+                chainId:BigInt(chainId), maxTreeDepth:contractConfig.MAX_TREE_DEPTH,eip712Name:contractConfig.EIP712_NAME, 
+                eip712Version:contractConfig.EIP712_VERSION,deploymentBlock:contractConfig.DEPLOYMENT_BLOCK,
+
+                // effectively blocks syncing all together. Merkle tree wont sync, burn accounts wont either since none are provided
+                syncTillBlock:contractConfig.DEPLOYMENT_BLOCK,
+            },
         )
         return result.relayInputs
     } else {
@@ -461,8 +472,22 @@ export async function createFakeRelayInputs(
 
         const result = await createRelayerInputs(
             recipient, 0n, fakeBurnViewKeyManager,
-            tokenAddress, archiveNode, signingEthAccount,
-            { threads, circuitSize, feeData },
+            tokenAddress, archiveNode, account,
+            { 
+                threads, circuitSize,
+
+                // defaults
+                circuitSizes:contractConfig.VERIFIER_SIZES, powDifficulty:contractConfig.POW_DIFFICULTY, 
+                allowedChainIds:contractConfig.ACCEPTED_CHAIN_IDS, reMintLimit:contractConfig.RE_MINT_LIMIT, 
+                chainId:BigInt(chainId), maxTreeDepth:contractConfig.MAX_TREE_DEPTH,eip712Name:contractConfig.EIP712_NAME, 
+                eip712Version:contractConfig.EIP712_VERSION,deploymentBlock:contractConfig.DEPLOYMENT_BLOCK,
+
+                // effectively blocks syncing all together. Merkle tree wont sync, burn accounts wont either since none are provided
+                syncTillBlock:contractConfig.DEPLOYMENT_BLOCK,
+                
+                // feeData
+                feeData 
+            },
         )
         return result.relayInputs
     }
