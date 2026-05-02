@@ -98,6 +98,16 @@ deploy poseidon2 hasher with create2 (if it's not deployed yet)
 yarn hardhat run scripts/deployPoseidon2.ts --network sepolia
 ```
 
+run tests
+```shell
+yarn hardhat test
+```
+
+run test in parallel
+```shell
+yarn hardhat compile && for f in test/*.test.ts; do yarn hardhat test --no-compile "$f" & done; wait
+```
+
 ## deployed addresses
 ### sepolia  
 TransWarpToken - [0x787c3CEd84107aeeE29e54674905B47C63992024](https://sepolia.etherscan.io/address/0x787c3CEd84107aeeE29e54674905B47C63992024)  
