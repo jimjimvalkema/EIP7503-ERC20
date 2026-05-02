@@ -15,14 +15,15 @@ import {
     MAX_TREE_DEPTH,
 } from "../src/constants.ts";
 import { relayTx } from "../src/transact.ts";
-import { getContract, padHex, parseUnits, toHex, type Address, type Hash, type Hex, type PublicClient } from "viem";
-import type { FeeData, RelayInputs, SelfRelayInputs } from "../src/types.ts";
+import { getAddress, getContract, padHex, parseUnits, toHex, type Account, type Address, type Chain, type Client, type Hash, type Hex, type PublicClient, type WalletClient } from "viem";
+import type { BurnAccount, FeeData, RelayInputs, SelfRelayInputs } from "../src/types.ts";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { BurnWallet } from "../src/BurnWallet.ts";
 import { GasReport } from "../test/utils/gasReport.ts";
-import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
+import type { ContractReturnType, HardhatViemHelpers, KeyedClient } from "@nomicfoundation/hardhat-viem/types";
+import { transwarpTokenAbi } from "../src/utils.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PRE_MADE_BURN_ACCOUNTS = await readFile(
@@ -34,14 +35,16 @@ const AMOUNT_OF_BURN_ACCOUNTS = 2;
 const PROVING_THREADS = 1;
 const DECIMALS_TOKEN_PRICE = 8;
 
-const TARGET_DEPTHS = [3, 6, 10];
+// @notice needs to be an multiple of the first 
+const TARGET_DEPTHS = [3, 6, 10, 30];
 
 type RelayType = "selfRelay" | "relayRefundSeparate" | "relayRefundSameAsRecipient";
 const CIRCUIT_SIZES = [3, 32, 100];
 const RELAY_TYPES: RelayType[] = ["selfRelay", "relayRefundSeparate", "relayRefundSameAsRecipient"];
 
 describe("Relay gas benchmark", async function () {
-    const { viem } = await network.connect();
+    const { viem, networkHelpers } = await network.connect();
+    const cleanState = await networkHelpers.takeSnapshot()
     const publicClient = (await viem.getPublicClient()) as PublicClient;
     const [deployer, alice, bob, , relayer] = await viem.getWalletClients();
 
@@ -52,48 +55,18 @@ describe("Relay gas benchmark", async function () {
     // treeDepth -> circuitSize -> txType -> gas (written to JSON at end)
     const benchmarkData: Record<number, Record<number, Record<string, number>>> = {};
 
-    beforeEach(async function () {
-        const poseidon2Create2Salt = padHex("0x00", { size: 32 });
-        await deployPoseidon2Huff(publicClient, deployer, poseidon2Create2Salt);
-        const leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [], { libraries: {} });
-        const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName100, [], { libraries: {} });
-        const reMintVerifier3 = await viem.deployContract(reMint3InVerifierContractName, [], {
-            client: { wallet: deployer },
-            libraries: { ZKTranscriptLib: ZKTranscriptLib.address },
-        });
-        const reMintVerifier32 = await viem.deployContract(reMint32InVerifierContractName, [], {
-            client: { wallet: deployer },
-            libraries: { ZKTranscriptLib: ZKTranscriptLib.address },
-        });
-        const reMintVerifier100 = await viem.deployContract(reMint100InVerifierContractName, [], {
-            client: { wallet: deployer },
-            libraries: { ZKTranscriptLib: ZKTranscriptLib.address },
-        });
-        transwarpToken = await viem.deployContract(
-            TransWarpTokenContractName,
-            [
-                toHex(POW_DIFFICULTY, { size: 32 }),
-                RE_MINT_LIMIT,
-                MAX_TREE_DEPTH,
-                false,
-                "TWRP",
-                "zkTransWarpTestToken",
-                "1",
-                [
-                    { contractAddress: reMintVerifier3.address, size: 3 },
-                    { contractAddress: reMintVerifier32.address, size: 32 },
-                    { contractAddress: reMintVerifier100.address, size: 100 },
-                ],
-                [],
-            ],
-            { client: { wallet: deployer }, libraries: { leanIMTPoseidon2: leanIMTPoseidon2.address } },
-        );
-        verifiersBySize = {
-            3: { address: reMintVerifier3.address, abi: reMintVerifier3.abi },
-            32: { address: reMintVerifier32.address, abi: reMintVerifier32.abi },
-            100: { address: reMintVerifier100.address, abi: reMintVerifier100.abi },
-        };
-    });
+    // Per-circuitSize snapshot taken AFTER burns. Outer-looped by circuitSize so we
+    // never `cleanState.restore()` between two restores of the same snapshot
+    // (which would invalidate it via Hardhat's evm_revert semantics).
+    type PostBurnSetup = {
+        snapshot: Awaited<ReturnType<typeof networkHelpers.takeSnapshot>>;
+        transwarpToken: ContractReturnType<typeof TransWarpTokenContractName>;
+        verifiersBySize: Record<number, { address: `0x${string}`; abi: any }>;
+        burnAddresses: Address[];
+        treeDepthBeforeBurns: bigint;
+        burnGases: bigint[];
+    };
+    let postBurn: PostBurnSetup | null = null;
 
     after(async function () {
         await writeFile(
@@ -104,70 +77,95 @@ describe("Relay gas benchmark", async function () {
         if (PROVING_THREADS !== 1) process.exit(0);
     });
 
-    for (const targetDepth of TARGET_DEPTHS) {
-        for (const circuitSize of CIRCUIT_SIZES) {
+    const chainId = await publicClient.getChainId();
+
+    for (const circuitSize of CIRCUIT_SIZES) {
+        // Reset the per-size cache when we move to a new circuitSize. The first
+        // test in this group will repopulate it from a clean chain.
+        postBurn = null;
+        for (const targetDepth of TARGET_DEPTHS) {
             for (const relayType of RELAY_TYPES) {
                 it(`${relayType} (circuit size ${circuitSize}, target depth ${targetDepth})`, async function () {
-                    const chainId = await publicClient.getChainId();
+                    // Always create a fresh BurnWallet — the shared one accumulates
+                    // syncData across iterations that doesn't get rolled back when
+                    // we revert the chain via snapshot.restore().
                     const aliceBurnWallet = new BurnWallet(alice, {
                         archiveNodes: { [chainId]: publicClient },
                         acceptedChainIds: [chainId],
                     });
 
-                    const transwarpTokenAlice = getContract({
-                        client: { public: publicClient, wallet: alice },
-                        abi: transwarpToken.abi,
-                        address: transwarpToken.address,
-                    });
-                    const decimalsToken = await transwarpToken.read.decimals();
+                    let aliceBurnAccounts: BurnAccount[];
+                    let treeDepthBeforeBurns: bigint;
+                    let burnGases: bigint[];
 
-                    await transwarpTokenAlice.write.getFreeTokens([alice.account.address]);
-
-                    await fillTreeToDepth(targetDepth, transwarpTokenAlice);
-
-                    await aliceBurnWallet.importWallet(PRE_MADE_BURN_ACCOUNTS, transwarpToken.address);
-                    const aliceBurnAccounts = await aliceBurnWallet.createBurnAccountsBulk(
-                        transwarpToken.address, AMOUNT_OF_BURN_ACCOUNTS, { startingViewKeyIndex: 1 },
-                    );
-
-                    const reMintAmount = 420n * 10n ** 18n;
-                    const maxFee = parseUnits("5", decimalsToken);
-                    const totalBurnAmount = reMintAmount + maxFee;
-
-                    const treeDepthBeforeBurns = (await transwarpToken.read.tree())[1];
-
-                    for (const aliceBurnAccount of aliceBurnAccounts) {
-                        const burnTx = await aliceBurnWallet.superSafeBurn(
-                            transwarpToken.address,
-                            totalBurnAmount / BigInt(AMOUNT_OF_BURN_ACCOUNTS) + 1n,
-                            aliceBurnAccount,
+                    if (postBurn) {
+                        await postBurn.snapshot.restore();
+                        transwarpToken = postBurn.transwarpToken;
+                        verifiersBySize = postBurn.verifiersBySize;
+                        treeDepthBeforeBurns = postBurn.treeDepthBeforeBurns;
+                        burnGases = postBurn.burnGases;
+                        await aliceBurnWallet.importWallet(PRE_MADE_BURN_ACCOUNTS, transwarpToken.address);
+                        aliceBurnAccounts = await aliceBurnWallet.createBurnAccountsBulk(
+                            transwarpToken.address, AMOUNT_OF_BURN_ACCOUNTS, { startingViewKeyIndex: 1 },
                         );
-                        const burnGas = await gasReport.recordTx(`burn (size ${circuitSize}, depth ${treeDepthBeforeBurns})`, burnTx, publicClient);
+                    } else {
+                        await cleanState.restore();
+                        const out = await deployTransWarpTest(publicClient, deployer, viem);
+                        verifiersBySize = out.verifiersBySize;
+                        transwarpToken = out.transwarpToken;
+
+                        await aliceBurnWallet.importWallet(PRE_MADE_BURN_ACCOUNTS, transwarpToken.address);
+
+                        const transwarpTokenAlice = getContract({
+                            client: { public: publicClient, wallet: alice },
+                            abi: transwarpToken.abi,
+                            address: transwarpToken.address,
+                        });
+                        aliceBurnAccounts = await aliceBurnWallet.createBurnAccountsBulk(
+                            transwarpToken.address, AMOUNT_OF_BURN_ACCOUNTS, { startingViewKeyIndex: 1 },
+                        );
+                        treeDepthBeforeBurns = (await transwarpToken.read.tree())[1];
+
+                        await transwarpTokenAlice.write.getFreeTokens([alice.account.address]);
+                        await fillTreeToDepth(targetDepth, transwarpTokenAlice);
+
+                        const decimalsTokenSetup = await transwarpToken.read.decimals();
+                        const reMintAmountSetup = 420n * 10n ** 18n;
+                        const maxFeeSetup = parseUnits("5", decimalsTokenSetup);
+                        const totalBurnAmountSetup = reMintAmountSetup + maxFeeSetup;
+
+                        burnGases = [];
+                        for (const aliceBurnAccount of aliceBurnAccounts) {
+                            const burnTx = await aliceBurnWallet.superSafeBurn(
+                                transwarpToken.address,
+                                totalBurnAmountSetup / BigInt(AMOUNT_OF_BURN_ACCOUNTS) + 1n,
+                                aliceBurnAccount,
+                            );
+                            const burnGas = await gasReport.recordTx(`burn (size ${circuitSize}, depth ${treeDepthBeforeBurns})`, burnTx, publicClient);
+                            burnGases.push(burnGas);
+                        }
+
+                        postBurn = {
+                            snapshot: await networkHelpers.takeSnapshot(),
+                            transwarpToken,
+                            verifiersBySize,
+                            burnAddresses: aliceBurnAccounts.map((b) => b.burnAddress),
+                            treeDepthBeforeBurns,
+                            burnGases,
+                        };
+                    }
+
+                    for (const burnGas of burnGases) {
                         record(benchmarkData, targetDepth, circuitSize, "burn", burnGas);
                     }
 
-                    const { syncedTree: syncedTreeProm, syncedBurnAccounts: syncedBurnAccountsProm } =
-                        aliceBurnWallet.sync(transwarpToken.address);
-                    await syncedBurnAccountsProm;
-
-                    const selection = await aliceBurnWallet.selectBurnAccountsForSpend(
-                        transwarpToken.address, totalBurnAmount, {
-                            burnAddresses: aliceBurnAccounts.map((b) => b.burnAddress),
-                            circuitSize,
-                        },
-                    );
-
-                    const recipient = bob.account.address;
+                    const decimalsToken = await transwarpToken.read.decimals();
+                    const reMintAmount = 420n * 10n ** 18n;
+                    const maxFee = parseUnits("5", decimalsToken);
+                    const totalBurnAmount = reMintAmount + maxFee;
                     const treeDepth = (await transwarpToken.read.tree())[1];
 
-                    let feeData: FeeData | undefined;
-                    if (relayType !== "selfRelay") {
-                        feeData = await buildFeeData(aliceBurnWallet, transwarpToken.address, recipient, relayType, relayer.account.address, maxFee, reMintAmount, decimalsToken, publicClient);
-                    }
-
-                    const signed = await aliceBurnWallet.signReMint(recipient, selection, { feeData, circuitSize });
-                    await syncedTreeProm;
-                    const proofInputs = await aliceBurnWallet.proof(signed, { threads: PROVING_THREADS, feeData, circuitSize });
+                    const proofInputs = await getCachedRealProof(publicClient, aliceBurnWallet, aliceBurnAccounts, relayer, bob, transwarpToken.address, circuitSize, relayType, maxFee, reMintAmount, decimalsToken, totalBurnAmount)
 
                     let txHash: Hash;
                     if (relayType === "selfRelay") {
@@ -179,14 +177,32 @@ describe("Relay gas benchmark", async function () {
                     const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
                     gasReport.record(`reMint ${relayType} (size ${circuitSize}, depth ${treeDepth})`, receipt.gasUsed);
                     record(benchmarkData, targetDepth, circuitSize, relayType, receipt.gasUsed);
+                    //-----------------
+
+                    // Seed wallet fakeProofs from module-level cache so the fake proof isn't
+                    // regenerated on every test (BurnWallet instance is fresh per test).
+                    const normTokenAddr = getAddress(transwarpToken.address) as Address;
+                    aliceBurnWallet.fakeProofs[chainId] ??= {};
+                    aliceBurnWallet.fakeProofs[chainId][normTokenAddr] ??= {};
+                    if (fakeProofCache[circuitSize]?.[relayType] !== undefined) {
+                        (aliceBurnWallet.fakeProofs[chainId][normTokenAddr][circuitSize] ??= {})[relayType] =
+                            fakeProofCache[circuitSize][relayType]!;
+                    }
 
                     const estimatedGas = await aliceBurnWallet.estimateGas(transwarpToken.address, relayType, circuitSize);
+
+                    // Persist the just-generated fake proof to the module-level cache so
+                    // the next test's fresh wallet can reuse it without re-generating.
+                    fakeProofCache[circuitSize] ??= {};
+                    fakeProofCache[circuitSize][relayType] ??= aliceBurnWallet.fakeProofs[chainId]?.[normTokenAddr]?.[circuitSize]?.[relayType];
+
                     gasReport.record(`estimate ${relayType} (size ${circuitSize})`, estimatedGas);
                     record(benchmarkData, targetDepth, circuitSize, `${relayType}Estimate`, estimatedGas);
                     const diff = receipt.gasUsed - estimatedGas;
-                    const diffPct = (Number(diff) * 100 / Number(receipt.gasUsed)).toFixed(1);
-                    console.log(`  estimate diff (${relayType}, size ${circuitSize}, depth ${treeDepth}): ${diff > 0n ? "+" : ""}${diff} gas (${diffPct}%)`);
+                    const ratio = (Number(estimatedGas) / Number(receipt.gasUsed)).toFixed(3);
+                    console.log(`  estimate (${relayType}, size ${circuitSize}, depth ${treeDepth}): actual=${receipt.gasUsed} estimate=${estimatedGas} ratio=${ratio}`);
                     record(benchmarkData, targetDepth, circuitSize, `${relayType}EstimateDiff`, diff);
+                    record(benchmarkData, targetDepth, circuitSize, `${relayType}EstimateRatioMilli`, BigInt(Math.round(Number(estimatedGas) * 1000 / Number(receipt.gasUsed))));
 
                     const verifyGas = await estimateVerifierGas(circuitSize, proofInputs, transwarpToken, publicClient, deployer, verifiersBySize);
                     gasReport.record(`verify only (size ${circuitSize})`, verifyGas);
@@ -225,11 +241,10 @@ async function fillTreeToDepth(
     if (needed <= 0) return;
 
     for (let sent = 0; sent < needed; sent += FILL_BATCH_SIZE) {
-        const batchSize = Math.min(FILL_BATCH_SIZE, needed - sent);
-        const recipients = Array.from({ length: batchSize }, (_, i) =>
+        const recipients = Array.from({ length: FILL_BATCH_SIZE }, (_, i) =>
             toHex(BigInt(sent + i + 1), { size: 20 }) as Address
         );
-        await (tokenAlice as any).write.transferBulk([recipients, Array<bigint>(batchSize).fill(1n)]);
+        await (tokenAlice as any).write.transferBulk([recipients, Array<bigint>(FILL_BATCH_SIZE).fill(1n)]);
     }
 }
 
@@ -316,4 +331,91 @@ async function estimateVerifierGas(
         args: [proof as Hex, formattedPublicInputs],
         account: deployer.account,
     });
+}
+
+export async function deployTransWarpTest(publicClient: PublicClient, deployer: WalletClient, viem: HardhatViemHelpers<"generic">) {
+    const poseidon2Create2Salt = padHex("0x00", { size: 32 });
+    await deployPoseidon2Huff(publicClient, deployer, poseidon2Create2Salt);
+    const leanIMTPoseidon2 = await viem.deployContract(leanIMTPoseidon2ContractName, [], { libraries: {} });
+    const ZKTranscriptLib = await viem.deployContract(ZKTranscriptLibContractName100, [], { libraries: {} });
+    const reMintVerifier3 = await viem.deployContract(reMint3InVerifierContractName, [], {
+        client: { wallet: deployer } as KeyedClient,
+        libraries: { ZKTranscriptLib: ZKTranscriptLib.address },
+    });
+    const reMintVerifier32 = await viem.deployContract(reMint32InVerifierContractName, [], {
+        client: { wallet: deployer } as KeyedClient,
+        libraries: { ZKTranscriptLib: ZKTranscriptLib.address },
+    });
+    const reMintVerifier100 = await viem.deployContract(reMint100InVerifierContractName, [], {
+        client: { wallet: deployer } as KeyedClient,
+        libraries: { ZKTranscriptLib: ZKTranscriptLib.address },
+    });
+    const transwarpToken = await viem.deployContract(
+        TransWarpTokenContractName,
+        [
+            toHex(POW_DIFFICULTY, { size: 32 }),
+            RE_MINT_LIMIT,
+            MAX_TREE_DEPTH,
+            false,
+            "TWRP",
+            "zkTransWarpTestToken",
+            "1",
+            [
+                { contractAddress: reMintVerifier3.address, size: 3 },
+                { contractAddress: reMintVerifier32.address, size: 32 },
+                { contractAddress: reMintVerifier100.address, size: 100 },
+            ],
+            [],
+        ],
+        { client: { wallet: deployer } as KeyedClient, libraries: { leanIMTPoseidon2: leanIMTPoseidon2.address } },
+    );
+    const verifiersBySize = {
+        3: { address: reMintVerifier3.address, abi: reMintVerifier3.abi },
+        32: { address: reMintVerifier32.address, abi: reMintVerifier32.abi },
+        100: { address: reMintVerifier100.address, abi: reMintVerifier100.abi },
+    };
+    return { transwarpToken, verifiersBySize }
+}
+
+const realProofCache: Record<number,Record<RelayType, RelayInputs | SelfRelayInputs>> = {}
+const fakeProofCache: Record<number, Partial<Record<RelayType, SelfRelayInputs | RelayInputs>>> = {};
+async function getCachedRealProof(
+    publicClient: PublicClient, aliceBurnWallet: BurnWallet, aliceBurnAccounts: BurnAccount[],
+    relayer: WalletClient & { account: Account },
+    bob: WalletClient & { account: Account },
+    transwarpTokenAddress: Address,
+    circuitSize: number, relayType: RelayType,
+
+    maxFee: bigint, reMintAmount: bigint, decimalsToken: number,
+    totalBurnAmount: bigint,
+
+) {
+    if (realProofCache[circuitSize] && realProofCache[circuitSize][relayType]) {
+        return realProofCache[circuitSize][relayType]
+    } else {
+        console.log(`   no cache for circuitSize: ${circuitSize} and relayType: ${relayType}`)
+        const { syncedTree: syncedTreeProm, syncedBurnAccounts: syncedBurnAccountsProm } = aliceBurnWallet.sync(transwarpTokenAddress);
+        await syncedBurnAccountsProm;
+
+        const selection = await aliceBurnWallet.selectBurnAccountsForSpend(
+            transwarpTokenAddress, totalBurnAmount, {
+            burnAddresses: aliceBurnAccounts.map((b) => b.burnAddress),
+            circuitSize,
+        },
+        );
+
+        const recipient = bob.account.address;
+
+        let feeData: FeeData | undefined;
+        if (relayType !== "selfRelay") {
+            feeData = await buildFeeData(aliceBurnWallet, transwarpTokenAddress, recipient, relayType, relayer.account.address, maxFee, reMintAmount, decimalsToken, publicClient);
+        }
+
+        const signed = await aliceBurnWallet.signReMint(recipient, selection, { feeData, circuitSize });
+        await syncedTreeProm;
+        const proofInputs = await aliceBurnWallet.proof(signed, { threads: PROVING_THREADS, feeData, circuitSize });
+        realProofCache[circuitSize] ??= {} as Record<RelayType, RelayInputs | SelfRelayInputs>;
+        realProofCache[circuitSize][relayType] = proofInputs
+        return proofInputs
+    }
 }

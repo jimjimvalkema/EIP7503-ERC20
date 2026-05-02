@@ -766,17 +766,30 @@ export class BurnWallet {
 
         const contract = getTransWarpTokenContract(tokenAddress, { public: archiveNode, wallet: this.viemWallet })
 
-
-        if (relayType === "selfRelay") {
-            return contract.estimateGas.reMint(
-                formatReMintArgs(fakeProofCache[circuitSize][relayType] as SelfRelayInputs),
-                { account: signingEthAccount, gas: GAS_LIMIT_TX },
-            )
-        } else {
-            return contract.estimateGas.reMintRelayer(
-                formatReMintRelayerArgs(fakeProofCache[circuitSize][relayType] as RelayInputs),
-                { account: signingEthAccount, gas: GAS_LIMIT_TX },
-            )
+        try {
+            if (relayType === "selfRelay") {
+                return await contract.estimateGas.reMint(
+                    formatReMintArgs(fakeProofCache[circuitSize][relayType] as SelfRelayInputs),
+                    { account: signingEthAccount, gas: GAS_LIMIT_TX },
+                )
+            } else {
+                return await contract.estimateGas.reMintRelayer(
+                    formatReMintRelayerArgs(fakeProofCache[circuitSize][relayType] as RelayInputs),
+                    { account: signingEthAccount, gas: GAS_LIMIT_TX },
+                )
+            }
+        } catch (err: any) {
+            // EDR (and MetaMask) inflate eth_estimateGas ~3× when the Honk verifier (LOG_N≥5)
+            // is in the call path, pushing the estimate above the EIP-7825 tx gas cap (16,777,216).
+            // The error message contains the inflated value — extract it and divide by 3.
+            let cur = err
+            while (cur) {
+                const det: string | undefined = cur.details ?? cur.message
+                const m = det?.match(/transaction gas limit \((\d+)\) is greater than the cap/)
+                if (m) return BigInt(m[1]) / 3n
+                cur = cur.cause
+            }
+            throw err
         }
     }
 

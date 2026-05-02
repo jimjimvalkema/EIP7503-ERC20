@@ -370,7 +370,7 @@ export function formatReMintRelayerArgs(inputs: RelayInputs) {
             estimatedPriorityFee: BigInt(inputs.signatureInputs.feeData.estimatedPriorityFee),
             refundAddress: inputs.signatureInputs.feeData.refundAddress,
             relayerAddress: inputs.signatureInputs.feeData.relayerAddress,
-        },
+        }
     ] as const
 }
 
@@ -436,7 +436,7 @@ export async function createFakeRelayInputs(
     archiveNode: PublicClient,
     circuitSize: number,
     contractConfig: TranswarpContractConfig,
-    { threads = 1}: { threads?: number} = {},
+    { threads = 1 }: { threads?: number } = {},
 ) {
     const account = privateKeyToAccount(bytesToHex(crypto.getRandomValues(new Uint8Array(32))) as Hex)
     const viemWallet = createWalletClient({ account, transport: custom(archiveNode) })
@@ -448,17 +448,17 @@ export async function createFakeRelayInputs(
         const result = await createRelayerInputs(
             recipient, 0n, fakeBurnViewKeyManager,
             tokenAddress, archiveNode, account,
-            { 
+            {
                 threads, circuitSize,
 
                 // defaults
-                circuitSizes:contractConfig.VERIFIER_SIZES, powDifficulty:contractConfig.POW_DIFFICULTY, 
-                allowedChainIds:contractConfig.ACCEPTED_CHAIN_IDS, reMintLimit:contractConfig.RE_MINT_LIMIT, 
-                chainId:BigInt(chainId), maxTreeDepth:contractConfig.MAX_TREE_DEPTH,eip712Name:contractConfig.EIP712_NAME, 
-                eip712Version:contractConfig.EIP712_VERSION,deploymentBlock:contractConfig.DEPLOYMENT_BLOCK,
+                circuitSizes: contractConfig.VERIFIER_SIZES, powDifficulty: contractConfig.POW_DIFFICULTY,
+                allowedChainIds: contractConfig.ACCEPTED_CHAIN_IDS, reMintLimit: contractConfig.RE_MINT_LIMIT,
+                chainId: BigInt(chainId), maxTreeDepth: contractConfig.MAX_TREE_DEPTH, eip712Name: contractConfig.EIP712_NAME,
+                eip712Version: contractConfig.EIP712_VERSION, deploymentBlock: contractConfig.DEPLOYMENT_BLOCK,
 
                 // effectively blocks syncing all together. Merkle tree wont sync, burn accounts wont either since none are provided
-                syncTillBlock:contractConfig.DEPLOYMENT_BLOCK,
+                syncTillBlock: contractConfig.DEPLOYMENT_BLOCK,
             },
         )
         return result.relayInputs
@@ -473,20 +473,20 @@ export async function createFakeRelayInputs(
         const result = await createRelayerInputs(
             recipient, 0n, fakeBurnViewKeyManager,
             tokenAddress, archiveNode, account,
-            { 
+            {
                 threads, circuitSize,
 
                 // defaults
-                circuitSizes:contractConfig.VERIFIER_SIZES, powDifficulty:contractConfig.POW_DIFFICULTY, 
-                allowedChainIds:contractConfig.ACCEPTED_CHAIN_IDS, reMintLimit:contractConfig.RE_MINT_LIMIT, 
-                chainId:BigInt(chainId), maxTreeDepth:contractConfig.MAX_TREE_DEPTH,eip712Name:contractConfig.EIP712_NAME, 
-                eip712Version:contractConfig.EIP712_VERSION,deploymentBlock:contractConfig.DEPLOYMENT_BLOCK,
+                circuitSizes: contractConfig.VERIFIER_SIZES, powDifficulty: contractConfig.POW_DIFFICULTY,
+                allowedChainIds: contractConfig.ACCEPTED_CHAIN_IDS, reMintLimit: contractConfig.RE_MINT_LIMIT,
+                chainId: BigInt(chainId), maxTreeDepth: contractConfig.MAX_TREE_DEPTH, eip712Name: contractConfig.EIP712_NAME,
+                eip712Version: contractConfig.EIP712_VERSION, deploymentBlock: contractConfig.DEPLOYMENT_BLOCK,
 
                 // effectively blocks syncing all together. Merkle tree wont sync, burn accounts wont either since none are provided
-                syncTillBlock:contractConfig.DEPLOYMENT_BLOCK,
-                
+                syncTillBlock: contractConfig.DEPLOYMENT_BLOCK,
+
                 // feeData
-                feeData 
+                feeData
             },
         )
         return result.relayInputs

@@ -260,7 +260,7 @@ contract TransWarpToken is ERC20WithTransWarpMerkleTree, EIP712, ReentrancyGuard
         }
     }
 
-    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _totalMintedLeafs) override internal {        
+    function _updateBalanceInMerkleTree(address _to, uint256 _newBalance, uint256[] memory _totalMintedLeafs) override internal {
         if (_notABurnAddress(_to)) {
             // _totalMintedLeafs still need to get inserted
             _insertManyInMerkleTree(_totalMintedLeafs);
@@ -375,11 +375,11 @@ contract TransWarpToken is ERC20WithTransWarpMerkleTree, EIP712, ReentrancyGuard
             if(_nullifier != 0) {
                 require(nullifiers[_nullifier] == uint256(0), "nullifier already exist");
                 nullifiers[_nullifier] = block.number;
-                emit Nullified(_nullifier, _encryptedTotalMinted[i]); 
+                emit Nullified(_nullifier, _encryptedTotalMinted[i]);
             }
         }
 
-        // format public inputs and verify proof 
+        // format public inputs and verify proof
         bytes32[] memory publicInputs = _formatPublicInputs(_root, _chainId, _amount, signatureHash, _totalMintedLeafs, _nullifiers);
         uint8 verifierSize = uint8(_nullifiers.length);
         address verifierAddress = VERIFIERS_PER_SIZE[verifierSize];
@@ -400,7 +400,7 @@ contract TransWarpToken is ERC20WithTransWarpMerkleTree, EIP712, ReentrancyGuard
         require(msg.value == _signatureInputs.callValue);
         bytes32 _signatureHash = _hashSignatureInputs(_signatureInputs);
         _verifyReMint(_root, _chainId, _signatureInputs.amountToReMint, _signatureHash, _totalMintedLeafs, _nullifiers, _signatureInputs.encryptedTotalMinted, _snarkProof);
-        
+
         // modified version of _mint that also inserts noteHashes and_chainId does not modify total supply!
         _reMint(_signatureInputs.recipient, _signatureInputs.amountToReMint, _totalMintedLeafs);
         _processCall(_signatureInputs);
