@@ -7,7 +7,7 @@ import { findPoWNonce, findPoWNonceAsync, getBurnAddress, hashBlindedAddressData
 import { VIEWING_KEY_SIG_MESSAGE } from "./constants.ts";
 import { BurnAccountToFlatArr, BurnAccountToFlatArrExportedData, getDeterministicBurnAccounts, getTransWarpTokenContract, signViewKeyMessage, toAccount, toImportableBurnAccount, toImportableDerivedBurnAccount, toImportableUnknownBurnAccount, toRecoverableBurnAccount, toRecoverableDerivedBurnAccount, toRecoverableUnknownBurnAccount } from "./utils.ts";
 import { extractPubKeyFromSig, getViewingKey } from "./signing.ts";
-import { BurnAccountSyncFieldsSchema, identifyBurnAccount, isDerivedBurnAccount, isSyncedBurnAccount } from "./schemas.ts";
+import { BurnAccountSyncFieldsSchema, identifyBurnAccount, isDerivedBurnAccount, isSingleUseBurnAccount, isSyncedBurnAccount } from "./schemas.ts";
 import { syncBurnAccount } from "./syncing.ts";
 import pLimit from "p-limit";
 import { viemAccountNotSetErr } from "./BurnWallet.ts";
@@ -28,7 +28,7 @@ import { viemAccountNotSetErr } from "./BurnWallet.ts";
  * @TODO make burnAccount sync data specific per chainId=>tokenAddress, right now we will have bugs when used with multiple tokens
  */
 export class BurnViewKeyManager {
-    viemWallet:  WalletClient & { account: Account }
+    viemWallet: WalletClient & { account: Account }
     readonly privateData: FullViewKeyData;
 
     /**
@@ -41,7 +41,7 @@ export class BurnViewKeyManager {
      * @param options.chainId - Default chain ID for operations. Inferred from `acceptedChainIds` if not provided.
      */
     constructor(
-        viemWallet:  WalletClient & { account: Account },
+        viemWallet: WalletClient & { account: Account },
         { viewKeyData, acceptedChainIds = [1], chainId, ethAddress }:
             { viewKeyData?: FullViewKeyData, viewKeySigMessage?: string, acceptedChainIds?: number[], chainId?: number, ethAddress?: Address } = {}
     ) {
@@ -100,7 +100,7 @@ export class BurnViewKeyManager {
         return { viewKeyRoot, pubKey: this.privateData.burnAccounts[ethAccount] }
     }
 
-    async connectPreSigned(wallet: WalletClient & {account: Account}, signature: Hex, message: string) {
+    async connectPreSigned(wallet: WalletClient & { account: Account }, signature: Hex, message: string) {
         if (wallet.account === undefined) throw new Error(viemAccountNotSetErr)
         const recovered = await recoverMessageAddress({ message, signature })
         const ethAccount = getAddress(wallet.account.address)
@@ -196,15 +196,20 @@ export class BurnViewKeyManager {
         const difficultyPadded = padHex(burnAccount.difficulty, { size: 32 })
         const ethAddress = getAddress(burnAccount.ethAccount)
         this.#createBurnAccountsKeysHex({ chainIdHex: burnAccount.chainId, difficultyHex: difficultyPadded, ethAddress })
-        if (isDerivedBurnAccount(burnAccount)) {
-            this.privateData.burnAccounts[ethAddress].burnAccounts[burnAccount.chainId][difficultyPadded].derivedBurnAccounts[burnAccount.viewingKeyIndex] = burnAccount
+        const burnAccounts = this.privateData.burnAccounts[ethAddress].burnAccounts[burnAccount.chainId][difficultyPadded]
+        if (isSingleUseBurnAccount(burnAccount)) {
+            const contractAddress = getAddress(burnAccount.tokenAddress)
+            burnAccounts.singleUseBurnAccounts[contractAddress] ??= []
+            burnAccounts.singleUseBurnAccounts[contractAddress][burnAccount.viewingKeyIndex] = burnAccount
+        } else if (isDerivedBurnAccount(burnAccount)) {
+            burnAccounts.derivedBurnAccounts[burnAccount.viewingKeyIndex] = burnAccount
         } else {
-            this.privateData.burnAccounts[ethAddress].burnAccounts[burnAccount.chainId][difficultyPadded].unknownBurnAccounts[getAddress(burnAccount.burnAddress)] = burnAccount
+            burnAccounts.unknownBurnAccounts[getAddress(burnAccount.burnAddress)] = burnAccount
         }
     }
 
     // prompts user to sign to create viewing keys and also store pubKey of eth account
-    async connect(walletClient?: WalletClient & {account:Account}) {
+    async connect(walletClient?: WalletClient & { account: Account }) {
         walletClient ??= this.viemWallet
         this.viemWallet = walletClient
         if (walletClient.account === undefined) throw new Error(viemAccountNotSetErr)
@@ -612,6 +617,22 @@ export class BurnViewKeyManager {
                     spendingPubKeyX: forceReSign === false && "spendingPubKeyX" in idBurnAccount.account ? idBurnAccount.account.spendingPubKeyX : undefined
                 }
             )
+        } else if (idBurnAccount.derivation === "SingleUse") {
+            reCreatedBurnAccount = await this.createSingleUseBurnAccount(
+                getAddress(idBurnAccount.account.tokenAddress),
+                Number(idBurnAccount.account.chainId),
+                idBurnAccount.account.difficulty,
+                {
+                    signingEthAccount: toAccount(idBurnAccount.account.ethAccount, this.viemWallet),
+                    viewingKeyIndex: idBurnAccount.account.viewingKeyIndex,
+                    viewKeyMessage: idBurnAccount.account.viewKeySigMessage,
+                    powNonce: forcePow === false && "powNonce" in idBurnAccount.account ? BigInt(idBurnAccount.account.powNonce) : undefined,
+                    viewingKey: forceReHashViewKey === false && "viewingKey" in idBurnAccount.account ? BigInt(idBurnAccount.account.viewingKey) : undefined,
+                    async: async,
+                    spendingPubKeyX: forceReSign === false && "spendingPubKeyX" in idBurnAccount.account ? idBurnAccount.account.spendingPubKeyX : undefined
+                }
+            )
+
         } else {
             // viewingKey cant be recreated, so always used from importedBurnAccount. 
             // viewingKeyIndex, viewKeyMessage, does not exist and is omitted. rest is same as above

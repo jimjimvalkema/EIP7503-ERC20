@@ -13,6 +13,7 @@ import type { TransWarpToken$Type } from "../artifacts/contracts/TransWarpToken.
 import TransWarpTokenArtifact from '../artifacts/contracts/TransWarpToken.sol/TransWarpToken.json' with {"type": "json"};
 import { createRelayerInputs, hashAndProof, selectBurnAccountsForClaim, selectSmallFirst, signAndEncrypt } from "./proving.ts";
 import { filterBurnAccounts, getCircuitSize, getContractConfig, getTransWarpTokenContract, toAccount } from "./utils.ts";
+import console from "node:console";
 //import { findPoWNonceAsync } from "./hashingAsync.js";
 
 export const viemAccountNotSetErr = `viem wallet not created with account set. pls do:
@@ -69,15 +70,19 @@ export class BurnWallet {
     async getBurnAccounts(
         tokenAddress: Address,
         { ethSigner, chainId, difficulty, type = "derived" }:
-            { ethSigner?: Account, chainId?: Hex, difficulty?: Hex, type?: "derived" | "unknown" } = {}
+            { ethSigner?: Account, chainId?: Hex, difficulty?: Hex, type?: "derived" | "singleUse" | "unknown" } = {}
     ): Promise<BurnAccount[]> {
         ethSigner ??= await this.defaultAccount()
         chainId ??= toHex(await this.viemWallet.getChainId())
+        tokenAddress = getAddress(tokenAddress)
+        const signerAddress = getAddress(ethSigner.address)
         const contractConfig = await this.getContractConfig(tokenAddress)
         difficulty = difficulty ? padHex(difficulty, { size: 32 }) : padHex(contractConfig.POW_DIFFICULTY, { size: 32 })
-        const burnAccounts = this.burnViewKeyManager.privateData.burnAccounts[ethSigner.address as string].burnAccounts[chainId as string][difficulty as string]
+        const burnAccounts = this.burnViewKeyManager.privateData.burnAccounts[signerAddress].burnAccounts[chainId as string][difficulty as string]
         if (type === "unknown") {
             return Object.values(burnAccounts.unknownBurnAccounts)
+        } if (type === "singleUse") {
+            return burnAccounts.singleUseBurnAccounts[tokenAddress]
         } else {
             return burnAccounts.derivedBurnAccounts
         }
@@ -705,7 +710,7 @@ export class BurnWallet {
     }
 
     /**
-     * @notice if no burnAccount or burnAddress provided, will make a freshAccount for extra privacy
+     * @notice if no burnAccount or burnAddress provided, will make a freshAccount for extra privacy, although getFreshSingleUseBurnAccount is safer for this
      * @TODO cache difficulty,circuitSizes,reMintLimit,maxTreeDepth per contract address and other contract parameters
      * @TODO do chain assertions. Every time contract.write.function(args[],{account,chain}).  
      * use const chainId = viemWallet.chain?.id !== undefined ? BigInt(viemWallet.chain.id) : BigInt(await viemWallet.getChainId())
@@ -744,8 +749,8 @@ export class BurnWallet {
      */
     async estimateGas(
         tokenAddress: Address,
-        relayType: RelayType,
         circuitSize: number,
+        relayType = "relayRefundSeparate" as RelayType,
         { signingEthAccount, chainId, threads }: { signingEthAccount?: Account, chainId?: number, threads?: number } = {}
     ): Promise<bigint> {
         tokenAddress = getAddress(tokenAddress)
@@ -760,7 +765,7 @@ export class BurnWallet {
 
         fakeProofCache[circuitSize] ??= {}
         if (fakeProofCache[circuitSize][relayType] === undefined) {
-            const contractConfig =  await this.#getContractConfig(tokenAddress, chainId)
+            const contractConfig = await this.#getContractConfig(tokenAddress, chainId)
             fakeProofCache[circuitSize][relayType] = await createFakeRelayInputs(relayType, chainId, tokenAddress, archiveNode, circuitSize, contractConfig, { threads })
         }
 

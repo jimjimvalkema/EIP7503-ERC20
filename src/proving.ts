@@ -115,6 +115,7 @@ export async function encryptTotalSpends(
     }))
     return encryptedAmounts
 }
+
 export function makeClaimable(
     spendableBurnAccounts: SpendableBurnAccount[], amount: bigint, largestCircuitSize: number, claimable?: SpendableBurnAccount[]
 ): { claimable: SpendableBurnAccount[], amountShort: bigint } {
@@ -141,7 +142,7 @@ export function makeClaimable(
         if (amountLeft === 0n) {
             break
         }
-        if (claimable.length >= largestCircuitSize) {
+        if (index+1 >= largestCircuitSize && claimable.length >= largestCircuitSize) {
             break
         }
     }

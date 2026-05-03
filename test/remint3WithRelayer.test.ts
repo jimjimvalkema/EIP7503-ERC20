@@ -12,8 +12,8 @@ import { getSyncedMerkleTree } from "../src/syncing.ts";
 import { createRelayerInputs, getBackend } from "../src/proving.ts";
 import type { ContractReturnType } from "@nomicfoundation/hardhat-viem/types";
 import { proofAndSelfRelay, relayTx, safeBurn, superSafeBurn } from "../src/transact.ts";
-import { getAddress, getContract, padHex, parseEventLogs, parseUnits, toHex, type Hash, type Hex } from "viem";
-import type { BurnAccount, FeeData, RelayInputs } from "../src/types.ts";
+import { getAddress, getContract, padHex, parseEventLogs, parseUnits, toHex, type Address, type Hash, type Hex } from "viem";
+import type { FeeData } from "../src/types.ts";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -21,6 +21,7 @@ import { BurnViewKeyManager } from "../src/BurnViewKeyManager.ts";
 import { BurnWallet } from "../src/BurnWallet.ts";
 import { transwarpTokenAbi } from "../src/utils.ts";
 import { GasReport } from "./utils/gasReport.ts";
+import type { SyncedBurnAccount } from "../src/schemas.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const path = join(__dirname, './data/privateDataAlice.json')
@@ -32,7 +33,6 @@ const PRE_MADE_BURN_ACCOUNTS = await readFile(path, { encoding: "utf-8" })
 export type TransWarpTokenTest = ContractReturnType<typeof TransWarpTokenContractName>
 
 
-let gas: any = { "transfers": {} }
 const gasReport = new GasReport("remintWithRelayer2.test")
 describe("Token", async function () {
     const SNARK_SCALAR_FIELD = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617")
@@ -58,7 +58,7 @@ describe("Token", async function () {
         reMintVerifier32 = await viem.deployContract(reMint32InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
         reMintVerifier100 = await viem.deployContract(reMint100InVerifierContractName, [], { client: { wallet: deployer }, libraries: { ZKTranscriptLib: ZKTranscriptLib.address } });
         //PrivateTransferVerifier = await viem.deployContract(PrivateTransferVerifierContractName, [], { client: { wallet: deployer }, libraries: { } });
-        const _powDifficulty = toHex(POW_DIFFICULTY, {size:32})
+        const _powDifficulty = toHex(POW_DIFFICULTY, { size: 32 })
         const _reMintLimit = RE_MINT_LIMIT
         const _maxTreeDepth = MAX_TREE_DEPTH
         const _isCrossChain = false
@@ -66,7 +66,7 @@ describe("Token", async function () {
         const _tokenSymbol = "zkTransWarpTestToken"
         const _712Version = "1"
         const _verifiers = [
-            { contractAddress: reMintVerifier3.address, size: 3},
+            { contractAddress: reMintVerifier3.address, size: 3 },
             { contractAddress: reMintVerifier32.address, size: 32 },
             { contractAddress: reMintVerifier100.address, size: 100 }
         ]
@@ -108,22 +108,17 @@ describe("Token", async function () {
     describe("Token", async function () {
         it("reMint 1x from 1 burn account with relayer", async function () {
             // ----------------- config test -----------------
-            const amountOfBurnAccounts = 2
+            const amountOfBurnAccounts = 1
+            const decimalsToken = BigInt(await transwarpToken.read.decimals())
             // reMint 3 times since the 1st tx needs no commitment inclusion proof, the 2nd one the total spend balance read only contains information of one spend
-            const amountsForRecipient = [69n, 69000n, 420n * 10n ** 18n]
+            const amountsForRecipient = [69n* 10n ** decimalsToken, 6969n* 10n ** decimalsToken, 420n * 10n ** decimalsToken]
             // acceptedChainIds defaults to [1n], but our chainId is 31337 so we need to set it.
             // archiveNodes will default to the node inside the client (`alice`), but that is generally a bad idea in prod since those are heavily rate limited note even archive clients
             const chainId = await publicClient.getChainId()
             const aliceBurnWallet = new BurnWallet(alice, { archiveNodes: { [chainId]: publicClient }, acceptedChainIds: [chainId] })
-            const relayerBurnWallet = new BurnWallet(relayer, { archiveNodes: { [chainId]: publicClient }, acceptedChainIds: [chainId] })
             const reMintRecipient = bob.account.address
-            const aliceRefundBurnAccount = await aliceBurnWallet.createBurnAccount(transwarpToken.address, { viewingKeyIndex: 0 })
             // ---------------------------------------------
-            const contractConfig = await aliceBurnWallet.getContractConfig(transwarpToken.address)
-            console.log({ contractConfig })
 
-
-            const decimalsToken = await transwarpToken.read.decimals()
             // TODO maybe add this to contract and BurnWallet.#getContractConfig? Or move to constants.ts!!!
             const decimalsTokenPrice = 8;
 
@@ -131,8 +126,6 @@ describe("Token", async function () {
             const transwarpTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: transwarpToken.abi, address: transwarpToken.address });
             // WalletClient.account.address = only true "which account is connected"
             await transwarpTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
-            await transwarpTokenAlice.write.getFreeTokens([alice.account.address])
-            await transwarpTokenAlice.write.getFreeTokens([alice.account.address])
 
             // takes presynced merkle tree and exported burnAccounts inside `PRE_MADE_BURN_ACCOUNTS`
             // uses that contract address to verify the sync state of that account
@@ -143,27 +136,31 @@ describe("Token", async function () {
             const aliceBurnAccounts = await aliceBurnWallet.createBurnAccountsBulk(transwarpToken.address, amountOfBurnAccounts, { startingViewKeyIndex: 1 })
 
 
-            const claimableBurnAddress = aliceBurnAccounts.map((b) => b.burnAddress);
-
             let expectedRecipientBalance = 0n
             let expectedRelayerBalance = 0n
-            let expectedRefundBalance = 0n
+            let expectedRefundReceived = 0n
             let reMintTxs: Hex[] = []
-            for (const amountForRecipient of amountsForRecipient) {
+            for (const [iterationIndex, amountForRecipient] of amountsForRecipient.entries()) {
                 const tokensPerEthPrice = parseUnits("69", decimalsTokenPrice)
-                const maxFee = parseUnits("5", decimalsToken)
+                const maxFee = parseUnits("5", Number(decimalsToken))
                 const reMintAmount = amountForRecipient + maxFee
+
+                const aliceBurnTotal = reMintAmount
 
                 for (const aliceBurnAccount of aliceBurnAccounts) {
                     // you can use a regular transfer. But superSafeBurn will do extra checks so you know the burn account works for that token contract (like difficulty etc)
                     // you can also not pass the burnAccount and superSafeBurn will make a fresh one for you!
                     // TODO  BigInt(amountOfBurnAccounts) in remint100
-                    const burnTx = await aliceBurnWallet.superSafeBurn(transwarpToken.address, reMintAmount / BigInt(amountOfBurnAccounts) + 1n, aliceBurnAccount)
+                    const burnTx = await aliceBurnWallet.superSafeBurn(transwarpToken.address, aliceBurnTotal / BigInt(amountOfBurnAccounts) + 1n, aliceBurnAccount)
                     await gasReport.recordTx("superSafeBurn (transfer to burn address)", burnTx, publicClient)
                 }
+                // fresh single-use burn account per iteration to receive the refund.
+                // contract-specific derivation means a single balance check confirms freshness.
+                const aliceRefundBurnAccount = await aliceBurnWallet.createSingleUseBurnAccount(transwarpToken.address, { viewingKeyIndex: iterationIndex })
                 // 1 eth will give you 69 token. the eth price of token is 0.0144 eth (1/69)
-                const relayerBonus = parseUnits("1", decimalsToken)
-                const estimatedGasCost = 3_092_125n
+                // TODO make burn wallet do this
+                const relayerBonus = parseUnits("1", Number(decimalsToken))
+                const estimatedGasCost = await aliceBurnWallet.estimateGas(transwarpToken.address, CIRCUIT_SIZE, "relayRefundSeparate")
                 const estimatedPriorityFee = await publicClient.estimateMaxPriorityFeePerGas()
                 const feeData: FeeData = {
                     tokensPerEthPrice: toHex(tokensPerEthPrice),
@@ -180,14 +177,12 @@ describe("Token", async function () {
                 // 1. you can also just do await await BurnWallet.sync(0xAddress), but BurnWallet.sync without await returns
                 // syncedTree, syncedBurnAccounts as separate promise, so we can wait for just the account sync.
                 // And without having to wait on the merkle tree
-                const { syncedTree:syncedTreeProm, syncedBurnAccounts:syncedBurnAccountsProm } = aliceBurnWallet.sync(transwarpToken.address)
+                const { syncedTree: syncedTreeProm, syncedBurnAccounts: syncedBurnAccountsProm } = aliceBurnWallet.sync(transwarpToken.address)
 
                 // 2. select burn accounts for spend
                 // wait till it's synced
                 await syncedBurnAccountsProm;
-                // make selection
                 const selection = await aliceBurnWallet.selectBurnAccountsForSpend(transwarpToken.address, reMintAmount, {
-                    burnAddresses: claimableBurnAddress,
                     circuitSize: CIRCUIT_SIZE,
                 })
 
@@ -205,8 +200,6 @@ describe("Token", async function () {
                 const relayInputs = await aliceBurnWallet.proof(signed, { threads: provingThreads, feeData })
 
                 // 6. relay
-                // BurnWallets can also do it. But tbh the relayer probably do not want their own burn accounts
-                //const reMintTx = await relayerBurnWallet.relayTx(relayInputs)
                 const reMintTx = await relayTx(relayInputs, relayer)
                 const txReceipt = await publicClient.getTransactionReceipt({ hash: reMintTx });
                 gasReport.record(`reMint (relayer, size ${CIRCUIT_SIZE})`, txReceipt.gasUsed)
@@ -222,41 +215,40 @@ describe("Token", async function () {
 
                 assert(relayerReceived !== undefined, "relayer did not receive a transfer")
                 assert(recipientReceived !== undefined, "recipient did not receive a transfer")
-                assert(refundReceived !== undefined, "refund account did not receive a transfer")
+                assert(refundReceived !== undefined, `single-use refund account ${aliceRefundBurnAccount.burnAddress} did not receive a transfer`)
                 expectedRecipientBalance += recipientReceived!.args.value
                 expectedRelayerBalance += relayerReceived!.args.value
-                expectedRefundBalance += refundReceived!.args.value
+                expectedRefundReceived += refundReceived!.args.value
                 reMintTxs.push(reMintTx)
             }
 
-            const balanceBobPublic = await transwarpTokenAlice.read.balanceOf([bob.account.address])
-
-            assert.equal(balanceBobPublic, expectedRecipientBalance, "bob didn't receive the expected amount of re-minted tokens")
             const recipientBalance = await transwarpToken.read.balanceOf([bob.account.address])
-            // TODO use fresh accounts instead
-            const refundAddressBalance = await transwarpToken.read.balanceOf([aliceRefundBurnAccount.burnAddress])
             const relayerBalance = await transwarpToken.read.balanceOf([relayer.account.address])
-            const totalMinted = recipientBalance + relayerBalance + refundAddressBalance
-            const expectedTotalReMinted = expectedRecipientBalance + expectedRelayerBalance + expectedRefundBalance
+            await aliceBurnWallet.syncBurnAccounts(transwarpToken.address)
+            const refundBurnAccounts = await aliceBurnWallet.getBurnAccounts(transwarpToken.address, { type: "singleUse" })
 
-            // console.log({
-            //     relayerBalance__________: relayerBalance,
-            //     recipientBalance________: recipientBalance,
-            //     refundAddressBalance____: refundAddressBalance,
-            // })
-            // console.log({
-            //     expectedRelayerBalance__: expectedRelayerBalance,
-            //     expectedRecipientBalance: expectedRecipientBalance,
-            //     expectedRefundBalance___: expectedRefundBalance
-            // })
-            // console.log({
-            //     totalMinted__________: totalMinted,
-            //     expectedTotalReMinted: expectedTotalReMinted
-            // })
-            assert.equal(expectedTotalReMinted, totalMinted, "amount reMinted not matched");
-            assert.equal(recipientBalance, expectedRecipientBalance, "recipient did not receive enough tokens");
-            assert(relayerBalance >= expectedRelayerBalance, "relayer did not receive enough tokens");
-            assert.equal(refundAddressBalance, expectedRefundBalance, "refund is not equal to maxFee - relayerBalance")
+            // Use totalBurned (= balanceOf at burnAddress, cumulative received) rather than
+            // spendableBalance — unaffected by refunds being consumed as inputs in later
+            // iterations, since tokens stay on the burn address.
+            const refundTotalReceived = refundBurnAccounts.reduce((acc, b) => {
+                const syncData = (b as SyncedBurnAccount).syncData[toHex(chainId)][getAddress(transwarpToken.address)]
+                return acc + BigInt(syncData.totalBurned)
+            }, 0n)
+            const totalReMinted = recipientBalance + relayerBalance + refundTotalReceived
+            const expectedTotalReMinted = expectedRecipientBalance + expectedRelayerBalance + expectedRefundReceived
+
+            assert.equal(totalReMinted, expectedTotalReMinted, "amount reMinted not matched")
+            assert.equal(recipientBalance, expectedRecipientBalance, "recipient did not receive expected tokens")
+            assert(relayerBalance >= expectedRelayerBalance, "relayer did not receive enough tokens")
+            assert.equal(refundTotalReceived, expectedRefundReceived, "sum of refund balances does not match logs")
+
+            // At least 2 refund accounts should have been consumed as inputs in later reMints
+            // (accountNonce increments on each spend; singleUse accounts cap at 1).
+            const spentRefundCount = refundBurnAccounts.filter((b) => {
+                const syncData = (b as SyncedBurnAccount).syncData[toHex(chainId)][getAddress(transwarpToken.address)]
+                return BigInt(syncData.accountNonce) >= 1n
+            }).length
+            assert.ok(spentRefundCount >= 2, `expected at least 2 refund accounts to be spent, only ${spentRefundCount} were`)
             const receipts = await Promise.all(
                 reMintTxs.map((tx) =>
                     publicClient.getTransactionReceipt({ hash: tx })
@@ -277,10 +269,8 @@ describe("Token", async function () {
                 assert.ok(nullifiedEvent.args.nullifier <= FIELD_LIMIT, `Nullifier exceeded the FIELD_LIMIT. expected ${nullifiedEvent.args.nullifier} to be less than ${FIELD_LIMIT}`)
                 assert.notEqual(nullifiedEvent.args.nullifier, 0n, "nullifier not set")
             }
-            // test wallet imports TODO move this
-            const walletExport = aliceBurnWallet.exportWallet({ paranoidMode: false, merkleTree: false })
-            const alicePrivate2 = new BurnWallet(alice, { archiveNodes: { [chainId]: publicClient }, acceptedChainIds: [chainId] })
-            await alicePrivate2.importWallet(walletExport, transwarpToken.address)
+
+            //@TODO checks on how much is over payed and accuracy of the gas estimation 
         })
 
     })

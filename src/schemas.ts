@@ -129,6 +129,9 @@ export const DerivedBurnAccountSchema = BurnAccountBaseSchema.extend({ syncData:
 // needed to re-derive the viewing key via hashSingleUseViewingKey.
 export const UnsyncedSingleUseBurnAccountSchema = BurnAccountBaseSchema.extend({ tokenAddress: AddressSchema });
 export const SyncedSingleUseBurnAccountSchema = UnsyncedSingleUseBurnAccountSchema.extend({ syncData: BurnAccountSyncDataSchema });
+export const SingleUseBurnAccountRecoverableSchema = UnsyncedSingleUseBurnAccountSchema.omit(derivedRecoverableKeys);
+export const SingleUseBurnAccountImportableSchema = SingleUseBurnAccountRecoverableSchema.extend({ syncData: BurnAccountImportableSyncDataSchema, ...UnsyncedSingleUseBurnAccountSchema.pick(importableExtraKeys).shape  });
+export const SingleUseBurnAccountSchema = UnsyncedSingleUseBurnAccountSchema.extend({ syncData: BurnAccountSyncDataSchema.optional() });
 
 // --- unknown family ----------------------------------------------------------
 
@@ -142,25 +145,28 @@ export const UnknownBurnAccountSchema = UnsyncedUnknownBurnAccountSchema.extend(
 export const NotOwnedBurnAccountSchema = BurnAccountBaseSchema.pick(stealthDerivedKey);
 
 // --- unions ------------------------------------------------------------------
-// merges families Derived + Unknown
 export const BurnAccountImportableSchema = z.union([
     DerivedBurnAccountImportableSchema,
+    SingleUseBurnAccountImportableSchema,
     UnknownBurnAccountImportableSchema,
 ]);
 
 export const BurnAccountSchema = z.union([
     DerivedBurnAccountSchema,
     UnknownBurnAccountSchema,
+    SingleUseBurnAccountSchema,
 ]);
 
 export const UnsyncedBurnAccountSchema = z.union([
     UnsyncedDerivedBurnAccountSchema,
     UnsyncedUnknownBurnAccountSchema,
+    UnsyncedSingleUseBurnAccountSchema,
 ]);
 
 export const SyncedBurnAccountSchema = z.union([
     SyncedDerivedBurnAccountSchema,
     SyncedUnknownBurnAccountSchema,
+    SyncedSingleUseBurnAccountSchema,
 ]);
 
 export const AnyBurnAccountSchema = z.union([
@@ -189,7 +195,10 @@ export type SyncedDerivedBurnAccount = WithReadonlyBase<z.infer<typeof SyncedDer
 export type DerivedBurnAccount = WithReadonlyBase<z.infer<typeof DerivedBurnAccountSchema>>;
 
 export type UnsyncedSingleUseBurnAccount = WithReadonlyBase<z.infer<typeof UnsyncedSingleUseBurnAccountSchema>>;
+export type SingleUseBurnAccountRecoverable = WithReadonlyBase<z.infer<typeof SingleUseBurnAccountRecoverableSchema>>;
+export type SingleUseBurnAccountImportable = WithReadonlyBase<z.infer<typeof SingleUseBurnAccountImportableSchema>>;
 export type SyncedSingleUseBurnAccount = WithReadonlyBase<z.infer<typeof SyncedSingleUseBurnAccountSchema>>;
+export type SingleUseBurnAccount = WithReadonlyBase<z.infer<typeof SingleUseBurnAccountSchema>>;
 
 export type UnsyncedUnknownBurnAccount = WithReadonlyBase<z.infer<typeof UnsyncedUnknownBurnAccountSchema>>;
 export type UnknownBurnAccountRecoverable = WithReadonlyBase<z.infer<typeof UnknownBurnAccountRecoverableSchema>>;
@@ -202,8 +211,8 @@ export type UnsyncedBurnAccount = WithReadonlyBase<z.infer<typeof UnsyncedBurnAc
 export type SyncedBurnAccount = WithReadonlyBase<z.infer<typeof SyncedBurnAccountSchema>>;
 
 // union types
-export type BurnAccountImportable = DerivedBurnAccountImportable | UnknownBurnAccountImportable;
-export type BurnAccountRecoverable = DerivedBurnAccountRecoverable | UnknownBurnAccountRecoverable;
+export type BurnAccountImportable = DerivedBurnAccountImportable | SingleUseBurnAccountImportable | UnknownBurnAccountImportable;
+export type BurnAccountRecoverable = DerivedBurnAccountRecoverable | SingleUseBurnAccountRecoverable | UnknownBurnAccountRecoverable;
 export type AnyBurnAccount = BurnAccount | BurnAccountImportable | BurnAccountRecoverable;
 
 // default objects
@@ -218,6 +227,9 @@ export const EMPTY_SYNC_FIELDS = BurnAccountSyncFieldsSchema.parse(
 
 // Use these instead of `"viewKeySigMessage" in x` — TypeScript cannot narrow
 // through WithReadonlyBase with a plain `in` check.
+export const isSingleUseBurnAccount = (x: AnyBurnAccount): x is import("./types.ts").UnsyncedSingleUseBurnAccount | import("./types.ts").SyncedSingleUseBurnAccount =>
+    "viewKeySigMessage" in x && "tokenAddress" in x;
+
 export const isDerivedBurnAccount = (x: AnyBurnAccount): x is DerivedBurnAccount =>
     "viewKeySigMessage" in x;
 
@@ -229,7 +241,7 @@ export const isSyncedBurnAccount = (x: BurnAccount): x is SyncedBurnAccount =>
 
 // --- types for type identification  -----------------------------------------------------------
 
-export type BurnAccountDerivation = "Derived" | "Unknown";
+export type BurnAccountDerivation = "Derived" | "SingleUse" | "Unknown" ;
 export type BurnAccountState = "Recoverable" | "Importable" | "Unsynced" | "Synced";
 
 export type BurnAccountType = {
@@ -242,6 +254,12 @@ export type ParsedBurnAccount =
     | { derivation: "Derived"; state: "Unsynced"; account: DerivedBurnAccount }
     | { derivation: "Derived"; state: "Importable"; account: DerivedBurnAccountImportable }
     | { derivation: "Derived"; state: "Recoverable"; account: DerivedBurnAccountRecoverable }
+    
+    | { derivation: "SingleUse"; state: "Synced"; account: SyncedSingleUseBurnAccount }
+    | { derivation: "SingleUse"; state: "Unsynced"; account: SingleUseBurnAccount }
+    | { derivation: "SingleUse"; state: "Importable"; account: SingleUseBurnAccountImportable }
+    | { derivation: "SingleUse"; state: "Recoverable"; account: SingleUseBurnAccountRecoverable }
+    
     | { derivation: "Unknown"; state: "Synced"; account: SyncedUnknownBurnAccount }
     | { derivation: "Unknown"; state: "Unsynced"; account: UnknownBurnAccount }
     | { derivation: "Unknown"; state: "Importable"; account: UnknownBurnAccountImportable }
@@ -272,7 +290,12 @@ export function parseBurnAccount(item: unknown): AnyBurnAccount {
  */
 export function identifyBurnAccount(account: AnyBurnAccount): ParsedBurnAccount {
     const hasSyncData = "syncData" in account && account.syncData !== undefined && Object.keys(account.syncData).length > 0;
-    if ("viewKeySigMessage" in account) {
+    if ("tokenAddress" in account) {
+        if (hasSyncData && SyncedSingleUseBurnAccountSchema.safeParse(account).success) return { derivation: "SingleUse", state: "Synced", account: SyncedSingleUseBurnAccountSchema.parse(account) };
+        if (SingleUseBurnAccountImportableSchema.safeParse(account).success) return { derivation: "SingleUse", state: "Importable", account: SingleUseBurnAccountImportableSchema.parse(account) };
+        if (SingleUseBurnAccountRecoverableSchema.safeParse(account).success) return { derivation: "SingleUse", state: "Recoverable", account: SingleUseBurnAccountRecoverableSchema.parse(account) };
+        return { derivation: "SingleUse", state: "Unsynced", account: SingleUseBurnAccountSchema.parse(account) };
+    } else if ("viewKeySigMessage" in account) {
         if (hasSyncData && SyncedDerivedBurnAccountSchema.safeParse(account).success) return { derivation: "Derived", state: "Synced", account: SyncedDerivedBurnAccountSchema.parse(account) };
         if (DerivedBurnAccountImportableSchema.safeParse(account).success) return { derivation: "Derived", state: "Importable", account: DerivedBurnAccountImportableSchema.parse(account) };
         if (DerivedBurnAccountRecoverableSchema.safeParse(account).success) return { derivation: "Derived", state: "Recoverable", account: DerivedBurnAccountRecoverableSchema.parse(account) };

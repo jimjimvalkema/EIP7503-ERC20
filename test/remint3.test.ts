@@ -261,9 +261,6 @@ describe("Token", async function () {
             const reMintRecipient = bob.account.address
             // ---------------------------------------------
             const contractConfig = await aliceBurnWallet.getContractConfig(transwarpToken.address)
-            console.log({ contractConfig })
-
-
 
             const transwarpTokenAlice = getContract({ client: { public: publicClient, wallet: alice }, abi: transwarpToken.abi, address: transwarpToken.address });
             await transwarpTokenAlice.write.getFreeTokens([alice.account.address]) //sends 1_000_000n token
