@@ -24,8 +24,6 @@ import { viemAccountNotSetErr } from "./BurnWallet.ts";
  * Pros: can change circuit and contract and keep PrivateWallet the same
  * 
  * @TODO remove default. BurnWallet will do default behavior, this should only store burnAccounts
- * @TODO rename to burnAccountManager
- * @TODO make burnAccount sync data specific per chainId=>tokenAddress, right now we will have bugs when used with multiple tokens
  */
 export class BurnViewKeyManager {
     viemWallet: WalletClient & { account: Account }

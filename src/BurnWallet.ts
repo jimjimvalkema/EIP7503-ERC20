@@ -784,6 +784,8 @@ export class BurnWallet {
                 )
             }
         } catch (err: any) {
+            // TODO do make whitelist so if estimations fails on normal txs it does not /3
+
             // EDR (and MetaMask) inflate eth_estimateGas ~3× when the Honk verifier (LOG_N≥5)
             // is in the call path, pushing the estimate above the EIP-7825 tx gas cap (16,777,216).
             // The error message contains the inflated value — extract it and divide by 3.

@@ -398,18 +398,19 @@ export async function selfRelayTx(selfRelayInputs: SelfRelayInputs, wallet: Wall
  * @param wallet                - Viem WalletClient that signs and sends the transaction (the relayer).
  * @param transwarpTokenContract - TransWarpToken contract instance with write access.
  */
-export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, account?: Address) {
+export async function relayTx(relayInputs: RelayInputs, wallet: WalletClient, { account, gasLimit, maxPriorityFeePerGas }: { account?: Address, gasLimit?: bigint, maxPriorityFeePerGas?: bigint } = {}) {
     const transwarpTokenContract = getTransWarpTokenContract(relayInputs.signatureInputs.contract, { wallet: wallet })
     // TODO not true. Is crossChain can be set to false. So this check can only live in BurnWallet ?
     // if(wallet.chain?.id && wallet.chain?.id !== Number(_chainId)) {throw new Error(`this proof can only be relayed in chainId ${Number(_chainId)}`)}
     const reMintRelayerArgs = formatReMintRelayerArgs(relayInputs)
     const relayerAccount = account ?? wallet.account?.address ?? (await wallet.getAddresses())[0]
-    const gas = await estimateGasCapped(() =>
+    const gas = gasLimit ?? await estimateGasCapped(() =>
         transwarpTokenContract.estimateGas.reMintRelayer(reMintRelayerArgs, { account: relayerAccount, gas: GAS_LIMIT_TX })
     )
     return await transwarpTokenContract.write.reMintRelayer(reMintRelayerArgs, {
         account: relayerAccount,
-        gas: gas,
+        gas,
+        maxPriorityFeePerGas,
         chain: wallet.chain
     })
 }

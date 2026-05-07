@@ -44,7 +44,8 @@
     "noir:reMint100:rename-verifier": "yarn tsx scripts/renameVerifier.ts --newName reMint100Verifier --file contracts/reMint100Verifier.sol",
     "noir:reMint100": "yarn noir:reMint100:compile; yarn noir:reMint100:vk; yarn noir:reMint100:verifier; yarn noir:reMint100:cp-verifier; yarn noir:reMint100:rename-verifier;",
     "noir": "yarn noir:reMint3; yarn noir:reMint32; yarn noir:reMint100",
-    "website": "cd website; yarn vite"
+    "website": "cd website; yarn vite",
+    "relayer": "tsx src/Relayer.ts"
   },
   "dependencies": {
     "@aztec/aztec.js": "2.0.3",

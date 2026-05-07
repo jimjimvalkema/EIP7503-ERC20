@@ -91,6 +91,9 @@ fn hash_fake_leaf(viewing_key: Field) -> Field {
     Poseidon2::hash([viewing_key, FAKE_LEAF], 2)
 }
 
+// this is a potential leak for privacy. If an user uses the same burn account for 2 different token contracts.
+// the same nullifier will appear twice, revealing those 2 txs are from the same account
+// same for a total_minted_leaf, but it requires the exact same amount being sent
 fn hash_fake_nullifier(viewing_key: Field) -> Field {
     Poseidon2::hash([viewing_key, FAKE_NULLIFIER], 2)
 }
